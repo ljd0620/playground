@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feign 声明式 HTTP 调用</title>
+  <meta name="description" content="交互式可视化 OpenFeign 工作原理，演示动态代理、编解码器、负载均衡与熔断降级机制">
+  <meta name="keywords" content="Feign, OpenFeign, 声明式HTTP, Spring Cloud, 动态代理, 负载均衡, 熔断, Java">
+  <meta property="og:title" content="Feign 声明式 HTTP 调用">
+  <meta property="og:description" content="交互式可视化 OpenFeign 工作原理，演示动态代理、编解码器、负载均衡与熔断降级机制">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --mono: 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 13px;
+      position: relative
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(77, 163, 255, 0.06), transparent 70%);
+      pointer-events: none;
+      z-index: 0
+    }
+
+    header {
+      padding: 12px 20px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1
+    }
+
+    header h1 {
+      font-size: 17px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text
+    }
+
+    .tag {
+      font-size: 0.68rem;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      padding: 3px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      letter-spacing: 0.3px
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      z-index: 1
+    }
+
+    .left {
+      width: 300px;
+      min-width: 300px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px
+    }
+
+    .sec {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      backdrop-filter: blur(8px);
+      transition: border-color .2s
+    }
+
+    .sec:hover {
+      border-color: var(--border-hover)
+    }
+
+    .sec-t {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .sec-t::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-green)
+    }
+
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px
+    }
+
+    .pbtn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 9px 11px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      text-align: left;
+      transition: all .15s;
+      display: flex;
+      gap: 8px;
+      align-items: center
+    }
+
+    .pbtn:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-elevated)
+    }
+
+    .pbtn.active {
+      border-color: var(--accent-green);
+      background: rgba(54, 217, 134, 0.06);
+      box-shadow: inset 3px 0 0 var(--accent-green), 0 0 12px var(--glow-green)
+    }
+
+    .pbtn .pi {
+      font-size: 16px;
+      width: 22px;
+      text-align: center;
+      flex-shrink: 0
+    }
+
+    .pbtn .pn {
+      font-weight: 600;
+      display: block;
+      font-size: 12px
+    }
+
+    .pbtn .pd {
+      color: var(--text-muted);
+      font-size: 10px;
+      line-height: 1.3;
+      margin-top: 2px
+    }
+
+    .btns {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px
+    }
+
+    .btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 0;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 11px;
+      transition: all .15s;
+      flex: 1;
+      text-align: center
+    }
+
+    .btn:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3)
+    }
+
+    .btn.pri {
+      background: linear-gradient(135deg, var(--accent-green), #2bb870);
+      color: #000;
+      font-weight: 600;
+      border-color: var(--accent-green);
+      box-shadow: 0 2px 10px rgba(54, 217, 134, 0.2)
+    }
+
+    .btn.pri:hover {
+      box-shadow: 0 4px 16px rgba(54, 217, 134, 0.35);
+      transform: translateY(-1px)
+    }
+
+    .right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 16px;
+      gap: 16px
+    }
+
+    .canvas-area {
+      flex: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      overflow-y: auto;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 20px
+    }
+
+    .interface-def {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.7;
+      position: relative;
+      flex-shrink: 0
+    }
+
+    .interface-def .kw {
+      color: var(--accent-purple)
+    }
+
+    .interface-def .ann {
+      color: var(--accent-orange)
+    }
+
+    .interface-def .str {
+      color: var(--accent-green)
+    }
+
+    .interface-def .type {
+      color: var(--accent-cyan)
+    }
+
+    .interface-def .method {
+      color: var(--accent-blue)
+    }
+
+    .pipeline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 0
+    }
+
+    .pnode {
+      padding: 10px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: all .3s;
+      text-align: center;
+      min-width: 80px;
+      position: relative
+    }
+
+    .pnode .pn-label {
+      display: block;
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 400;
+      margin-top: 2px
+    }
+
+    .pnode.active {
+      border-color: var(--accent-green);
+      background: rgba(54, 217, 134, 0.12);
+      box-shadow: 0 0 20px var(--glow-green);
+      transform: translateY(-2px);
+      color: var(--accent-green)
+    }
+
+    .pnode.done {
+      border-color: var(--accent-blue);
+      background: rgba(77, 163, 255, 0.08);
+      color: var(--accent-blue)
+    }
+
+    .pnode.done .pn-label {
+      color: rgba(77, 163, 255, 0.6)
+    }
+
+    .pnode.err {
+      border-color: var(--accent-red);
+      background: rgba(255, 92, 108, 0.1);
+      box-shadow: 0 0 20px rgba(255, 92, 108, 0.15);
+      color: var(--accent-red)
+    }
+
+    .pnode.warn {
+      border-color: var(--accent-orange);
+      background: rgba(255, 159, 67, 0.08);
+      color: var(--accent-orange)
+    }
+
+    .parrow {
+      color: var(--text-muted);
+      font-size: 14px;
+      flex-shrink: 0
+    }
+
+    .parrow.flow {
+      color: var(--accent-green);
+      animation: pulse 0.6s ease-in-out infinite
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 0.4
+      }
+
+      50% {
+        opacity: 1
+      }
+    }
+
+    .log-panel {
+      height: 160px;
+      min-height: 160px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow-y: auto;
+      padding: 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.6
+    }
+
+    .log-entry {
+      padding: 4px 8px;
+      border-radius: 4px;
+      margin-bottom: 2px;
+      display: flex;
+      gap: 8px;
+      animation: fadeIn 0.3s ease
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateX(-8px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0)
+      }
+    }
+
+    .log-entry .time {
+      color: var(--text-muted);
+      flex-shrink: 0;
+      min-width: 70px
+    }
+
+    .log-entry .stage {
+      font-weight: 600;
+      flex-shrink: 0;
+      min-width: 100px
+    }
+
+    .log-entry.info .stage {
+      color: var(--accent-blue)
+    }
+
+    .log-entry.success .stage {
+      color: var(--accent-green)
+    }
+
+    .log-entry.warn .stage {
+      color: var(--accent-orange)
+    }
+
+    .log-entry.error .stage {
+      color: var(--accent-red)
+    }
+
+    .log-entry .msg {
+      color: var(--text-secondary)
+    }
+
+    .info-row {
+      display: flex;
+      gap: 16px;
+      flex-shrink: 0
+    }
+
+    .info-card {
+      flex: 1;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      min-width: 0
+    }
+
+    .info-card .ic-t {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 6px
+    }
+
+    .info-card .ic-v {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent-cyan)
+    }
+
+    .info-card .ic-v.ok {
+      color: var(--accent-green)
+    }
+
+    .info-card .ic-v.err {
+      color: var(--accent-red)
+    }
+
+    .speed-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 4px
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      outline: none;
+      margin: 6px 0
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      cursor: pointer;
+      border: 2px solid var(--bg-card)
+    }
+
+    @media (max-width: 900px) {
+      .main {
+        flex-direction: column
+      }
+
+      .left {
+        width: 100%;
+        min-width: 0;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px;
+        max-height: 180px
+      }
+
+      .left .sec {
+        flex: 1;
+        min-width: 140px
+      }
+
+      .right {
+        padding: 10px;
+        gap: 10px
+      }
+
+      .canvas-area {
+        padding: 12px
+      }
+
+      .pipeline {
+        gap: 4px
+      }
+
+      .pnode {
+        padding: 6px 8px;
+        font-size: 10px;
+        min-width: 60px
+      }
+
+      .parrow {
+        font-size: 11px
+      }
+
+      .log-panel {
+        height: 120px;
+        min-height: 120px
+      }
+    }
+
+    .tip-box {
+      background: rgba(77, 163, 255, 0.06);
+      border: 1px solid rgba(77, 163, 255, 0.2);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.5
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Feign 声明式 HTTP 调用</h1>
+    <span class="tag">Spring Cloud</span>
+  </header>
+  <div class="main">
+    <div class="left">
+      <div class="sec">
+        <div class="sec-t">场景预设</div>
+        <div class="preset-list" id="presetList">
+          <button class="pbtn active" data-id="basic">
+            <span class="pi">&#128640;</span>
+            <span><span class="pn">基础 Feign 调用</span><span class="pd">接口声明 → 动态代理 → HTTP 请求</span></span>
+          </button>
+          <button class="pbtn" data-id="lb">
+            <span class="pi">&#9879;&#65039;</span>
+            <span><span class="pn">Feign + LoadBalancer</span><span class="pd">服务发现 + 客户端负载均衡</span></span>
+          </button>
+          <button class="pbtn" data-id="fallback">
+            <span class="pi">&#9888;&#65039;</span>
+            <span><span class="pn">Feign + 熔断降级</span><span class="pd">FallbackFactory + 异常兜底</span></span>
+          </button>
+          <button class="pbtn" data-id="interceptor">
+            <span class="pi">&#128274;</span>
+            <span><span class="pn">请求拦截器链</span><span class="pd">认证 Token 注入 + 链路追踪</span></span>
+          </button>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-t">控制</div>
+        <div class="btns">
+          <button class="btn pri" id="btnRun">&#9654; 发起调用</button>
+          <button class="btn" id="btnStep">&#9194; 单步</button>
+        </div>
+        <div class="btns" style="margin-top:6px">
+          <button class="btn" id="btnReset">&#8634; 重置</button>
+        </div>
+        <div class="speed-label">
+          <span>动画速度</span>
+          <span id="speedVal">中速</span>
+        </div>
+        <input type="range" id="speedSlider" min="1" max="3" value="2">
+      </div>
+      <div class="info-card" id="statusCard">
+        <div class="ic-t">调用状态</div>
+        <div class="ic-v" id="statusText">等待发起调用...</div>
+      </div>
+      <div class="info-card">
+        <div class="ic-t">耗时统计</div>
+        <div class="ic-v" id="latencyText">-</div>
+      </div>
+      <div class="tip-box" id="tipBox">
+        Feign 是 Netflix 开源的声明式 HTTP 客户端，通过接口 + 注解即可定义 HTTP 调用，运行时由 JDK 动态代理生成实现。Spring Cloud 对其进行了增强，集成了负载均衡、服务发现和熔断降级。
+      </div>
+    </div>
+    <div class="right">
+      <div class="canvas-area" id="canvasArea">
+        <div class="interface-def" id="interfaceDef">
+          <span class="ann">@FeignClient</span>(name = <span class="str">"user-service"</span>, url = <span class="str">"http://user-api"</span>)<br>
+          <span class="kw">public interface</span> <span class="type">UserClient</span> {<br>
+          &nbsp;&nbsp;<span class="ann">@GetMapping</span>(<span class="str">"/users/{id}"</span>)<br>
+          &nbsp;&nbsp;<span class="type">UserDTO</span> <span class="method">getUser</span>(<span class="ann">@PathVariable</span>(<span class="str">"id"</span>) <span class="type">Long</span> id);<br>
+          }
+        </div>
+        <div class="pipeline" id="pipeline">
+          <div class="pnode" data-node="proxy"><span>JDK 动态代理</span><span class="pn-label">Proxy.newProxyInstance</span></div>
+          <span class="parrow">→</span>
+          <div class="pnode" data-node="contract"><span>Contract 解析</span><span class="pn-label">SpringMvcContract</span></div>
+          <span class="parrow">→</span>
+          <div class="pnode" data-node="handler"><span>MethodHandler</span><span class="pn-label">构建 RequestTemplate</span></div>
+          <span class="parrow">→</span>
+          <div class="pnode" data-node="interceptor"><span>请求拦截器</span><span class="pn-label">Authorization / Trace</span></div>
+          <span class="parrow">→</span>
+          <div class="pnode" data-node="encoder"><span>Encoder</span><span class="pn-label">Jackson 序列化</span></div>
+          <span class="parrow">→</span>
+          <div class="pnode" data-node="client"><span>HTTP Client</span><span class="pn-label">执行 HTTP 请求</span></div>
+          <span class="parrow">→</span>
+          <div class="pnode" data-node="lb"><span>LoadBalancer</span><span class="pn-label">选择服务实例</span></div>
+          <span class="parrow" style="display:none">←</span>
+          <div class="pnode" data-node="decoder"><span>Decoder</span><span class="pn-label">Jackson 反序列化</span></div>
+          <span class="parrow" style="display:none" data-arrow="resp1">←</span>
+          <div class="pnode" data-node="errdec"><span>ErrorDecoder</span><span class="pn-label">状态码 → 异常</span></div>
+          <span class="parrow" style="display:none" data-arrow="resp2">←</span>
+          <div class="pnode" data-node="result"><span>返回结果</span><span class="pn-label">UserDTO</span></div>
+        </div>
+        <div class="info-row" id="infoRow">
+          <div class="info-card">
+            <div class="ic-t">请求 URL</div>
+            <div class="ic-v" id="infoUrl">GET /users/1</div>
+          </div>
+          <div class="info-card">
+            <div class="ic-t">目标服务</div>
+            <div class="ic-v" id="infoSvc">user-service</div>
+          </div>
+          <div class="info-card">
+            <div class="ic-t">HTTP 状态</div>
+            <div class="ic-v ok" id="infoStatus">-</div>
+          </div>
+          <div class="info-card">
+            <div class="ic-t">响应体</div>
+            <div class="ic-v ok" id="infoResp">-</div>
+          </div>
+        </div>
+      </div>
+      <div class="log-panel" id="logPanel">
+        <div class="log-entry info"><span class="time">00:00.000</span><span class="stage">系统</span><span class="msg">Feign Playground 就绪，选择一个场景后点击「发起调用」或「单步」</span></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="shared/theme.js"></script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/analytics.js"></script>
+  <script>
+    (function () {
+      // ── DOM refs ──
+      var presetList = document.getElementById('presetList');
+      var btnRun = document.getElementById('btnRun');
+      var btnStep = document.getElementById('btnStep');
+      var btnReset = document.getElementById('btnReset');
+      var speedSlider = document.getElementById('speedSlider');
+      var speedVal = document.getElementById('speedVal');
+      var statusText = document.getElementById('statusText');
+      var latencyText = document.getElementById('latencyText');
+      var logPanel = document.getElementById('logPanel');
+      var pipeline = document.getElementById('pipeline');
+      var interfaceDef = document.getElementById('interfaceDef');
+      var infoUrl = document.getElementById('infoUrl');
+      var infoSvc = document.getElementById('infoSvc');
+      var infoStatus = document.getElementById('infoStatus');
+      var infoResp = document.getElementById('infoResp');
+      var tipBox = document.getElementById('tipBox');
+
+
+      // ── State ──
+      var currentPreset = 'basic';
+      var running = false;
+      var currentStep = -1;
+      var timer = null;
+      var startTime = 0;
+
+      // ── Preset configs ──
+      var presets = {
+        basic: {
+          name: '基础 Feign 调用',
+          interfaceCode:
+            '<span class="ann">@FeignClient</span>(name = <span class="str">"user-service"</span>, url = <span class="str">"http://user-api"</span>)\n' +
+            '<span class="kw">public interface</span> <span class="type">UserClient</span> {\n' +
+            '  <span class="ann">@GetMapping</span>(<span class="str">"/users/{id}"</span>)\n' +
+            '  <span class="type">UserDTO</span> <span class="method">getUser</span>(<span class="ann">@PathVariable</span>(<span class="str">"id"</span>) <span class="type">Long</span> id);\n' +
+            '}',
+          url: 'GET http://user-api/users/1',
+          service: 'user-service (直连)',
+          responseStatus: '200 OK',
+          responseBody: '{"id":1,"name":"张三"}',
+          hasLB: false,
+          hasFallback: false,
+          hasInterceptor: false,
+          finalStatus: 'ok',
+          steps: [
+            { node: 'proxy', time: 0.5, stage: '动态代理', msg: 'Feign 通过 JDK Proxy.newProxyInstance 创建 UserClient 的动态代理对象', level: 'info' },
+            { node: 'contract', time: 1.2, stage: 'Contract', msg: 'SpringMvcContract 解析 @GetMapping 注解，提取路径 /users/{id} 和 HTTP 方法 GET', level: 'info' },
+            { node: 'handler', time: 1.8, stage: 'MethodHandler', msg: '构建 RequestTemplate：GET http://user-api/users/1，设置 Accept: application/json', level: 'info' },
+            { node: 'encoder', time: 2.3, stage: 'Encoder', msg: 'GET 请求无 Body，Encoder 跳过序列化（仅 POST/PUT 需要 Jackson 编码）', level: 'info' },
+            { node: 'client', time: 3.0, stage: 'HTTP Client', msg: 'Feign 默认使用 HttpURLConnection 发送 HTTP GET 请求到 http://user-api/users/1', level: 'info' },
+            { node: 'decoder', time: 4.5, stage: 'Decoder', msg: '收到响应 200 OK, Content-Type: application/json', level: 'success' },
+            { node: 'decoder', time: 5.0, stage: 'Decoder', msg: 'JacksonDecoder 将 JSON 响应体反序列化为 UserDTO{id=1, name="张三"}', level: 'success' },
+            { node: 'errdec', time: 5.3, stage: 'ErrorDecoder', msg: 'HTTP 200 不在错误码范围，ErrorDecoder 直接放行', level: 'info' },
+            { node: 'result', time: 5.5, stage: '返回结果', msg: '返回 UserDTO 对象给调用方，整个 Feign 调用完成', level: 'success' }
+          ]
+        },
+        lb: {
+          name: 'Feign + LoadBalancer',
+          interfaceCode:
+            '<span class="ann">@FeignClient</span>(name = <span class="str">"user-service"</span>)\n' +
+            '<span class="kw">public interface</span> <span class="type">UserClient</span> {\n' +
+            '  <span class="ann">@GetMapping</span>(<span class="str">"/users/{id}"</span>)\n' +
+            '  <span class="type">UserDTO</span> <span class="method">getUser</span>(<span class="ann">@PathVariable</span>(<span class="str">"id"</span>) <span class="type">Long</span> id);\n' +
+            '}',
+          url: 'GET http://user-service/users/1',
+          service: 'user-service (Nacos 发现 → 3 实例)',
+          responseStatus: '200 OK',
+          responseBody: '{"id":1,"name":"张三"}',
+          hasLB: true,
+          hasFallback: false,
+          hasInterceptor: false,
+          finalStatus: 'ok',
+          steps: [
+            { node: 'proxy', time: 0.5, stage: '动态代理', msg: 'JDK Proxy 拦截 UserClient.getUser(1L) 方法调用', level: 'info' },
+            { node: 'contract', time: 1.0, stage: 'Contract', msg: 'SpringMvcContract 解析注解，注意 url 未指定，将使用服务名 user-service', level: 'info' },
+            { node: 'handler', time: 1.5, stage: 'MethodHandler', msg: '构建 RequestTemplate：GET http://user-service/users/1', level: 'info' },
+            { node: 'lb', time: 2.2, stage: 'LoadBalancer', msg: '从 Nacos 获取 user-service 实例列表：[192.168.1.10:8080, 192.168.1.11:8080, 192.168.1.12:8080]', level: 'info' },
+            { node: 'lb', time: 2.8, stage: 'LoadBalancer', msg: 'RoundRobin 轮询选择第 2 个实例：192.168.1.11:8080', level: 'success' },
+            { node: 'client', time: 3.2, stage: 'HTTP Client', msg: '实际请求 http://192.168.1.11:8080/users/1', level: 'info' },
+            { node: 'decoder', time: 4.0, stage: 'Decoder', msg: '收到 200 OK，反序列化响应体 → UserDTO{id=1, name="张三"}', level: 'success' },
+            { node: 'errdec', time: 4.3, stage: 'ErrorDecoder', msg: '状态码 200，无错误，正常返回', level: 'info' },
+            { node: 'result', time: 4.5, stage: '返回结果', msg: '返回 UserDTO，调用方完全无感知负载均衡的存在', level: 'success' }
+          ]
+        },
+        fallback: {
+          name: 'Feign + 熔断降级',
+          interfaceCode:
+            '<span class="ann">@FeignClient</span>(name = <span class="str">"user-service"</span>, fallbackFactory = <span class="type">UserClientFallbackFactory</span>.<span class="kw">class</span>)\n' +
+            '<span class="kw">public interface</span> <span class="type">UserClient</span> {\n' +
+            '  <span class="ann">@GetMapping</span>(<span class="str">"/users/{id}"</span>)\n' +
+            '  <span class="type">UserDTO</span> <span class="method">getUser</span>(<span class="ann">@PathVariable</span>(<span class="str">"id"</span>) <span class="type">Long</span> id);\n' +
+            '}',
+          url: 'GET http://user-service/users/1',
+          service: 'user-service (3 实例全部不可用)',
+          responseStatus: '降级返回',
+          responseBody: '{"id":1,"name":"默认用户(降级)"}',
+          hasLB: true,
+          hasFallback: true,
+          hasInterceptor: false,
+          finalStatus: 'warn',
+          steps: [
+            { node: 'proxy', time: 0.5, stage: '动态代理', msg: 'JDK Proxy 拦截 getUser(1L) 调用，此 FeignClient 配置了 fallbackFactory', level: 'info' },
+            { node: 'handler', time: 1.0, stage: 'MethodHandler', msg: '构建 RequestTemplate：GET http://user-service/users/1', level: 'info' },
+            { node: 'lb', time: 1.5, stage: 'LoadBalancer', msg: '从注册中心获取 user-service 实例列表，包含 3 个实例', level: 'info' },
+            { node: 'client', time: 2.0, stage: 'HTTP Client', msg: '尝试实例 192.168.1.10:8080 → 连接超时 (2s)', level: 'warn' },
+            { node: 'client', time: 4.2, stage: 'HTTP Client', msg: '重试实例 192.168.1.11:8080 → 连接超时 (2s)', level: 'warn' },
+            { node: 'client', time: 6.5, stage: 'HTTP Client', msg: '重试实例 192.168.1.12:8080 → 连接拒绝', level: 'error' },
+            { node: 'errdec', time: 6.8, stage: 'ErrorDecoder', msg: '所有重试失败，抛出 RetryableException: 全部 3 个实例不可用', level: 'error' },
+            { node: 'result', time: 7.0, stage: 'FallbackFactory', msg: '触发 UserClientFallbackFactory.create(exception)，返回降级 UserDTO', level: 'warn' },
+            { node: 'result', time: 7.2, stage: '返回结果', msg: '返回降级数据 UserDTO{id=1, name="默认用户(降级)"}，调用方无异常感知', level: 'success' }
+          ]
+        },
+        interceptor: {
+          name: '请求拦截器链',
+          interfaceCode:
+            '<span class="ann">@FeignClient</span>(name = <span class="str">"user-service"</span>, configuration = <span class="type">FeignConfig</span>.<span class="kw">class</span>)\n' +
+            '<span class="kw">public interface</span> <span class="type">UserClient</span> {\n' +
+            '  <span class="ann">@PostMapping</span>(<span class="str">"/users"</span>)\n' +
+            '  <span class="type">UserDTO</span> <span class="method">createUser</span>(<span class="ann">@RequestBody</span> <span class="type">UserDTO</span> user);\n' +
+            '}',
+          url: 'POST http://user-service/users',
+          service: 'user-service (192.168.1.10:8080)',
+          responseStatus: '201 Created',
+          responseBody: '{"id":99,"name":"新用户"}',
+          hasLB: true,
+          hasFallback: false,
+          hasInterceptor: true,
+          finalStatus: 'ok',
+          steps: [
+            { node: 'proxy', time: 0.5, stage: '动态代理', msg: 'JDK Proxy 拦截 createUser(userDTO) 调用', level: 'info' },
+            { node: 'contract', time: 1.0, stage: 'Contract', msg: '解析 @PostMapping("/users") 和 @RequestBody，确定 POST + JSON Body', level: 'info' },
+            { node: 'handler', time: 1.4, stage: 'MethodHandler', msg: '构建 POST RequestTemplate: /users, Body={name:"新用户"}', level: 'info' },
+            { node: 'interceptor', time: 1.8, stage: 'AuthInterceptor', msg: '注入 Authorization: Bearer eyJhbG... (从 SecurityContext 获取当前用户 Token)', level: 'info' },
+            { node: 'interceptor', time: 2.2, stage: 'TraceInterceptor', msg: '注入 X-Trace-Id: trace-abc123, X-Span-Id: span-xyz789 (链路追踪)', level: 'info' },
+            { node: 'encoder', time: 2.6, stage: 'Encoder', msg: 'JacksonEncoder 将 UserDTO 序列化为 JSON → {"name":"新用户"}', level: 'info' },
+            { node: 'client', time: 3.0, stage: 'HTTP Client', msg: '发送 POST 请求，Headers 包含: Authorization, X-Trace-Id, X-Span-Id', level: 'info' },
+            { node: 'decoder', time: 4.2, stage: 'Decoder', msg: '收到 201 Created，反序列化 → UserDTO{id=99, name="新用户"}', level: 'success' },
+            { node: 'result', time: 4.5, stage: '返回结果', msg: '返回新建的 UserDTO，整个调用链包含完整的认证和追踪信息', level: 'success' }
+          ]
+        }
+      };
+
+      // ── Helpers ──
+      function getSpeedMs() {
+        var v = parseInt(speedSlider.value);
+        return v === 1 ? 1200 : v === 2 ? 700 : 350;
+      }
+
+      function updateSpeedLabel() {
+        var v = parseInt(speedSlider.value);
+        speedVal.textContent = v === 1 ? '慢速' : v === 2 ? '中速' : '快速';
+      }
+
+      function clearAllNodes() {
+        var nodes = pipeline.querySelectorAll('.pnode');
+        nodes.forEach(function (n) { n.className = 'pnode'; });
+        var arrows = pipeline.querySelectorAll('.parrow');
+        arrows.forEach(function (a) { a.classList.remove('flow'); });
+        fixArrowsVisibility();
+      }
+
+      function setNodeState(nodeName, state) {
+        var node = pipeline.querySelector('[data-node="' + nodeName + '"]');
+        if (node) {
+          if (state === 'active') node.className = 'pnode active';
+          else if (state === 'done') node.className = 'pnode done';
+          else if (state === 'err') node.className = 'pnode err';
+          else if (state === 'warn') node.className = 'pnode warn';
+          else node.className = 'pnode';
+        }
+      }
+
+      function addLog(time, stage, msg, level) {
+        var entry = document.createElement('div');
+        entry.className = 'log-entry ' + (level || 'info');
+        var t = document.createElement('span');
+        t.className = 'time';
+        t.textContent = time;
+        var s = document.createElement('span');
+        s.className = 'stage';
+        s.textContent = stage;
+        var m = document.createElement('span');
+        m.className = 'msg';
+        m.textContent = msg;
+        entry.appendChild(t);
+        entry.appendChild(s);
+        entry.appendChild(m);
+        logPanel.appendChild(entry);
+        logPanel.scrollTop = logPanel.scrollHeight;
+      }
+
+      function clearLogs() {
+        logPanel.innerHTML = '';
+      }
+
+      function updateInfoCards(p) {
+        infoUrl.textContent = p.url;
+        infoSvc.textContent = p.service;
+        infoStatus.textContent = '-';
+        infoStatus.className = 'ic-v';
+        infoResp.textContent = '-';
+        infoResp.className = 'ic-v';
+      }
+
+      // ── Load preset ──
+      function loadPreset(id) {
+        if (running) return;
+        currentPreset = id;
+        var p = presets[id];
+        interfaceDef.innerHTML = p.interfaceCode.replace(/\n/g, '<br>').replace(/  /g, '&nbsp;&nbsp;');
+        updateInfoCards(p);
+        clearAllNodes();
+        clearLogs();
+        addLog('00:00.000', '系统', '已加载场景: ' + p.name);
+        currentStep = -1;
+        statusText.textContent = '就绪，等待调用...';
+        statusText.className = 'ic-v';
+        latencyText.textContent = '-';
+        tipBox.textContent = {
+          basic: '最简 Feign 调用：指定 URL 直连，无负载均衡无熔断，核心链路：Proxy → Contract → Handler → Encoder → Client → Decoder → Result',
+          lb: 'Spring Cloud LoadBalancer 集成：不指定 URL 而是通过服务名从注册中心发现实例，客户端侧轮询选择',
+          fallback: 'Hystrix/Resilience4j + Feign：当所有实例不可用时，FallbackFactory 返回降级数据，防止雪崩',
+          interceptor: 'RequestInterceptor 链：每个 Feign 请求自动注入认证 Token 和链路追踪 ID，实现横切关注点透明化'
+        }[id];
+
+        // Show/hide load balancer node based on preset
+        var lbNode = pipeline.querySelector('[data-node="lb"]');
+        if (lbNode) lbNode.style.display = p.hasLB ? '' : 'none';
+
+        // Show/hide interceptor node
+        var intNode = pipeline.querySelector('[data-node="interceptor"]');
+        if (intNode) intNode.style.display = p.hasInterceptor ? '' : 'none';
+
+        // Show/hide error decoder node
+        var edNode = pipeline.querySelector('[data-node="errdec"]');
+        if (edNode) edNode.style.display = p.hasFallback ? '' : 'none';
+
+        // Adjust arrows visibility
+        fixArrowsVisibility();
+      }
+
+      function fixArrowsVisibility() {
+        var children = Array.prototype.slice.call(pipeline.children);
+        // Find indices of visible nodes
+        var visibleIdx = [];
+        children.forEach(function (child, i) {
+          if (child.classList && child.classList.contains('pnode') && child.style.display !== 'none') {
+            visibleIdx.push(i);
+          }
+        });
+        // Hide all arrows
+        children.forEach(function (child) {
+          if (child.classList && child.classList.contains('parrow')) {
+            child.style.display = 'none';
+          }
+        });
+        // Show exactly one arrow between each consecutive pair of visible nodes
+        for (var j = 1; j < visibleIdx.length; j++) {
+          for (var k = visibleIdx[j - 1] + 1; k < visibleIdx[j]; k++) {
+            if (children[k].classList && children[k].classList.contains('parrow')) {
+              children[k].style.display = '';
+              break;
+            }
+          }
+        }
+      }
+
+      // ── Run step ──
+      function runStep() {
+        var p = presets[currentPreset];
+        if (currentStep >= p.steps.length - 1) {
+          running = false;
+          return false;
+        }
+
+        // Mark previous step nodes as done
+        if (currentStep >= 0) {
+          var prev = p.steps[currentStep];
+          setNodeState(prev.node, 'done');
+        }
+
+        currentStep++;
+        var step = p.steps[currentStep];
+
+        // Clear active from all and set current as active
+        var nodes = pipeline.querySelectorAll('.pnode');
+        nodes.forEach(function (n) {
+          if (n.getAttribute('data-node') === step.node && n.className !== 'done' && n.className !== 'err' && n.className !== 'warn') {
+            // keep it
+          }
+        });
+        setNodeState(step.node, step.level === 'error' ? 'err' : step.level === 'warn' ? 'warn' : 'active');
+
+        var timeStr = '00:0' + step.time.toFixed(1).replace('.', ':');
+        if (step.time >= 10) timeStr = '00:' + step.time.toFixed(1).replace('.', ':');
+        addLog(timeStr, step.stage, step.msg, step.level);
+
+        // Update info cards on last step
+        if (currentStep === p.steps.length - 1) {
+          infoStatus.textContent = p.responseStatus;
+          infoStatus.className = 'ic-v ' + (p.finalStatus === 'ok' ? 'ok' : 'err');
+          infoResp.textContent = p.responseBody;
+          infoResp.className = 'ic-v ' + (p.finalStatus === 'ok' ? 'ok' : 'err');
+          statusText.textContent = p.finalStatus === 'ok' ? '调用成功 ✓' : '降级返回 (业务无损)';
+          statusText.className = 'ic-v ' + (p.finalStatus === 'ok' ? 'ok' : 'err');
+          latencyText.textContent = (step.time * 1000).toFixed(0) + ' ms';
+
+          if (p.finalStatus === 'ok') {
+            setNodeState(step.node, 'done');
+          }
+          running = false;
+          return false;
+        }
+        return true;
+      }
+
+      function runAll() {
+        if (running) return;
+        running = true;
+        clearLogs();
+        clearAllNodes();
+        currentStep = -1;
+        statusText.textContent = '调用中...';
+        statusText.className = 'ic-v';
+        latencyText.textContent = '-';
+        infoStatus.textContent = '-';
+        infoStatus.className = 'ic-v';
+        infoResp.textContent = '-';
+        infoResp.className = 'ic-v';
+        startTime = Date.now();
+        addLog('00:00.000', '系统', '开始执行: ' + presets[currentPreset].name);
+        scheduleNext();
+      }
+
+      function scheduleNext() {
+        if (!running) return;
+        var hasMore = runStep();
+        if (hasMore) {
+          timer = setTimeout(scheduleNext, getSpeedMs());
+        }
+      }
+
+      function doStep() {
+        if (running) return;
+        if (currentStep === -1) {
+          clearLogs();
+          clearAllNodes();
+          statusText.textContent = '单步执行中...';
+          statusText.className = 'ic-v';
+          infoStatus.textContent = '-';
+          infoStatus.className = 'ic-v';
+          infoResp.textContent = '-';
+          infoResp.className = 'ic-v';
+          addLog('00:00.000', '系统', '单步模式: ' + presets[currentPreset].name);
+        }
+        runStep();
+      }
+
+      function resetAll() {
+        running = false;
+        if (timer) { clearTimeout(timer); timer = null; }
+        clearAllNodes();
+        clearLogs();
+        currentStep = -1;
+        statusText.textContent = '等待发起调用...';
+        statusText.className = 'ic-v';
+        latencyText.textContent = '-';
+        var p = presets[currentPreset];
+        infoStatus.textContent = '-';
+        infoStatus.className = 'ic-v';
+        infoResp.textContent = '-';
+        infoResp.className = 'ic-v';
+        addLog('00:00.000', '系统', '已重置，准备就绪');
+      }
+
+      // ── Event binding ──
+      presetList.addEventListener('click', function (e) {
+        var btn = e.target.closest('.pbtn');
+        if (!btn) return;
+        var id = btn.getAttribute('data-id');
+        if (id === currentPreset) return;
+        presetList.querySelectorAll('.pbtn').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        resetAll();
+        loadPreset(id);
+      });
+
+      btnRun.addEventListener('click', function () {
+        if (running) return;
+        resetAll();
+        runAll();
+      });
+
+      btnStep.addEventListener('click', function () {
+        doStep();
+      });
+
+      btnReset.addEventListener('click', function () {
+        resetAll();
+      });
+
+      speedSlider.addEventListener('input', function () {
+        updateSpeedLabel();
+      });
+
+      // ── Init ──
+      updateSpeedLabel();
+      loadPreset('basic');
+    })();
+  </script>
+</body>
+
+</html>

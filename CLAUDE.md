@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A collection of self-contained, single-file HTML playgrounds for interactive visualization of technical concepts. Each file is a standalone educational tool — no build system, no server required. Currently contains 23 topic playgrounds plus an index navigation page.
+A collection of self-contained, single-file HTML playgrounds for interactive visualization of technical concepts. Each file is a standalone educational tool — no build system, no server required. Currently contains 25 topic playgrounds plus an index navigation page.
 
 ## Topics Covered
 
 | Category | Playgrounds |
 |----------|------------|
 | AI | `rag.html`, `ai-agent-harness.html`, `claude-code.html` |
-| Spring | `spring-boot-startup.html`, `spring-circular-dep.html`, `spring-tx.html` |
+| Spring | `spring-boot-startup.html`, `spring-circular-dep.html`, `spring-tx.html`, `feign.html` |
 | Redis | `redis-cluster.html`, `redis-sentinel.html`, `redis-db-consistency.html` |
 | MySQL | `mysql-explain.html`, `mysql-isolation.html` |
 | Kafka/MQ | `kafka.html`, `kafka-offset.html`, `rabbitmq-ordering.html` |
@@ -36,7 +36,7 @@ Open any `.html` file directly in a browser. No build step or dev server needed.
 │   ├── nav.js              # Navigation bar component
 │   ├── theme.js            # Dark/light theme toggle
 │   └── analytics.js        # Analytics integration
-├── *.html                  # Individual topic playgrounds (23 files)
+├── *.html                  # Individual topic playgrounds (25 files)
 └── CLAUDE.md               # This file
 ```
 
