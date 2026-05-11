@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redis Cluster</title>
+  <meta name="description" content="交互式演示 Redis Cluster 集群模式的哈希槽分配、数据分片、节点通信及故障转移机制">
+  <meta name="keywords" content="Redis Cluster, 哈希槽, 数据分片, 故障转移, 集群模式, 交互式演示">
+  <meta property="og:title" content="Redis Cluster">
+  <meta property="og:description" content="交互式演示 Redis Cluster 集群模式的哈希槽分配、数据分片、节点通信及故障转移机制">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      /* Legacy aliases for JS/inline references */
+      --bg: var(--bg-primary);
+      --surface: var(--bg-card);
+      --surface2: var(--bg-elevated);
+      --text: var(--text-primary);
+      --text2: var(--text-secondary);
+      --accent: var(--accent-blue);
+      --accent2: #3b8de6;
+      --red: var(--accent-red);
+      --green: var(--accent-green);
+      --yellow: var(--accent-orange);
+      --orange: var(--accent-orange);
+      --cyan: var(--accent-cyan);
+      --purple: var(--accent-purple);
+      --pink: var(--accent-pink);
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at 20% 0%, rgba(77, 163, 255, 0.04) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 100%, rgba(176, 122, 255, 0.03) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      grid-template-rows: 1fr auto;
+      height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    .controls {
+      grid-row: 1/3;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .preview {
+      grid-column: 2;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .prompt-bar {
+      grid-column: 2;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    h1 {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      letter-spacing: -.3px;
+      color: var(--text-primary);
+    }
+
+    .subtitle {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      letter-spacing: 0.3px;
+    }
+
+    .section {
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 0.68rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+    }
+
+    label {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 500;
+    }
+
+    select,
+    input[type=range] {
+      width: 100%;
+      margin-bottom: 10px;
+    }
+
+    select {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      transition: border-color .2s, box-shadow .2s;
+      outline: none;
+    }
+
+    select:focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--accent-blue);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 6px var(--glow-blue);
+    }
+
+    .range-val {
+      font-size: 11px;
+      color: var(--accent-blue);
+      font-weight: 600;
+      float: right;
+    }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all .2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .btn:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-accent {
+      background: linear-gradient(135deg, #36d986, #2bb870);
+      border-color: transparent;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .btn-accent:hover {
+      background: linear-gradient(135deg, #40e694, #36d986);
+      box-shadow: 0 4px 16px var(--glow-green);
+    }
+
+    .btn-red {
+      background: linear-gradient(135deg, #ff5c6c, #e04555);
+      border-color: transparent;
+      color: #fff;
+    }
+
+    .btn-red:hover {
+      background: linear-gradient(135deg, #ff6e7c, #ff5c6c);
+      box-shadow: 0 4px 16px rgba(255, 92, 108, 0.2);
+    }
+
+    .btn-green {
+      background: linear-gradient(135deg, #36d986, #2bb870);
+      border-color: transparent;
+      color: #fff;
+    }
+
+    .btn-green:hover {
+      background: linear-gradient(135deg, #40e694, #36d986);
+      box-shadow: 0 4px 16px var(--glow-green);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .preset-btn {
+      padding: 5px 10px;
+      font-size: 11px;
+      border-radius: 14px;
+    }
+
+    .preset-btn.active {
+      background: linear-gradient(135deg, var(--accent-blue), #3b8de6);
+      border-color: transparent;
+      color: #fff;
+      box-shadow: 0 2px 10px var(--glow-blue);
+    }
+
+    .tab-bar {
+      display: flex;
+      gap: 0;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      padding: 0;
+      background: transparent;
+      border-radius: 0;
+    }
+
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 10px 6px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 0;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all .2s;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+
+    .tab.active {
+      color: var(--accent-blue);
+      border-bottom-color: var(--accent-blue);
+      background: rgba(77, 163, 255, 0.05);
+    }
+
+    .tab:hover:not(.active) {
+      color: var(--text-primary);
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    canvas {
+      border-radius: var(--radius);
+      display: block;
+    }
+
+    .viz-container {
+      position: relative;
+    }
+
+    .info-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 12px;
+      backdrop-filter: blur(8px);
+      transition: border-color .2s;
+    }
+
+    .info-card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .info-card h3 {
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+    }
+
+    .info-card p {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .info-card code {
+      background: var(--bg-elevated);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      font-size: 11px;
+      color: var(--accent-cyan);
+    }
+
+    .slot-grid {
+      display: grid;
+      grid-template-columns: repeat(64, 1fr);
+      gap: 1px;
+      margin: 12px 0;
+    }
+
+    .slot-cell {
+      aspect-ratio: 1;
+      border-radius: 2px;
+      transition: background .2s;
+    }
+
+    .node-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .node-badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .log-area {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px;
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.68rem;
+      max-height: 200px;
+      overflow-y: auto;
+      line-height: 1.7;
+    }
+
+    .log-area .log-time {
+      color: var(--text-secondary);
+    }
+
+    .log-area .log-info {
+      color: var(--accent-cyan);
+    }
+
+    .log-area .log-warn {
+      color: var(--accent-orange);
+    }
+
+    .log-area .log-error {
+      color: var(--accent-red);
+    }
+
+    .log-area .log-ok {
+      color: var(--accent-green);
+    }
+
+    .prompt-text {
+      flex: 1;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .copy-btn {
+      white-space: nowrap;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .stat-row:last-child {
+      border: none;
+    }
+
+    .stat-label {
+      color: var(--text-secondary);
+    }
+
+    .stat-val {
+      font-weight: 600;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+    }
+
+    .topology-legend {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin: 10px 0;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .gossip-msg {
+      position: absolute;
+      font-size: 10px;
+      padding: 2px 6px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 10;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: .4;
+      }
+    }
+
+    .pulsing {
+      animation: pulse 1s infinite;
+    }
+
+    .key-input {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      margin-bottom: 8px;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    .key-input:focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    .hash-result {
+      background: var(--bg-elevated);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      margin: 8px 0;
+      text-align: center;
+      border: 1px solid var(--border);
+    }
+
+    .hash-result .slot-num {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      color: var(--accent-blue);
+    }
+
+    .hash-result .slot-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-hover);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="layout">
+    <div class="controls">
+      <h1>Redis Cluster</h1>
+      <div class="subtitle">交互式集群原理演示</div>
+
+      <div class="section">
+        <div class="section-title">预设场景</div>
+        <div class="btn-row">
+          <button class="btn preset-btn active" onclick="applyPreset('basic')">基础 3主3从</button>
+          <button class="btn preset-btn" onclick="applyPreset('large')">大规模集群</button>
+          <button class="btn preset-btn" onclick="applyPreset('minimal')">最小集群</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">集群配置</div>
+        <label>主节点数量 <span class="range-val" id="masterCountVal">3</span></label>
+        <input type="range" id="masterCount" min="3" max="8" value="3" oninput="onConfigChange()">
+        <label>每主节点从节点数 <span class="range-val" id="replicaCountVal">1</span></label>
+        <input type="range" id="replicaCount" min="0" max="3" value="1" oninput="onConfigChange()">
+      </div>
+
+      <div class="section">
+        <div class="section-title">模拟操作</div>
+        <label>Key 查询测试</label>
+        <input type="text" class="key-input" id="keyInput" placeholder="输入 key（如 user:1001）" oninput="onKeyInput()">
+        <div class="hash-result" id="hashResult" style="display:none;">
+          <div class="slot-num" id="slotNum">—</div>
+          <div class="slot-label">Hash Slot → <span id="slotOwner">—</span></div>
+        </div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn btn-red" id="failBtn" onclick="simulateFailover()">模拟主节点故障</button>
+          <button class="btn btn-green" id="recoverBtn" onclick="simulateRecovery()" style="display:none;">恢复节点</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-accent" onclick="simulateGossip()">触发 Gossip 通信</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn" onclick="simulateReshard()">模拟 Reshard</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">动画速度</div>
+        <label>速度 <span class="range-val" id="speedVal">1x</span></label>
+        <input type="range" id="speed" min="0.5" max="3" step="0.5" value="1"
+          oninput="document.getElementById('speedVal').textContent=this.value+'x'">
+      </div>
+    </div>
+
+    <div class="preview">
+      <div class="tab-bar">
+        <div class="tab active" onclick="switchTab('topology')">集群拓扑</div>
+        <div class="tab" onclick="switchTab('slots')">哈希槽分布</div>
+        <div class="tab" onclick="switchTab('gossip')">Gossip 协议</div>
+        <div class="tab" onclick="switchTab('failover')">故障转移</div>
+      </div>
+
+      <div class="panel active" id="panel-topology">
+        <div class="topology-legend" id="topologyLegend"></div>
+        <div class="viz-container">
+          <canvas id="topoCanvas" width="900" height="480"></canvas>
+        </div>
+        <div style="margin-top:14px;" id="clusterStats"></div>
+      </div>
+
+      <div class="panel" id="panel-slots">
+        <div class="info-card">
+          <h3>Hash Slot 分配</h3>
+          <p>Redis Cluster 将所有数据映射到 <code>16384</code> 个哈希槽。每个 key 通过 <code>CRC16(key) % 16384</code>
+            计算所属槽位，再路由到负责该槽位范围的主节点。</p>
+        </div>
+        <div id="slotViz"></div>
+        <div id="slotDetail" style="margin-top: 12px;"></div>
+      </div>
+
+      <div class="panel" id="panel-gossip">
+        <div class="info-card">
+          <h3>Gossip 协议 (Cluster Bus)</h3>
+          <p>节点间通过 <code>Gossip</code> 协议交换状态信息。每个节点每秒随机选取若干节点发送 <code>PING</code>，收到后回复
+            <code>PONG</code>。消息中携带部分已知节点的状态信息（epoch、slot 分配、故障标记等），实现最终一致的集群视图。
+          </p>
+        </div>
+        <div class="viz-container">
+          <canvas id="gossipCanvas" width="900" height="380"></canvas>
+        </div>
+        <div class="log-area" id="gossipLog" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="panel" id="panel-failover">
+        <div class="info-card">
+          <h3>故障检测与自动转移</h3>
+          <p>当超过半数主节点标记某节点为 <code>PFAIL</code>（疑似故障），该节点被标记为
+            <code>FAIL</code>。其从节点发起选举（Raft-like），获得多数主节点投票后晋升为新主节点，接管原主节点的哈希槽。
+          </p>
+        </div>
+        <div class="viz-container">
+          <canvas id="failoverCanvas" width="900" height="400"></canvas>
+        </div>
+        <div class="log-area" id="failoverLog" style="margin-top:12px;"></div>
+      </div>
+    </div>
+
+    <div class="prompt-bar">
+      <div class="prompt-text" id="promptText">调整左侧参数探索 Redis 集群的工作原理。</div>
+      <button class="btn copy-btn btn-accent" onclick="copyPrompt()">复制</button>
+    </div>
+  </div>
+
+  <script>
+    const COLORS = ['#6c7aff', '#4ecdc4', '#ff8c42', '#ff6bb5', '#b44dff', '#ffd93d', '#00d2ff', '#ff5f6d'];
+    const COLOR_NAMES = ['蓝', '青', '橙', '粉', '紫', '黄', '天蓝', '红'];
+
+    let state = {
+      masterCount: 3,
+      replicaCount: 1,
+      nodes: [],
+      failedNode: null,
+      promotedNode: null,
+      gossipMessages: [],
+      resharding: false,
+      activeTab: 'topology',
+      animations: [],
+    };
+
+    function crc16(str) {
+      let crc = 0;
+      for (let i = 0; i < str.length; i++) {
+        crc ^= str.charCodeAt(i) << 8;
+        for (let j = 0; j < 8; j++) {
+          crc = crc & 0x8000 ? (crc << 1) ^ 0x1021 : crc << 1;
+          crc &= 0xFFFF;
+        }
+      }
+      return crc;
+    }
+
+    function buildCluster() {
+      const m = state.masterCount;
+      const r = state.replicaCount;
+      const nodes = [];
+      const slotsPerMaster = Math.floor(16384 / m);
+      for (let i = 0; i < m; i++) {
+        const start = i * slotsPerMaster;
+        const end = i === m - 1 ? 16383 : (i + 1) * slotsPerMaster - 1;
+        nodes.push({
+          id: `M${i + 1}`,
+          role: 'master',
+          color: COLORS[i % COLORS.length],
+          colorName: COLOR_NAMES[i % COLOR_NAMES.length],
+          port: 7000 + i,
+          slotStart: start,
+          slotEnd: end,
+          status: 'online',
+          replicas: [],
+          epoch: 1,
+        });
+      }
+      for (let i = 0; i < m; i++) {
+        for (let j = 0; j < r; j++) {
+          const rep = {
+            id: `S${i + 1}${r > 1 ? String.fromCharCode(97 + j) : ''}`,
+            role: 'replica',
+            color: nodes[i].color,
+            colorName: nodes[i].colorName,
+            port: 7000 + m + i * r + j,
+            masterId: nodes[i].id,
+            status: 'online',
+            epoch: 1,
+          };
+          nodes[i].replicas.push(rep.id);
+          nodes.push(rep);
+        }
+      }
+      state.nodes = nodes;
+      state.failedNode = null;
+      state.promotedNode = null;
+      state.gossipMessages = [];
+      state.resharding = false;
+    }
+
+    function getMasters() { return state.nodes.filter(n => n.role === 'master'); }
+    function getReplicas() { return state.nodes.filter(n => n.role === 'replica'); }
+    function getNode(id) { return state.nodes.find(n => n.id === id); }
+
+    function onConfigChange() {
+      state.masterCount = +document.getElementById('masterCount').value;
+      state.replicaCount = +document.getElementById('replicaCount').value;
+      document.getElementById('masterCountVal').textContent = state.masterCount;
+      document.getElementById('replicaCountVal').textContent = state.replicaCount;
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      buildCluster();
+      renderAll();
+    }
+
+    function applyPreset(name) {
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      if (name === 'basic') { state.masterCount = 3; state.replicaCount = 1; }
+      else if (name === 'large') { state.masterCount = 6; state.replicaCount = 2; }
+      else if (name === 'minimal') { state.masterCount = 3; state.replicaCount = 0; }
+      document.getElementById('masterCount').value = state.masterCount;
+      document.getElementById('replicaCount').value = state.replicaCount;
+      document.getElementById('masterCountVal').textContent = state.masterCount;
+      document.getElementById('replicaCountVal').textContent = state.replicaCount;
+      event.target.classList.add('active');
+      buildCluster();
+      renderAll();
+    }
+
+    function switchTab(tab) {
+      state.activeTab = tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('panel-' + tab).classList.add('active');
+      renderAll();
+    }
+
+    function onKeyInput() {
+      const key = document.getElementById('keyInput').value.trim();
+      const el = document.getElementById('hashResult');
+      if (!key) { el.style.display = 'none'; updatePrompt(); return; }
+      el.style.display = 'block';
+      const hashTag = key.match(/\{([^}]+)\}/);
+      const effective = hashTag ? hashTag[1] : key;
+      const slot = crc16(effective) % 16384;
+      document.getElementById('slotNum').textContent = slot;
+      const master = getMasters().find(m => slot >= m.slotStart && slot <= m.slotEnd);
+      const ownerEl = document.getElementById('slotOwner');
+      if (master) {
+        ownerEl.innerHTML = `<span style="color:${master.color}">${master.id}</span> (端口 ${master.port})`;
+      }
+      updatePrompt();
+    }
+
+    // ─── Topology rendering ───
+    function renderTopology() {
+      const canvas = document.getElementById('topoCanvas');
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      const masters = getMasters();
+      const m = masters.length;
+      const cx = W / 2, cy = H / 2 - 10;
+      const R = Math.min(160, W / 3);
+      const nodeR = 28;
+
+      const positions = {};
+
+      // Draw master ring
+      masters.forEach((node, i) => {
+        const angle = -Math.PI / 2 + (2 * Math.PI * i) / m;
+        const x = cx + R * Math.cos(angle);
+        const y = cy + R * Math.sin(angle);
+        positions[node.id] = { x, y };
+      });
+
+      // Draw replica positions
+      state.nodes.filter(n => n.role === 'replica').forEach(rep => {
+        const mp = positions[rep.masterId];
+        if (!mp) return;
+        const master = getNode(rep.masterId);
+        const mi = masters.indexOf(master);
+        const angle = -Math.PI / 2 + (2 * Math.PI * mi) / m;
+        const ri = master.replicas.indexOf(rep.id);
+        const offset = (ri - (master.replicas.length - 1) / 2) * 0.3;
+        const rx = cx + (R + 90) * Math.cos(angle + offset);
+        const ry = cy + (R + 90) * Math.sin(angle + offset);
+        positions[rep.id] = { x: rx, y: ry };
+      });
+
+      // Draw connections: master-replica
+      state.nodes.filter(n => n.role === 'replica').forEach(rep => {
+        const mp = positions[rep.masterId];
+        const rp = positions[rep.id];
+        if (!mp || !rp) return;
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = rep.status === 'online' ? rep.color + '60' : '#ff5f6d40';
+        ctx.lineWidth = 1.5;
+        ctx.moveTo(mp.x, mp.y);
+        ctx.lineTo(rp.x, rp.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Arrow
+        const dx = rp.x - mp.x, dy = rp.y - mp.y;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        const ux = dx / len, uy = dy / len;
+        const ax = mp.x + ux * (len - nodeR - 6), ay = mp.y + uy * (len - nodeR - 6);
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ax - ux * 8 + uy * 4, ay - uy * 8 - ux * 4);
+        ctx.lineTo(ax - ux * 8 - uy * 4, ay - uy * 8 + ux * 4);
+        ctx.fillStyle = rep.color + '80';
+        ctx.fill();
+      });
+
+      // Draw connections: master-master (cluster bus)
+      for (let i = 0; i < m; i++) {
+        for (let j = i + 1; j < m; j++) {
+          const a = positions[masters[i].id], b = positions[masters[j].id];
+          ctx.beginPath();
+          ctx.strokeStyle = var_bus_line();
+          ctx.lineWidth = 1;
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+
+      // Draw gossip animations
+      state.gossipMessages.forEach(msg => {
+        if (!msg.progress) return;
+        const from = positions[msg.from], to = positions[msg.to];
+        if (!from || !to) return;
+        const t = msg.progress;
+        const px = from.x + (to.x - from.x) * t;
+        const py = from.y + (to.y - from.y) * t;
+        ctx.beginPath();
+        ctx.arc(px, py, 4, 0, Math.PI * 2);
+        ctx.fillStyle = msg.type === 'PING' ? '#ffd93d' : '#4ecdc4';
+        ctx.fill();
+        ctx.font = '9px SF Mono, monospace';
+        ctx.fillStyle = msg.type === 'PING' ? '#ffd93d' : '#4ecdc4';
+        ctx.fillText(msg.type, px + 6, py - 6);
+      });
+
+      // Draw nodes
+      state.nodes.forEach(node => {
+        const p = positions[node.id];
+        if (!p) return;
+        const r = node.role === 'master' ? nodeR : 20;
+
+        // Glow for masters
+        if (node.role === 'master' && node.status === 'online') {
+          const grad = ctx.createRadialGradient(p.x, p.y, r, p.x, p.y, r + 12);
+          grad.addColorStop(0, node.color + '30');
+          grad.addColorStop(1, 'transparent');
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r + 12, 0, Math.PI * 2);
+          ctx.fillStyle = grad;
+          ctx.fill();
+        }
+
+        // Node circle
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        if (node.status === 'failed') {
+          ctx.fillStyle = var_failed_bg();
+          ctx.strokeStyle = var_red();
+          ctx.lineWidth = 2;
+          ctx.fill(); ctx.stroke();
+          // X mark
+          ctx.beginPath();
+          ctx.moveTo(p.x - 8, p.y - 8); ctx.lineTo(p.x + 8, p.y + 8);
+          ctx.moveTo(p.x + 8, p.y - 8); ctx.lineTo(p.x - 8, p.y + 8);
+          ctx.strokeStyle = var_red();
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        } else if (state.promotedNode === node.id) {
+          ctx.fillStyle = node.color + '30';
+          ctx.strokeStyle = var_green();
+          ctx.lineWidth = 2.5;
+          ctx.fill(); ctx.stroke();
+        } else {
+          ctx.fillStyle = node.status === 'online' ? node.color + '20' : (isLight() ? '#e5e7eb' : '#333');
+          ctx.strokeStyle = node.color;
+          ctx.lineWidth = node.role === 'master' ? 2.5 : 1.5;
+          ctx.fill(); ctx.stroke();
+        }
+
+        // Label
+        ctx.font = `${node.role === 'master' ? 'bold ' : ''}${node.role === 'master' ? 13 : 11}px -apple-system, sans-serif`;
+        ctx.fillStyle = node.status === 'failed' ? var_red() : var_text();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(node.id, p.x, p.y);
+
+        // Port
+        ctx.font = '9px SF Mono, monospace';
+        ctx.fillStyle = var_text2();
+        ctx.fillText(':' + node.port, p.x, p.y + r + 12);
+
+        // Slot range for masters
+        if (node.role === 'master' && node.status !== 'failed') {
+          ctx.font = '9px SF Mono, monospace';
+          ctx.fillStyle = node.color + 'aa';
+          ctx.fillText(`[${node.slotStart}-${node.slotEnd}]`, p.x, p.y - r - 8);
+        }
+      });
+
+      // Legend
+      const legend = document.getElementById('topologyLegend');
+      legend.innerHTML = getMasters().map(m =>
+        `<div class="legend-item"><div class="legend-dot" style="background:${m.color}"></div>${m.id} · 端口 ${m.port} · Slots ${m.slotStart}-${m.slotEnd}${m.status === 'failed' ? ' · <span style="color:var(--red)">FAIL</span>' : ''}</div>`
+      ).join('');
+
+      // Stats
+      const stats = document.getElementById('clusterStats');
+      const onlineMasters = getMasters().filter(n => n.status === 'online').length;
+      const onlineReplicas = getReplicas().filter(n => n.status === 'online').length;
+      stats.innerHTML = `<div class="info-card"><div class="stat-row"><span class="stat-label">总节点数</span><span class="stat-val">${state.nodes.length}</span></div><div class="stat-row"><span class="stat-label">主节点</span><span class="stat-val">${onlineMasters} / ${getMasters().length}</span></div><div class="stat-row"><span class="stat-label">从节点</span><span class="stat-val">${onlineReplicas} / ${getReplicas().length}</span></div><div class="stat-row"><span class="stat-label">哈希槽覆盖</span><span class="stat-val">${state.failedNode && !state.promotedNode ? '<span style="color:var(--red)">不完整</span>' : '<span style="color:var(--green)">16384/16384</span>'}</span></div><div class="stat-row"><span class="stat-label">集群状态</span><span class="stat-val">${state.failedNode && !state.promotedNode ? '<span style="color:var(--red)">FAIL (部分槽位不可用)</span>' : '<span style="color:var(--green)">OK</span>'}</span></div></div>`;
+    }
+
+    function isLight() { return document.documentElement.getAttribute('data-theme') === 'light'; }
+    function var_red() { return isLight() ? '#dc2626' : '#ff5f6d'; }
+    function var_green() { return isLight() ? '#059669' : '#4ecdc4'; }
+    function var_text() { return isLight() ? '#111827' : '#e2e4ed'; }
+    function var_text2() { return isLight() ? '#4b5563' : '#8b90a5'; }
+    function var_bus_line() { return isLight() ? '#94a3b820' : '#2e334830'; }
+    function var_failed_bg() { return isLight() ? '#fef2f2' : '#2a1520'; }
+    function var_step_bg() { return isLight() ? '#f0f3f8' : '#1a1d27'; }
+
+    // ─── Slot visualization ───
+    function renderSlots() {
+      const masters = getMasters();
+      const container = document.getElementById('slotViz');
+      let html = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">';
+      masters.forEach(m => {
+        const count = m.slotEnd - m.slotStart + 1;
+        html += `<div class="node-badge" style="background:${m.color}20;border:1px solid ${m.color}50"><span class="dot" style="background:${m.color}"></span>${m.id}: ${m.slotStart}-${m.slotEnd} (${count}槽)</div>`;
+      });
+      html += '</div>';
+
+      // Grid: 256 cells representing 16384 slots (each cell = 64 slots)
+      html += '<div style="margin:6px 0;font-size:11px;color:var(--text2)">每格 = 64 个哈希槽 (共 16384 / 64 = 256 格)</div>';
+      html += '<div class="slot-grid">';
+      for (let i = 0; i < 256; i++) {
+        const slot = i * 64;
+        const master = masters.find(m => slot >= m.slotStart && slot <= m.slotEnd);
+        const color = master ? master.color : (isLight() ? '#d1d5db' : '#333');
+        const title = master ? `Slot ${slot}-${Math.min(slot + 63, 16383)} → ${master.id}` : '';
+        html += `<div class="slot-cell" style="background:${color}90" title="${title}"></div>`;
+      }
+      html += '</div>';
+
+      // CRC16 formula
+      html += `<div class="info-card" style="margin-top:14px"><h3>路由算法</h3><p><code>HASH_SLOT = CRC16(key) mod 16384</code><br><br>如果 key 包含 <code>{hash_tag}</code>，则只对花括号内的部分计算 CRC16，这使得相关的 key 可以被分配到同一个槽位。例如 <code>user:{1001}:name</code> 和 <code>user:{1001}:email</code> 会路由到相同的节点。</p></div>`;
+
+      container.innerHTML = html;
+
+      // Highlight active key
+      const key = document.getElementById('keyInput').value.trim();
+      if (key) {
+        const hashTag = key.match(/\{([^}]+)\}/);
+        const effective = hashTag ? hashTag[1] : key;
+        const slot = crc16(effective) % 16384;
+        const cellIdx = Math.floor(slot / 64);
+        const cells = container.querySelectorAll('.slot-cell');
+        if (cells[cellIdx]) {
+          cells[cellIdx].style.outline = isLight() ? '2px solid #111827' : '2px solid #fff';
+          cells[cellIdx].style.outlineOffset = '1px';
+          cells[cellIdx].style.zIndex = '1';
+          cells[cellIdx].style.position = 'relative';
+        }
+        const master = masters.find(m => slot >= m.slotStart && slot <= m.slotEnd);
+        document.getElementById('slotDetail').innerHTML = `<div class="info-card"><h3>Key: <code>${key}</code></h3><p>有效哈希部分: <code>${effective}</code><br>CRC16 = ${crc16(effective)}<br>Slot = ${crc16(effective)} % 16384 = <strong>${slot}</strong><br>路由至: <span style="color:${master?.color || '#fff'}">${master?.id || '?'}</span> (端口 ${master?.port || '?'})</p></div>`;
+      } else {
+        document.getElementById('slotDetail').innerHTML = '';
+      }
+    }
+
+    // ─── Gossip Protocol ───
+    let gossipAnimFrame = null;
+    function renderGossip() {
+      const canvas = document.getElementById('gossipCanvas');
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      const allNodes = state.nodes.filter(n => n.status === 'online');
+      const n = allNodes.length;
+      const cx = W / 2, cy = H / 2;
+      const R = Math.min(150, H / 2 - 40);
+      const positions = {};
+
+      allNodes.forEach((node, i) => {
+        const angle = -Math.PI / 2 + (2 * Math.PI * i) / n;
+        positions[node.id] = { x: cx + R * Math.cos(angle), y: cy + R * Math.sin(angle) };
+      });
+
+      // Cluster bus lines
+      for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+          const a = positions[allNodes[i].id], b = positions[allNodes[j].id];
+          ctx.beginPath();
+          ctx.strokeStyle = var_bus_line();
+          ctx.lineWidth = 0.5;
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+
+      // Active gossip paths
+      state.gossipMessages.forEach(msg => {
+        const from = positions[msg.from], to = positions[msg.to];
+        if (!from || !to) return;
+        ctx.beginPath();
+        ctx.strokeStyle = msg.type === 'PING' ? '#ffd93d40' : '#4ecdc440';
+        ctx.lineWidth = 2;
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(to.x, to.y);
+        ctx.stroke();
+
+        if (msg.progress !== undefined) {
+          const t = msg.progress;
+          const px = from.x + (to.x - from.x) * t;
+          const py = from.y + (to.y - from.y) * t;
+          ctx.beginPath();
+          ctx.arc(px, py, 6, 0, Math.PI * 2);
+          ctx.fillStyle = msg.type === 'PING' ? '#ffd93d' : '#4ecdc4';
+          ctx.fill();
+          ctx.font = 'bold 9px SF Mono, monospace';
+          ctx.fillText(msg.type, px + 10, py - 4);
+          // Packet info
+          ctx.font = '8px SF Mono, monospace';
+          ctx.fillStyle = var_text2();
+          ctx.fillText(msg.info || '', px + 10, py + 8);
+        }
+      });
+
+      // Nodes
+      allNodes.forEach(node => {
+        const p = positions[node.id];
+        const r = node.role === 'master' ? 24 : 18;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = node.color + '25';
+        ctx.strokeStyle = node.color;
+        ctx.lineWidth = node.role === 'master' ? 2 : 1.5;
+        ctx.fill(); ctx.stroke();
+        ctx.font = `${node.role === 'master' ? 'bold 12' : '10'}px -apple-system, sans-serif`;
+        ctx.fillStyle = var_text();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(node.id, p.x, p.y);
+      });
+
+      // Title
+      ctx.font = '11px -apple-system, sans-serif';
+      ctx.fillStyle = var_text2();
+      ctx.textAlign = 'left';
+      ctx.fillText('Cluster Bus (端口 + 10000)', 10, 20);
+      ctx.fillText('每秒随机选取节点发送 PING/PONG 消息', 10, 36);
+    }
+
+    function simulateGossip() {
+      state.gossipMessages = [];
+      const online = state.nodes.filter(n => n.status === 'online');
+      if (online.length < 2) return;
+      const log = document.getElementById('gossipLog');
+      log.innerHTML = '';
+
+      const pairs = [];
+      const count = Math.min(online.length, 4);
+      const used = new Set();
+      for (let i = 0; i < count; i++) {
+        let a, b;
+        let tries = 0;
+        do {
+          a = online[Math.floor(Math.random() * online.length)];
+          b = online[Math.floor(Math.random() * online.length)];
+          tries++;
+        } while ((a.id === b.id || used.has(a.id + b.id)) && tries < 20);
+        used.add(a.id + b.id);
+        pairs.push([a, b]);
+      }
+
+      const speed = +document.getElementById('speed').value;
+      let delay = 0;
+
+      pairs.forEach(([a, b], idx) => {
+        // PING
+        setTimeout(() => {
+          const msg = { from: a.id, to: b.id, type: 'PING', progress: 0, info: `epoch:${a.epoch} slots:${a.role === 'master' ? a.slotStart + '-' + a.slotEnd : 'replica'}` };
+          state.gossipMessages.push(msg);
+          addLog(log, 'info', `${a.id} → ${b.id} PING [携带 ${Math.min(online.length, 3)} 个已知节点状态]`);
+          animateMessage(msg, () => {
+            // PONG response
+            const pong = { from: b.id, to: a.id, type: 'PONG', progress: 0, info: `epoch:${b.epoch} flags:OK` };
+            state.gossipMessages.push(pong);
+            addLog(log, 'ok', `${b.id} → ${a.id} PONG [确认存活, 更新集群视图]`);
+            animateMessage(pong, () => { });
+          });
+        }, delay);
+        delay += 800 / speed;
+      });
+    }
+
+    function animateMessage(msg, onDone) {
+      const speed = +document.getElementById('speed').value;
+      const duration = 600 / speed;
+      const start = performance.now();
+      function tick(now) {
+        msg.progress = Math.min(1, (now - start) / duration);
+        renderCurrentTab();
+        if (msg.progress < 1) requestAnimationFrame(tick);
+        else { msg.progress = 1; onDone(); }
+      }
+      requestAnimationFrame(tick);
+    }
+
+    // ─── Failover ───
+    function renderFailover() {
+      const canvas = document.getElementById('failoverCanvas');
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0, 0, W, H);
+
+      const masters = getMasters();
+      const m = masters.length;
+      const spacing = W / (m + 1);
+
+      masters.forEach((node, i) => {
+        const x = spacing * (i + 1);
+        const y = 100;
+        const r = 30;
+
+        // Node
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        if (node.status === 'failed') {
+          ctx.fillStyle = var_failed_bg();
+          ctx.strokeStyle = var_red();
+          ctx.lineWidth = 2.5;
+          ctx.fill(); ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(x - 10, y - 10); ctx.lineTo(x + 10, y + 10);
+          ctx.moveTo(x + 10, y - 10); ctx.lineTo(x - 10, y + 10);
+          ctx.strokeStyle = var_red();
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          // FAIL label
+          ctx.font = 'bold 11px SF Mono, monospace';
+          ctx.fillStyle = var_red();
+          ctx.textAlign = 'center';
+          ctx.fillText('FAIL', x, y - r - 14);
+        } else {
+          ctx.fillStyle = node.color + '20';
+          ctx.strokeStyle = node.color;
+          ctx.lineWidth = 2.5;
+          ctx.fill(); ctx.stroke();
+        }
+        ctx.font = 'bold 13px -apple-system, sans-serif';
+        ctx.fillStyle = node.status === 'failed' ? var_red() : var_text();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(node.id, x, y);
+
+        ctx.font = '10px SF Mono, monospace';
+        ctx.fillStyle = var_text2();
+        ctx.fillText(`[${node.slotStart}-${node.slotEnd}]`, x, y + r + 14);
+
+        // Replicas
+        const reps = state.nodes.filter(n => n.masterId === node.id || (n.role === 'master' && state.promotedNode === n.id && n._origMaster === node.id));
+        reps.forEach((rep, j) => {
+          const rx = x + (j - (reps.length - 1) / 2) * 70;
+          const ry = y + 120;
+          const rr = 22;
+          const isPromoted = state.promotedNode === rep.id;
+
+          // Connection
+          ctx.beginPath();
+          ctx.setLineDash(isPromoted ? [] : [4, 4]);
+          ctx.strokeStyle = isPromoted ? var_green() + '80' : rep.color + '40';
+          ctx.lineWidth = isPromoted ? 2 : 1;
+          ctx.moveTo(x, y + r);
+          ctx.lineTo(rx, ry - rr);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          if (isPromoted) {
+            // Arrow pointing up (promotion)
+            ctx.font = '10px -apple-system, sans-serif';
+            ctx.fillStyle = var_green();
+            ctx.textAlign = 'center';
+            ctx.fillText('▲ 晋升', (x + rx) / 2 + 16, (y + r + ry - rr) / 2);
+          }
+
+          ctx.beginPath();
+          ctx.arc(rx, ry, rr, 0, Math.PI * 2);
+          if (isPromoted) {
+            ctx.fillStyle = rep.color + '30';
+            ctx.strokeStyle = var_green();
+            ctx.lineWidth = 2.5;
+          } else {
+            ctx.fillStyle = rep.color + '15';
+            ctx.strokeStyle = rep.color + '80';
+            ctx.lineWidth = 1.5;
+          }
+          ctx.fill(); ctx.stroke();
+
+          ctx.font = `${isPromoted ? 'bold ' : ''}11px -apple-system, sans-serif`;
+          ctx.fillStyle = var_text();
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(rep.id, rx, ry);
+
+          if (isPromoted) {
+            ctx.font = 'bold 9px SF Mono, monospace';
+            ctx.fillStyle = var_green();
+            ctx.fillText('NEW MASTER', rx, ry + rr + 12);
+          }
+        });
+      });
+
+      // Timeline at bottom
+      if (state.failedNode) {
+        const steps = [
+          { label: '1. 节点不可达', color: var_red(), desc: 'PING 超时' },
+          { label: '2. PFAIL 标记', color: '#ffd93d', desc: '单节点判定' },
+          { label: '3. FAIL 广播', color: var_red(), desc: '多数节点确认' },
+          { label: '4. 从节点选举', color: '#b44dff', desc: 'Raft 投票' },
+          { label: '5. 槽位接管', color: var_green(), desc: '晋升完成' },
+        ];
+        const stepW = (W - 80) / steps.length;
+        const ty = H - 50;
+        steps.forEach((s, i) => {
+          const sx = 40 + stepW * i + stepW / 2;
+          const done = state.promotedNode ? true : (i < 3);
+          ctx.beginPath();
+          ctx.arc(sx, ty, 12, 0, Math.PI * 2);
+          ctx.fillStyle = done ? s.color + '30' : var_step_bg();
+          ctx.strokeStyle = done ? s.color : var_text2() + '40';
+          ctx.lineWidth = 2;
+          ctx.fill(); ctx.stroke();
+          if (done) {
+            ctx.font = 'bold 10px -apple-system, sans-serif';
+            ctx.fillStyle = s.color;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('✓', sx, ty);
+          }
+          ctx.font = '10px -apple-system, sans-serif';
+          ctx.fillStyle = done ? var_text() : var_text2() + '60';
+          ctx.textAlign = 'center';
+          ctx.fillText(s.label, sx, ty + 22);
+          ctx.font = '9px -apple-system, sans-serif';
+          ctx.fillStyle = var_text2();
+          ctx.fillText(s.desc, sx, ty + 36);
+          if (i < steps.length - 1) {
+            ctx.beginPath();
+            ctx.moveTo(sx + 14, ty);
+            ctx.lineTo(sx + stepW - 14, ty);
+            ctx.strokeStyle = done ? s.color + '40' : var_text2() + '20';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+        });
+      } else {
+        ctx.font = '12px -apple-system, sans-serif';
+        ctx.fillStyle = var_text2();
+        ctx.textAlign = 'center';
+        ctx.fillText('点击左侧「模拟主节点故障」按钮开始演示故障转移流程', W / 2, H - 40);
+      }
+    }
+
+    function simulateFailover() {
+      if (state.failedNode) return;
+      const masters = getMasters().filter(m => m.status === 'online');
+      if (masters.length === 0) return;
+      const target = masters[Math.floor(Math.random() * masters.length)];
+      target.status = 'failed';
+      state.failedNode = target.id;
+
+      document.getElementById('failBtn').style.display = 'none';
+      document.getElementById('recoverBtn').style.display = '';
+
+      const log = document.getElementById('failoverLog');
+      log.innerHTML = '';
+      const speed = +document.getElementById('speed').value;
+
+      switchTabTo('failover');
+
+      addLog(log, 'error', `节点 ${target.id} (端口 ${target.port}) 无响应`);
+      setTimeout(() => {
+        addLog(log, 'warn', `其他主节点标记 ${target.id} 为 PFAIL (Possibly Failed)`);
+      }, 1000 / speed);
+      setTimeout(() => {
+        addLog(log, 'error', `超过半数主节点确认，${target.id} 被标记为 FAIL`);
+        addLog(log, 'error', `集群状态: FAIL — 槽位 ${target.slotStart}-${target.slotEnd} 不可用`);
+        renderAll();
+      }, 2000 / speed);
+
+      const replica = state.nodes.find(n => n.masterId === target.id && n.status === 'online');
+      if (replica) {
+        setTimeout(() => {
+          addLog(log, 'info', `从节点 ${replica.id} 发起 Failover 选举 (epoch: ${target.epoch + 1})`);
+        }, 3000 / speed);
+        setTimeout(() => {
+          addLog(log, 'info', `${replica.id} 获得 ${masters.length - 1}/${masters.length - 1} 张主节点投票`);
+        }, 3500 / speed);
+        setTimeout(() => {
+          replica.role = 'master';
+          replica.slotStart = target.slotStart;
+          replica.slotEnd = target.slotEnd;
+          replica.epoch = target.epoch + 1;
+          replica._origMaster = target.id;
+          state.promotedNode = replica.id;
+          addLog(log, 'ok', `${replica.id} 晋升为新主节点，接管槽位 [${target.slotStart}-${target.slotEnd}]`);
+          addLog(log, 'ok', `集群状态: OK — 所有槽位已覆盖`);
+          renderAll();
+        }, 4500 / speed);
+      } else {
+        setTimeout(() => {
+          addLog(log, 'error', `${target.id} 没有可用的从节点！无法自动 Failover`);
+          addLog(log, 'error', `集群处于 FAIL 状态，需要管理员手动干预`);
+        }, 3000 / speed);
+      }
+      renderAll();
+    }
+
+    function simulateRecovery() {
+      buildCluster();
+      document.getElementById('failBtn').style.display = '';
+      document.getElementById('recoverBtn').style.display = 'none';
+      document.getElementById('failoverLog').innerHTML = '';
+      addLog(document.getElementById('failoverLog'), 'ok', '集群已恢复至初始状态');
+      renderAll();
+    }
+
+    function simulateReshard() {
+      const masters = getMasters().filter(m => m.status === 'online');
+      if (masters.length < 2) return;
+      state.resharding = true;
+      switchTabTo('slots');
+
+      const from = masters[0], to = masters[masters.length - 1];
+      const moveCount = Math.floor((from.slotEnd - from.slotStart + 1) * 0.2);
+      const oldEnd = from.slotEnd;
+      from.slotEnd -= moveCount;
+      to.slotStart = from.slotEnd + 1;
+
+      renderAll();
+      updatePrompt();
+      setTimeout(() => { state.resharding = false; }, 1000);
+    }
+
+    function switchTabTo(tab) {
+      state.activeTab = tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.querySelector(`.tab:nth-child(${['topology', 'slots', 'gossip', 'failover'].indexOf(tab) + 1})`).classList.add('active');
+      document.getElementById('panel-' + tab).classList.add('active');
+    }
+
+    // ─── Rendering ───
+    function renderCurrentTab() {
+      switch (state.activeTab) {
+        case 'topology': renderTopology(); break;
+        case 'slots': renderSlots(); break;
+        case 'gossip': renderGossip(); break;
+        case 'failover': renderFailover(); break;
+      }
+    }
+
+    function renderAll() {
+      renderCurrentTab();
+      updatePrompt();
+    }
+
+    function updatePrompt() {
+      const parts = [];
+      parts.push(`Redis Cluster: ${state.masterCount}主${state.replicaCount}从`);
+      parts.push(`共 ${state.nodes.length} 个节点`);
+      if (state.failedNode) {
+        parts.push(`${state.failedNode} 已故障`);
+        if (state.promotedNode) parts.push(`${state.promotedNode} 已晋升为新主`);
+      }
+      const key = document.getElementById('keyInput').value.trim();
+      if (key) {
+        const hashTag = key.match(/\{([^}]+)\}/);
+        const effective = hashTag ? hashTag[1] : key;
+        const slot = crc16(effective) % 16384;
+        parts.push(`Key "${key}" → Slot ${slot}`);
+      }
+      document.getElementById('promptText').textContent = parts.join(' · ');
+    }
+
+    function copyPrompt() {
+      const text = document.getElementById('promptText').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.textContent = '已复制!';
+        setTimeout(() => btn.textContent = '复制', 1500);
+      });
+    }
+
+    function addLog(el, type, msg) {
+      const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+      el.innerHTML += `<div><span class="log-time">[${time}]</span> <span class="log-${type}">${msg}</span></div>`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // Init
+    buildCluster();
+    renderAll();
+
+    // Re-render on theme change
+    new MutationObserver(function () { renderAll(); }).observe(
+      document.documentElement, { attributes: true, attributeFilter: ['data-theme'] }
+    );
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

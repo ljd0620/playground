@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spring 事务传播特性</title>
+  <meta name="description" content="交互式可视化 Spring 事务传播机制，演示 REQUIRED、REQUIRES_NEW、NESTED 等七种传播行为的执行效果">
+  <meta name="keywords" content="Spring, 事务管理, 事务传播, Transaction, REQUIRED, REQUIRES_NEW, NESTED, Java">
+  <meta property="og:title" content="Spring 事务传播特性">
+  <meta property="og:description" content="交互式可视化 Spring 事务传播机制，演示 REQUIRED、REQUIRES_NEW、NESTED 等七种传播行为的执行效果">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --bg: var(--bg-primary);
+      --sf: var(--bg-card);
+      --card: var(--bg-elevated);
+      --accent: var(--accent-orange);
+      --blue: var(--accent-blue);
+      --green: var(--accent-green);
+      --yellow: var(--accent-orange);
+      --red: var(--accent-red);
+      --purple: var(--accent-purple);
+      --cyan: var(--accent-cyan);
+      --pink: var(--accent-pink);
+      --teal: var(--accent-cyan);
+      --orange: var(--accent-orange);
+      --text: var(--text-primary);
+      --text2: var(--text-secondary);
+      --text3: var(--text-muted);
+      --r: var(--radius-sm);
+      --mono: 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 13px;
+      position: relative
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(77, 163, 255, 0.06), transparent 70%);
+      pointer-events: none;
+      z-index: 0
+    }
+
+    header {
+      padding: 12px 20px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1
+    }
+
+    header h1 {
+      font-size: 17px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text
+    }
+
+    header h1 span {
+      background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text
+    }
+
+    .tag {
+      font-size: 0.68rem;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      padding: 3px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      letter-spacing: 0.3px
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      z-index: 1
+    }
+
+    /* Left */
+    .left {
+      width: 330px;
+      min-width: 330px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px
+    }
+
+    .sec {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      backdrop-filter: blur(8px);
+      transition: border-color .2s
+    }
+
+    .sec:hover {
+      border-color: var(--border-hover)
+    }
+
+    .sec-t {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .sec-t::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-blue)
+    }
+
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px
+    }
+
+    .pbtn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 9px 11px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      text-align: left;
+      transition: all .15s;
+      display: flex;
+      gap: 8px;
+      align-items: center
+    }
+
+    .pbtn:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-elevated)
+    }
+
+    .pbtn.active {
+      border-color: var(--accent-blue);
+      background: rgba(77, 163, 255, 0.06);
+      box-shadow: inset 3px 0 0 var(--accent-blue), 0 0 12px var(--glow-blue)
+    }
+
+    .pbtn .pi {
+      font-size: 16px;
+      width: 22px;
+      text-align: center;
+      flex-shrink: 0
+    }
+
+    .pbtn .pn {
+      font-weight: 600;
+      display: block;
+      font-size: 12px
+    }
+
+    .pbtn .pd {
+      color: var(--text-muted);
+      font-size: 10px;
+      line-height: 1.3;
+      margin-top: 2px
+    }
+
+    .pbdg {
+      font-size: 9px;
+      padding: 2px 7px;
+      border-radius: 8px;
+      font-weight: 700;
+      margin-left: 4px;
+      vertical-align: middle
+    }
+
+    .bg {
+      background: rgba(54, 217, 134, 0.12);
+      color: var(--accent-green)
+    }
+
+    .by {
+      background: rgba(255, 159, 67, 0.12);
+      color: var(--accent-orange)
+    }
+
+    .br {
+      background: rgba(255, 92, 108, 0.12);
+      color: var(--accent-red)
+    }
+
+    .bp {
+      background: rgba(176, 122, 255, 0.12);
+      color: var(--accent-purple)
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0
+    }
+
+    .row label {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px
+    }
+
+    .row select {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: var(--radius-sm);
+      padding: 4px 8px;
+      font-size: 11px;
+      width: 145px;
+      transition: border-color .2s, box-shadow .2s
+    }
+
+    .row select:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue)
+    }
+
+    .btns {
+      display: flex;
+      gap: 6px
+    }
+
+    .btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 0;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 11px;
+      transition: all .15s;
+      flex: 1;
+      text-align: center;
+      position: relative;
+      overflow: hidden
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.03), transparent);
+      opacity: 0;
+      transition: opacity .15s
+    }
+
+    .btn:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3)
+    }
+
+    .btn:hover::after {
+      opacity: 1
+    }
+
+    .btn.pri {
+      background: linear-gradient(135deg, var(--accent-green), #2bb870);
+      color: #000;
+      font-weight: 600;
+      border-color: var(--accent-green);
+      box-shadow: 0 2px 10px rgba(54, 217, 134, 0.2)
+    }
+
+    .btn.pri:hover {
+      box-shadow: 0 4px 16px rgba(54, 217, 134, 0.35);
+      transform: translateY(-1px)
+    }
+
+    .btn.red {
+      color: var(--accent-red);
+      border-color: rgba(255, 92, 108, 0.25)
+    }
+
+    .btn.red:hover {
+      border-color: var(--accent-red);
+      box-shadow: 0 4px 12px rgba(255, 92, 108, 0.15)
+    }
+
+    .btn.yel {
+      color: var(--accent-orange);
+      border-color: rgba(255, 159, 67, 0.25)
+    }
+
+    .btn.yel:hover {
+      border-color: var(--accent-orange);
+      box-shadow: 0 4px 12px rgba(255, 159, 67, 0.15)
+    }
+
+    .info {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 11px;
+      font-size: 11px;
+      line-height: 1.7;
+      color: var(--text-secondary)
+    }
+
+    .info b {
+      color: var(--text-primary)
+    }
+
+    .info .hl {
+      color: var(--accent-green);
+      font-weight: 600
+    }
+
+    .info .r {
+      color: var(--accent-red)
+    }
+
+    .info .b {
+      color: var(--accent-blue)
+    }
+
+    .info .p {
+      color: var(--accent-purple)
+    }
+
+    .info .y {
+      color: var(--accent-orange)
+    }
+
+    /* Right */
+    .right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden
+    }
+
+    .canvas-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%
+    }
+
+    .prompt-bar {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 10px 18px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px
+    }
+
+    .prompt-bar .pt {
+      flex: 1;
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      max-height: 50px;
+      overflow-y: auto
+    }
+
+    .cbtn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 5px 14px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 11px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: all .15s;
+      position: relative;
+      overflow: hidden
+    }
+
+    .cbtn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.03), transparent);
+      opacity: 0;
+      transition: opacity .15s
+    }
+
+    .cbtn:hover {
+      border-color: var(--accent-blue);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(77, 163, 255, 0.15)
+    }
+
+    .cbtn:hover::after {
+      opacity: 1
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.14)
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Spring <span>@Transactional</span> 传播特性</h1>
+    <div class="tag">交互式动画演示</div>
+  </header>
+  <div class="main">
+    <div class="left" id="leftPanel"></div>
+    <div class="right">
+      <div class="canvas-wrap"><canvas id="cv"></canvas></div>
+      <div class="prompt-bar">
+        <div class="pt" id="promptText"></div>
+        <button class="cbtn"
+          onclick="navigator.clipboard.writeText(document.getElementById('promptText').textContent).then(()=>{event.target.textContent='已复制!';setTimeout(()=>event.target.textContent='复制',1200)})">复制</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    const cv = document.getElementById('cv'), cx = cv.getContext('2d');
+    let W, H, dpr;
+    function resize() { const r = cv.parentElement.getBoundingClientRect(); dpr = devicePixelRatio || 1; W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px'; cx.setTransform(dpr, 0, 0, dpr, 0, 0) }
+    addEventListener('resize', () => { resize(); draw() });
+
+    // ===== Drawing helpers =====
+    function cssVar(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim() }
+    const FF = () => getComputedStyle(document.body).fontFamily;
+    function txt(x, y, t, sz, c, al = 'center', bl = 'middle') { cx.fillStyle = c; cx.font = `${sz}px ${FF()}`; cx.textAlign = al; cx.textBaseline = bl; cx.fillText(t, x, y) }
+    function txtB(x, y, t, sz, c, al = 'center', bl = 'middle') { cx.font = `bold ${sz}px ${FF()}`; txt(x, y, t, sz, c, al, bl) }
+    function txtM(x, y, t, sz, c, al = 'center', bl = 'middle') { cx.fillStyle = c; cx.font = `${sz}px ${getComputedStyle(document.body).getPropertyValue('--mono').trim() || 'monospace'}`; cx.textAlign = al; cx.textBaseline = bl; cx.fillText(t, x, y) }
+    function rr(x, y, w, h, r) { cx.beginPath(); cx.moveTo(x + r, y); cx.lineTo(x + w - r, y); cx.quadraticCurveTo(x + w, y, x + w, y + r); cx.lineTo(x + w, y + h - r); cx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); cx.lineTo(x + r, y + h); cx.quadraticCurveTo(x, y + h, x, y + h - r); cx.lineTo(x, y + r); cx.quadraticCurveTo(x, y, x + r, y); cx.closePath() }
+    function box(x, y, w, h, fill, stroke, r = 5) { cx.fillStyle = fill; cx.strokeStyle = stroke; cx.lineWidth = 1.2; rr(x, y, w, h, r); cx.fill(); cx.stroke() }
+    function arrow(x1, y1, x2, y2, c, w = 1.2) { cx.strokeStyle = c; cx.lineWidth = w; cx.beginPath(); cx.moveTo(x1, y1); cx.lineTo(x2, y2); cx.stroke(); const a = Math.atan2(y2 - y1, x2 - x1), l = 5; cx.fillStyle = c; cx.beginPath(); cx.moveTo(x2, y2); cx.lineTo(x2 - l * Math.cos(a - .35), y2 - l * Math.sin(a - .35)); cx.lineTo(x2 - l * Math.cos(a + .35), y2 - l * Math.sin(a + .35)); cx.closePath(); cx.fill() }
+    function dashedRect(x, y, w, h, c, r = 5) { cx.strokeStyle = c; cx.lineWidth = 1.5; cx.setLineDash([6, 4]); rr(x, y, w, h, r); cx.stroke(); cx.setLineDash([]) }
+    function dashedLine(x1, y1, x2, y2, c) { cx.strokeStyle = c; cx.lineWidth = 1; cx.setLineDash([4, 4]); cx.beginPath(); cx.moveTo(x1, y1); cx.lineTo(x2, y2); cx.stroke(); cx.setLineDash([]) }
+
+    // ===== Data =====
+    const PROPAGATIONS = {
+      REQUIRED: { label: 'REQUIRED', color: '#10b981', desc: '有事务则加入，无则新建', badge: 'bg', badgeT: '默认' },
+      REQUIRES_NEW: { label: 'REQUIRES_NEW', color: '#3b82f6', desc: '总是新建事务，挂起已有事务', badge: 'bp', badgeT: '独立' },
+      NESTED: { label: 'NESTED', color: '#8b5cf6', desc: '嵌套事务，使用 Savepoint', badge: 'bp', badgeT: '嵌套' },
+      SUPPORTS: { label: 'SUPPORTS', color: '#06b6d4', desc: '有事务则加入，无则非事务运行', badge: 'by', badgeT: '跟随' },
+      NOT_SUPPORTED: { label: 'NOT_SUPPORTED', color: '#f59e0b', desc: '总是非事务运行，挂起已有事务', badge: 'by', badgeT: '挂起' },
+      MANDATORY: { label: 'MANDATORY', color: '#ef4444', desc: '必须在事务中调用，否则抛异常', badge: 'br', badgeT: '强制' },
+      NEVER: { label: 'NEVER', color: '#ec4899', desc: '必须在非事务中调用，否则抛异常', badge: 'br', badgeT: '禁止' }
+    };
+
+    const SCENARIOS = [
+      {
+        id: 'req_req', name: 'REQUIRED → REQUIRED', icon: '🔗',
+        desc: '最常见：内层加入外层事务', badge: 'bg', badgeT: '加入',
+        outer: 'REQUIRED', inner: 'REQUIRED', throwInner: false, throwOuter: false
+      },
+      {
+        id: 'req_reqnew', name: 'REQUIRED → REQUIRES_NEW', icon: '✂️',
+        desc: '内层独立新建事务，外层挂起', badge: 'bp', badgeT: '独立',
+        outer: 'REQUIRED', inner: 'REQUIRES_NEW', throwInner: false, throwOuter: false
+      },
+      {
+        id: 'req_nested', name: 'REQUIRED → NESTED', icon: '📎',
+        desc: '内层创建 Savepoint，可独立回滚', badge: 'bp', badgeT: '嵌套',
+        outer: 'REQUIRED', inner: 'NESTED', throwInner: false, throwOuter: false
+      },
+      {
+        id: 'req_req_innerEx', name: 'REQUIRED→REQUIRED 内层异常', icon: '💥',
+        desc: '内层异常导致整个事务回滚', badge: 'br', badgeT: '全回滚',
+        outer: 'REQUIRED', inner: 'REQUIRED', throwInner: true, throwOuter: false
+      },
+      {
+        id: 'req_reqnew_innerEx', name: 'REQUIRED→REQ_NEW 内层异常', icon: '🛡️',
+        desc: '内层回滚不影响外层事务', badge: 'bg', badgeT: '隔离',
+        outer: 'REQUIRED', inner: 'REQUIRES_NEW', throwInner: true, throwOuter: false
+      },
+      {
+        id: 'req_nested_innerEx', name: 'REQUIRED→NESTED 内层异常', icon: '⏪',
+        desc: '回滚到 Savepoint，外层可继续', badge: 'bg', badgeT: '部分回滚',
+        outer: 'REQUIRED', inner: 'NESTED', throwInner: true, throwOuter: false
+      },
+      {
+        id: 'none_mandatory', name: '无事务 → MANDATORY', icon: '🚫',
+        desc: '无外层事务时调用 MANDATORY 抛异常', badge: 'br', badgeT: '异常',
+        outer: 'NONE', inner: 'MANDATORY', throwInner: false, throwOuter: false
+      },
+      {
+        id: 'req_never', name: 'REQUIRED → NEVER', icon: '⛔',
+        desc: '在事务中调用 NEVER 抛异常', badge: 'br', badgeT: '异常',
+        outer: 'REQUIRED', inner: 'NEVER', throwInner: false, throwOuter: false
+      },
+      {
+        id: 'req_notsup', name: 'REQUIRED → NOT_SUPPORTED', icon: '⏸️',
+        desc: '内层挂起外层事务，以非事务运行', badge: 'by', badgeT: '挂起',
+        outer: 'REQUIRED', inner: 'NOT_SUPPORTED', throwInner: false, throwOuter: false
+      },
+      {
+        id: 'none_supports', name: '无事务 → SUPPORTS', icon: '🤷',
+        desc: '无外层事务，内层也以非事务运行', badge: 'by', badgeT: '无事务',
+        outer: 'NONE', inner: 'SUPPORTS', throwInner: false, throwOuter: false
+      }
+    ];
+
+    let state = {
+      activeScenario: 0,
+      step: 0,
+      maxStep: 0,
+      animId: null,
+      playing: false,
+      steps: []
+    };
+
+    function init() {
+      selectScenario(0);
+    }
+
+    function renderLeft() {
+      const s = SCENARIOS[state.activeScenario];
+      document.getElementById('leftPanel').innerHTML = `
+    <div class="sec"><div class="sec-t">场景选择</div>
+      <div class="preset-list">${SCENARIOS.map((sc, i) => `
+        <button class="pbtn${i === state.activeScenario ? ' active' : ''}" onclick="selectScenario(${i})">
+          <span class="pi">${sc.icon}</span>
+          <span style="flex:1">
+            <span class="pn">${sc.name}<span class="pbdg ${sc.badge}">${sc.badgeT}</span></span>
+            <span class="pd">${sc.desc}</span>
+          </span>
+        </button>`).join('')}
+      </div>
+    </div>
+    <div class="sec"><div class="sec-t">播放控制</div>
+      <div class="btns">
+        <button class="btn" onclick="stepBack()">◀ 上一步</button>
+        <button class="btn pri" id="playBtn" onclick="togglePlay()">${state.playing ? '⏸ 暂停' : '▶ 播放'}</button>
+        <button class="btn" onclick="stepForward()">下一步 ▶</button>
+      </div>
+      <div style="height:5px"></div>
+      <div style="text-align:center;font-size:11px;color:var(--text3)">步骤 ${state.step + 1} / ${state.maxStep}</div>
+      <div style="height:5px"></div>
+      <div class="btns"><button class="btn red" onclick="resetAnim()">↺ 重置</button></div>
+    </div>
+    <div class="sec"><div class="sec-t">当前步骤说明</div>
+      <div class="info" id="stepInfo">${state.steps[state.step]?.info || ''}</div>
+    </div>
+    <div class="sec"><div class="sec-t">传播类型速查</div>
+      <div class="info" style="font-size:10px;line-height:1.8">
+        <span class="hl">REQUIRED</span> — 有则加入，无则新建（默认）<br>
+        <span class="b">REQUIRES_NEW</span> — 始终新建，挂起已有<br>
+        <span class="p">NESTED</span> — Savepoint 嵌套，可局部回滚<br>
+        <b style="color:#06b6d4">SUPPORTS</b> — 有则加入，无则裸跑<br>
+        <span class="y">NOT_SUPPORTED</span> — 挂起已有，裸跑<br>
+        <span class="r">MANDATORY</span> — 必须有事务，否则异常<br>
+        <b style="color:#ec4899">NEVER</b> — 必须无事务，否则异常
+      </div>
+    </div>`;
+    }
+
+    function selectScenario(idx) {
+      stopPlay();
+      state.activeScenario = idx;
+      state.step = 0;
+      state.steps = buildSteps(SCENARIOS[idx]);
+      state.maxStep = state.steps.length;
+      renderLeft();
+      resize();
+      draw();
+      updatePrompt();
+    }
+
+    function resetAnim() { stopPlay(); state.step = 0; renderLeft(); draw(); updatePrompt(); }
+    function stepForward() { if (state.step < state.maxStep - 1) { state.step++; renderLeft(); draw(); updatePrompt(); } }
+    function stepBack() { if (state.step > 0) { state.step--; renderLeft(); draw(); updatePrompt(); } }
+    function togglePlay() {
+      if (state.playing) { stopPlay(); return; }
+      state.playing = true;
+      document.getElementById('playBtn').textContent = '⏸ 暂停';
+      state.animId = setInterval(() => {
+        if (state.step < state.maxStep - 1) { state.step++; renderLeft(); draw(); updatePrompt(); }
+        else stopPlay();
+      }, 1100);
+    }
+    function stopPlay() {
+      state.playing = false;
+      if (state.animId) { clearInterval(state.animId); state.animId = null; }
+      const b = document.getElementById('playBtn'); if (b) b.textContent = '▶ 播放';
+    }
+
+    // ===== Step builder =====
+    function buildSteps(sc) {
+      const steps = [];
+      const outerP = sc.outer;
+      const innerP = sc.inner;
+      const outerInfo = PROPAGATIONS[outerP];
+      const innerInfo = PROPAGATIONS[innerP];
+      const isError = sc.id === 'none_mandatory' || sc.id === 'req_never';
+
+      // Step 0: Initial call
+      steps.push({
+        phase: 'call_outer',
+        info: `<b>调用 ServiceA.methodA()</b><br>${outerP === 'NONE' ? '方法没有 @Transactional 注解，不存在事务上下文。' : `方法标注 <span class="hl">@Transactional(propagation=${outerP})</span>。Spring AOP 拦截调用，进入事务管理。`}`
+      });
+
+      // Step 1: Outer TX behavior
+      if (outerP === 'NONE') {
+        steps.push({
+          phase: 'outer_no_tx',
+          info: `<b>无事务上下文</b><br>methodA() 没有 @Transactional，以<span class="y">非事务方式</span>执行。不会创建数据库连接的事务。`
+        });
+      } else {
+        steps.push({
+          phase: 'outer_tx_begin',
+          info: `<b>开启外层事务 TX1</b><br>TransactionManager 调用 <code>getTransaction()</code>，创建新事务。底层执行 <code>Connection.setAutoCommit(false)</code>。`
+        });
+      }
+
+      // Step 2: Execute outer logic
+      steps.push({
+        phase: 'outer_exec',
+        info: `<b>执行 methodA() 业务逻辑</b><br>执行 SQL 操作（INSERT/UPDATE 等）。${outerP !== 'NONE' ? '这些操作在事务 TX1 中进行。' : '这些操作在非事务上下文中自动提交。'}`
+      });
+
+      // Step 3: Call inner
+      steps.push({
+        phase: 'call_inner',
+        info: `<b>methodA() 调用 ServiceB.methodB()</b><br>methodB() 标注 <span class="hl">@Transactional(propagation=${innerP})</span>。<br>Spring AOP 再次拦截，根据传播特性决定事务行为。`
+      });
+
+      // Step 4: Inner TX decision — this is the core
+      if (isError) {
+        if (sc.id === 'none_mandatory') {
+          steps.push({
+            phase: 'inner_error',
+            info: `<b class="r">抛出 IllegalTransactionStateException!</b><br>MANDATORY 要求调用方<b>必须</b>存在事务上下文，但当前没有事务。<br><span class="r">Spring 直接抛出异常，methodB() 不会执行。</span>`
+          });
+        } else {
+          steps.push({
+            phase: 'inner_error',
+            info: `<b class="r">抛出 IllegalTransactionStateException!</b><br>NEVER 要求调用方<b>必须没有</b>事务上下文，但当前存在事务 TX1。<br><span class="r">Spring 直接抛出异常，methodB() 不会执行。</span>`
+          });
+        }
+        steps.push({
+          phase: 'error_result',
+          info: `<b>异常向上传播</b><br>异常抛回 methodA()。${outerP !== 'NONE' ? '如果 methodA() 不捕获该异常，<span class="r">TX1 也会被回滚</span>。' : '方法调用失败。'}`
+        });
+        return steps;
+      }
+
+      // Non-error inner TX scenarios
+      if (innerP === 'REQUIRED') {
+        steps.push({
+          phase: 'inner_join',
+          info: `<b>REQUIRED: 加入外层事务 TX1</b><br>检测到已存在事务 TX1，methodB() <span class="hl">加入同一个事务</span>。<br>两个方法共享同一个数据库连接和事务上下文。<br><b>关键：它们是同一个物理事务！</b>`
+        });
+      } else if (innerP === 'REQUIRES_NEW') {
+        steps.push({
+          phase: 'inner_new',
+          info: `<b>REQUIRES_NEW: 挂起 TX1，新建 TX2</b><br>Spring 将 TX1 <span class="y">挂起</span>（保存当前事务状态到 SuspendedResourcesHolder），<br>从连接池获取<b>新的数据库连接</b>，创建<span class="b">独立事务 TX2</span>。<br>TX1 和 TX2 完全隔离，互不影响。`
+        });
+      } else if (innerP === 'NESTED') {
+        steps.push({
+          phase: 'inner_nested',
+          info: `<b>NESTED: 在 TX1 中创建 Savepoint</b><br>调用 <code>Connection.setSavepoint("SAVEPOINT_1")</code>。<br>methodB() 在<span class="p">同一个物理事务 TX1 中</span>执行，但拥有自己的保存点。<br>嵌套事务可以<span class="hl">独立回滚到 Savepoint</span> 而不影响外层。`
+        });
+      } else if (innerP === 'SUPPORTS') {
+        steps.push({
+          phase: 'inner_supports',
+          info: `<b>SUPPORTS: ${outerP !== 'NONE' ? '加入外层事务 TX1' : '以非事务方式运行'}</b><br>${outerP !== 'NONE' ? '检测到已存在事务，行为等同于 REQUIRED，加入 TX1。' : '没有事务上下文，methodB() 以非事务方式执行。SQL 操作自动提交。'}`
+        });
+      } else if (innerP === 'NOT_SUPPORTED') {
+        steps.push({
+          phase: 'inner_not_supported',
+          info: `<b>NOT_SUPPORTED: 挂起 TX1，以非事务运行</b><br>Spring 将 TX1 <span class="y">挂起</span>，methodB() 中的 SQL 以<b>自动提交</b>模式执行。<br>methodB() 完成后，<span class="hl">恢复 TX1</span> 继续执行。`
+        });
+      }
+
+      // Step 5: Inner exec
+      steps.push({
+        phase: 'inner_exec',
+        info: `<b>执行 methodB() 业务逻辑</b><br>执行内层 SQL 操作。${sc.throwInner ? '<span class="r">⚡ 执行过程中抛出了 RuntimeException!</span>' : ''}`
+      });
+
+      // Step 6: Inner result
+      if (sc.throwInner) {
+        if (innerP === 'REQUIRED') {
+          steps.push({
+            phase: 'inner_rollback_mark',
+            info: `<b class="r">REQUIRED: 整个事务被标记为 rollback-only</b><br>内层异常导致 TransactionManager 将共享事务 TX1 标记为 <code>rollback-only</code>。<br><span class="r">即使外层 methodA() 捕获了异常，事务也无法提交！</span><br>尝试提交会抛出 <code>UnexpectedRollbackException</code>。`
+          });
+          steps.push({
+            phase: 'all_rollback',
+            info: `<b class="r">TX1 整体回滚</b><br>methodA() 和 methodB() 的所有 SQL 操作<span class="r">全部撤销</span>。<br>这是 REQUIRED 最大的坑：<b>内层异常会牵连外层</b>。`
+          });
+        } else if (innerP === 'REQUIRES_NEW') {
+          steps.push({
+            phase: 'inner_rollback_only',
+            info: `<b>TX2 独立回滚</b><br>内层事务 TX2 的异常只导致 <span class="r">TX2 回滚</span>。<br>TX1 的数据不受任何影响。`
+          });
+          steps.push({
+            phase: 'outer_resume',
+            info: `<b>恢复 TX1 继续执行</b><br>Spring <span class="hl">恢复</span>之前挂起的 TX1。<br>如果 methodA() 捕获了异常，<span class="hl">TX1 可以正常提交</span>。`
+          });
+          steps.push({
+            phase: 'outer_commit',
+            info: `<b class="hl">TX1 提交成功</b><br>外层事务的所有操作正常提交。<br><span class="hl">REQUIRES_NEW 实现了真正的事务隔离。</span>`
+          });
+        } else if (innerP === 'NESTED') {
+          steps.push({
+            phase: 'inner_rollback_savepoint',
+            info: `<b>回滚到 Savepoint</b><br>调用 <code>Connection.rollbackToSavepoint("SAVEPOINT_1")</code>。<br><span class="p">只撤销 methodB() 的 SQL</span>，methodA() 的操作保留。`
+          });
+          steps.push({
+            phase: 'outer_continue',
+            info: `<b>外层事务继续执行</b><br>如果 methodA() 捕获了异常，可以继续后续逻辑。<br><span class="hl">TX1 仍然可以正常提交</span>。<br>这就是 NESTED 的价值：<b>部分回滚 + 外层不受影响</b>。`
+          });
+          steps.push({
+            phase: 'outer_commit',
+            info: `<b class="hl">TX1 提交成功</b><br>外层事务正常提交，包含 methodA() 的操作。<br>methodB() 的操作已在 Savepoint 回滚时撤销。`
+          });
+        }
+      } else {
+        // No exception
+        if (innerP === 'REQUIRES_NEW') {
+          steps.push({
+            phase: 'inner_commit',
+            info: `<b>TX2 独立提交</b><br>内层事务 TX2 <span class="b">提交</span>，释放其数据库连接。<br>然后 Spring <span class="hl">恢复</span>之前挂起的 TX1。`
+          });
+        } else if (innerP === 'NOT_SUPPORTED') {
+          steps.push({
+            phase: 'inner_done',
+            info: `<b>内层非事务执行完成</b><br>methodB() 中的操作已自动提交。Spring <span class="hl">恢复</span>之前挂起的 TX1。`
+          });
+        } else if (innerP === 'NESTED') {
+          steps.push({
+            phase: 'inner_savepoint_release',
+            info: `<b>释放 Savepoint</b><br>methodB() 正常完成，调用 <code>Connection.releaseSavepoint()</code>。<br>嵌套事务的修改<b>暂不提交</b>，等待外层事务一起提交。`
+          });
+        } else {
+          steps.push({
+            phase: 'inner_return',
+            info: `<b>methodB() 正常返回</b><br>${innerP === 'REQUIRED' ? '内层方法完成，但事务尚未提交（和外层共享）。' : '内层方法完成。'}`
+          });
+        }
+
+        // Outer commit
+        if (outerP !== 'NONE') {
+          steps.push({
+            phase: 'outer_commit',
+            info: `<b class="hl">TX1 提交成功</b><br>调用 <code>Connection.commit()</code>，所有操作持久化。${innerP === 'REQUIRED' ? '包括 methodA() 和 methodB() 的全部操作。' : innerP === 'NESTED' ? '包括 methodA() 和 methodB() 的全部操作（嵌套事务一起提交）。' : '包括 methodA() 的操作。'}`
+          });
+        } else {
+          steps.push({
+            phase: 'done',
+            info: `<b>调用完成</b><br>所有操作已结束。`
+          });
+        }
+      }
+
+      return steps;
+    }
+
+    // ===== DRAWING =====
+    function draw() {
+      cx.clearRect(0, 0, W, H);
+      const sc = SCENARIOS[state.activeScenario];
+      const step = state.steps[state.step];
+      if (!step) return;
+
+      const outerP = sc.outer;
+      const innerP = sc.inner;
+      const outerC = PROPAGATIONS[outerP]?.color || cssVar('--text-muted');
+      const innerC = PROPAGATIONS[innerP]?.color || cssVar('--text-muted');
+      const isError = sc.id === 'none_mandatory' || sc.id === 'req_never';
+
+      const mx = 30, topY = 20;
+
+      // ===== Title =====
+      txtB(mx, topY + 6, `${sc.name}`, 14, outerC, 'left');
+      txt(mx, topY + 22, sc.desc, 11, cssVar('--text-secondary'), 'left');
+
+      // ===== Code panel =====
+      const codeY = topY + 42, codeW = Math.min(W - 60, 520), codeH = 110;
+      box(mx, codeY, codeW, codeH, cssVar('--bg-primary'), cssVar('--border'));
+      const cl = mx + 12; let cy = codeY + 14;
+      const codeOuter = outerP === 'NONE';
+      if (!codeOuter) txtM(cl, cy, `@Transactional(propagation = ${outerP})`, 10, outerC, 'left');
+      else txtM(cl, cy, '// 无 @Transactional', 10, cssVar('--text-muted'), 'left');
+      cy += 14; txtM(cl, cy, 'public void methodA() {', 10, cssVar('--text-primary'), 'left');
+      cy += 14; txtM(cl + 16, cy, '// ... SQL 操作 ...', 10, cssVar('--text-muted'), 'left');
+      cy += 14; txtM(cl + 16, cy, 'serviceB.methodB();', 10, cssVar('--text-secondary'), 'left');
+      cy += 14; txtM(cl + 16, cy, '// ... 后续操作 ...', 10, cssVar('--text-muted'), 'left');
+      cy += 14; txtM(cl, cy, '}', 10, cssVar('--text-primary'), 'left');
+
+      const cr = mx + codeW / 2 + 20; cy = codeY + 14;
+      txtM(cr, cy, `@Transactional(propagation = ${innerP})`, 10, innerC, 'left');
+      cy += 14; txtM(cr, cy, 'public void methodB() {', 10, cssVar('--text-primary'), 'left');
+      cy += 14; txtM(cr + 16, cy, '// ... SQL 操作 ...', 10, cssVar('--text-muted'), 'left');
+      cy += 14; if (sc.throwInner) txtM(cr + 16, cy, 'throw new RuntimeException();', 10, '#ef4444', 'left');
+      else txtM(cr + 16, cy, '// ... 正常完成 ...', 10, cssVar('--text-muted'), 'left');
+      cy += 14; txtM(cr, cy, '}', 10, cssVar('--text-primary'), 'left');
+
+      // Highlight active code
+      const phase = step.phase;
+      const hlOuterCall = phase.startsWith('call_outer') || phase.startsWith('outer_tx') || phase === 'outer_exec' || phase === 'outer_no_tx';
+      const hlInnerCall = phase.startsWith('call_inner') || phase.startsWith('inner_');
+      if (hlOuterCall) { cx.fillStyle = outerC + '08'; rr(mx + 1, codeY + 1, codeW / 2 - 10, codeH - 2, 4); cx.fill(); cx.strokeStyle = outerC + '30'; rr(mx + 1, codeY + 1, codeW / 2 - 10, codeH - 2, 4); cx.stroke(); }
+      if (hlInnerCall) { cx.fillStyle = innerC + '08'; rr(mx + codeW / 2 + 10, codeY + 1, codeW / 2 - 12, codeH - 2, 4); cx.fill(); cx.strokeStyle = innerC + '30'; rr(mx + codeW / 2 + 10, codeY + 1, codeW / 2 - 12, codeH - 2, 4); cx.stroke(); }
+
+      // ===== Transaction timeline / diagram =====
+      const diagY = codeY + codeH + 30;
+      const diagW = codeW;
+      const diagH = H - diagY - 30;
+
+      txtB(mx, diagY - 8, '事务状态图', 11, cssVar('--text-muted'), 'left');
+
+      // Draw the main diagram based on current step
+      drawTransactionDiagram(mx, diagY, diagW, diagH, sc, step, outerC, innerC);
+    }
+
+    function drawTransactionDiagram(mx, dy, dw, dh, sc, step, outerC, innerC) {
+      const phase = step.phase;
+      const outerP = sc.outer;
+      const innerP = sc.inner;
+      const hasOuterTx = outerP !== 'NONE';
+      const barH = 36;
+      const timelineY = dy + 20;
+      const outerY = timelineY;
+      const innerY = timelineY + barH + 24;
+      const spY = innerY + barH + 20;
+
+      // Calculate widths
+      const fullW = dw - 20;
+      const unitW = fullW / 10;
+
+      // Phase progress mapping (approximate positions)
+      const phaseProgress = {
+        'call_outer': 0.5, 'outer_no_tx': 1, 'outer_tx_begin': 1.5, 'outer_exec': 2.5, 'call_inner': 3.5,
+        'inner_join': 4.5, 'inner_new': 4.5, 'inner_nested': 4.5, 'inner_supports': 4.5, 'inner_not_supported': 4.5,
+        'inner_error': 4.5, 'inner_exec': 5.5, 'inner_rollback_mark': 6.5, 'all_rollback': 7.5,
+        'inner_rollback_only': 6.5, 'outer_resume': 7.5, 'inner_rollback_savepoint': 6.5, 'outer_continue': 7.5,
+        'inner_commit': 6.5, 'inner_done': 6.5, 'inner_savepoint_release': 6.5, 'inner_return': 6.5,
+        'outer_commit': 8.5, 'error_result': 6, 'done': 8.5
+      };
+      const progress = phaseProgress[phase] || 0;
+      const px = mx + 10 + progress * unitW;
+
+      // Time axis
+      cx.strokeStyle = cssVar('--border'); cx.lineWidth = 1;
+      cx.beginPath(); cx.moveTo(mx + 10, timelineY - 6); cx.lineTo(mx + 10 + fullW, timelineY - 6); cx.stroke();
+      txt(mx + 10 + fullW + 4, timelineY - 6, '时间 →', 9, cssVar('--text-muted'), 'left');
+
+      // ===== Outer Transaction Bar =====
+      if (hasOuterTx) {
+        const outerStart = mx + 10 + 1.5 * unitW;
+        const outerEnd = phase.includes('rollback') && !phase.includes('savepoint') && !phase.includes('inner_rollback_only') ?
+          Math.min(px, mx + 10 + 8 * unitW) :
+          (phase === 'outer_commit' || phase === 'done' ? mx + 10 + 8.5 * unitW : Math.max(px, outerStart));
+
+        // TX bar
+        const rollback = phase === 'all_rollback' || phase === 'error_result';
+        const committed = phase === 'outer_commit' && !sc.throwInner || (phase === 'outer_commit' && (innerP === 'REQUIRES_NEW' || innerP === 'NESTED'));
+        const barColor = rollback ? '#ef4444' : committed ? '#10b981' : outerC;
+
+        box(outerStart, outerY, outerEnd - outerStart, barH, barColor + '15', barColor + '50');
+        txtB(outerStart + 6, outerY + 12, 'TX1', 10, barColor, 'left');
+        txt(outerStart + 6, outerY + 26, `外层事务 (${outerP})`, 8, cssVar('--text-secondary'), 'left');
+
+        if (committed) {
+          txtB(outerEnd - 4, outerY + barH / 2, 'COMMIT ✓', 10, '#10b981', 'right');
+        }
+        if (rollback) {
+          txtB(outerEnd - 4, outerY + barH / 2, 'ROLLBACK ✗', 10, '#ef4444', 'right');
+        }
+
+        // Suspend marker for REQUIRES_NEW / NOT_SUPPORTED
+        if ((innerP === 'REQUIRES_NEW' || innerP === 'NOT_SUPPORTED') && progress >= 4.5) {
+          const suspStart = mx + 10 + 4 * unitW;
+          const suspEnd = innerP === 'REQUIRES_NEW' ?
+            (sc.throwInner ? (phase === 'outer_resume' || phase === 'outer_commit' ? mx + 10 + 7.5 * unitW : Math.min(px, mx + 10 + 7 * unitW)) :
+              (phase === 'inner_commit' || phase === 'outer_commit' ? mx + 10 + 7 * unitW : Math.min(px, mx + 10 + 7 * unitW))) :
+            (phase === 'inner_done' || phase === 'outer_commit' ? mx + 10 + 7 * unitW : Math.min(px, mx + 10 + 7 * unitW));
+
+          // Suspended section (hatched)
+          cx.fillStyle = '#eab30808';
+          rr(suspStart, outerY, suspEnd - suspStart, barH, 4); cx.fill();
+          cx.setLineDash([3, 3]); cx.strokeStyle = '#eab30840'; cx.lineWidth = 1;
+          for (let lx = suspStart; lx < suspEnd; lx += 8) {
+            cx.beginPath(); cx.moveTo(lx, outerY); cx.lineTo(lx + barH, outerY + barH); cx.stroke();
+          }
+          cx.setLineDash([]);
+          txtB((suspStart + suspEnd) / 2, outerY + barH / 2, '⏸ 挂起', 9, '#eab308');
+        }
+      }
+
+      // ===== Inner Transaction / Non-TX bar =====
+      if (progress >= 4) {
+        const innerStart = mx + 10 + 4.5 * unitW;
+        const isErrorScenario = phase === 'inner_error' || phase === 'error_result';
+
+        if (isErrorScenario) {
+          // Error box
+          box(innerStart, innerY, 3 * unitW, barH, '#ef444415', '#ef444450');
+          txtB(innerStart + 6, innerY + 12, 'ERROR', 10, '#ef4444', 'left');
+          txt(innerStart + 6, innerY + 26, 'IllegalTransactionStateException', 8, '#ef4444', 'left');
+          // X mark
+          const ex = innerStart + 3 * unitW - 10;
+          cx.strokeStyle = '#ef4444'; cx.lineWidth = 2.5;
+          cx.beginPath(); cx.moveTo(ex - 6, innerY + barH / 2 - 6); cx.lineTo(ex + 6, innerY + barH / 2 + 6); cx.stroke();
+          cx.beginPath(); cx.moveTo(ex + 6, innerY + barH / 2 - 6); cx.lineTo(ex - 6, innerY + barH / 2 + 6); cx.stroke();
+        } else {
+          const innerRollback = sc.throwInner && (phase.includes('inner_rollback') || phase === 'all_rollback' || phase === 'outer_resume' || phase === 'outer_continue' || phase === 'outer_commit');
+          const innerCommit = !sc.throwInner && (phase === 'inner_commit' || phase === 'inner_done' || phase === 'inner_savepoint_release' || phase === 'inner_return' || phase === 'outer_commit' || phase === 'done');
+          const innerEnd = Math.max(innerStart + unitW, Math.min(px, mx + 10 + 7 * unitW));
+
+          const noTx = innerP === 'NOT_SUPPORTED' || (innerP === 'SUPPORTS' && !hasOuterTx);
+
+          if (noTx) {
+            // Non-transactional bar (dashed)
+            dashedRect(innerStart, innerY, innerEnd - innerStart, barH, '#eab30860');
+            cx.fillStyle = '#eab30808'; rr(innerStart, innerY, innerEnd - innerStart, barH, 4); cx.fill();
+            txtB(innerStart + 6, innerY + 12, '非事务', 10, '#eab308', 'left');
+            txt(innerStart + 6, innerY + 26, 'auto-commit', 8, cssVar('--text-secondary'), 'left');
+          } else {
+            // TX bar
+            const isJoined = innerP === 'REQUIRED' || (innerP === 'SUPPORTS' && hasOuterTx);
+            const isNested = innerP === 'NESTED';
+            const isNew = innerP === 'REQUIRES_NEW';
+
+            const barC = innerRollback ? '#ef4444' : innerCommit ? '#10b981' : innerC;
+            box(innerStart, innerY, innerEnd - innerStart, barH, barC + '15', barC + '50');
+
+            const label = isJoined ? 'TX1 (加入)' : isNew ? 'TX2 (新建)' : isNested ? 'TX1 + Savepoint' : 'TX';
+            txtB(innerStart + 6, innerY + 12, label, 10, barC, 'left');
+            txt(innerStart + 6, innerY + 26, `内层 (${innerP})`, 8, cssVar('--text-secondary'), 'left');
+
+            if (innerRollback) {
+              const rlabel = isNested ? 'ROLLBACK TO SP ↩' : 'ROLLBACK ✗';
+              txtB(innerEnd - 4, innerY + barH / 2, rlabel, 10, '#ef4444', 'right');
+            }
+            if (innerCommit && isNew) {
+              txtB(innerEnd - 4, innerY + barH / 2, 'COMMIT ✓', 10, '#10b981', 'right');
+            }
+
+            // Savepoint marker for NESTED
+            if (isNested) {
+              const spX = innerStart;
+              dashedLine(spX, innerY - 4, spX, innerY + barH + 4, '#8b5cf660');
+              txt(spX, innerY - 10, 'Savepoint', 8, '#8b5cf6');
+            }
+
+            // Connection arrow between inner and outer
+            if (isJoined) {
+              dashedLine(innerStart, outerY + barH, innerStart, innerY, '#10b98130');
+              txt(innerStart + 20, outerY + barH + 10, '共享连接', 8, '#10b981', 'left');
+            }
+          }
+        }
+      }
+
+      // ===== Labels on left =====
+      if (hasOuterTx) txt(mx + 4, outerY + barH / 2, '外层', 8, cssVar('--text-muted'), 'right');
+      if (progress >= 4) txt(mx + 4, innerY + barH / 2, '内层', 8, cssVar('--text-muted'), 'right');
+
+      // ===== Call stack visualization =====
+      const csX = mx + dw - 160, csY = dy;
+      box(csX, csY, 150, barH * 3 + 20, cssVar('--bg-primary'), cssVar('--border'));
+      txtB(csX + 75, csY + 12, '调用栈', 9, cssVar('--text-muted'));
+
+      // Stack frames
+      const frames = [];
+      if (progress >= 0) frames.push({ name: 'methodA()', color: outerC, active: progress < 4 || progress >= 7 });
+      if (progress >= 3.5 && phase !== 'error_result') frames.push({ name: 'methodB()', color: innerC, active: progress >= 4 && progress < 7 });
+
+      frames.forEach((f, i) => {
+        const fy = csY + 20 + i * (barH + 4);
+        box(csX + 8, fy, 134, barH, f.active ? f.color + '18' : cssVar('--border') + '20', f.active ? f.color + '50' : cssVar('--border') + '40');
+        txtB(csX + 75, fy + barH / 2, f.name, 11, f.active ? f.color : cssVar('--text-muted'));
+      });
+
+      // ===== Current position indicator =====
+      if (progress > 0) {
+        cx.fillStyle = '#f59e0b';
+        cx.beginPath(); cx.arc(px, timelineY - 6, 4, 0, Math.PI * 2); cx.fill();
+        cx.fillStyle = '#f59e0b20'; cx.beginPath(); cx.arc(px, timelineY - 6, 8, 0, Math.PI * 2); cx.fill();
+      }
+
+      // ===== Result summary at bottom =====
+      if (phase === 'outer_commit' || phase === 'all_rollback' || phase === 'error_result' || phase === 'done') {
+        const ry = Math.max(innerY + barH + 30, spY);
+        const isGood = phase === 'outer_commit' || phase === 'done';
+        const isBad = phase === 'all_rollback' || phase === 'error_result';
+
+        const resultW = dw - 20;
+        box(mx + 10, ry, resultW, 40, isGood ? '#10b98110' : '#ef444410', isGood ? '#10b98130' : '#ef444430');
+
+        if (phase === 'outer_commit') {
+          if (sc.throwInner && innerP === 'REQUIRES_NEW') {
+            txtB(mx + 10 + resultW / 2, ry + 12, '结果: TX2 回滚, TX1 提交成功', 11, '#10b981');
+            txt(mx + 10 + resultW / 2, ry + 28, 'REQUIRES_NEW 实现了事务隔离 — 内层失败不影响外层', 9, cssVar('--text-secondary'));
+          } else if (sc.throwInner && innerP === 'NESTED') {
+            txtB(mx + 10 + resultW / 2, ry + 12, '结果: Savepoint 回滚, TX1 提交成功', 11, '#10b981');
+            txt(mx + 10 + resultW / 2, ry + 28, 'NESTED 实现了部分回滚 — 回退到保存点, 外层继续', 9, cssVar('--text-secondary'));
+          } else {
+            txtB(mx + 10 + resultW / 2, ry + 12, '结果: 所有操作提交成功', 11, '#10b981');
+            txt(mx + 10 + resultW / 2, ry + 28, innerP === 'REQUIRED' ? 'REQUIRED 共享事务, 一起提交' : innerP === 'REQUIRES_NEW' ? 'TX1 和 TX2 分别独立提交' : innerP === 'NESTED' ? '嵌套事务随外层一起提交' : '操作完成', 9, cssVar('--text-secondary'));
+          }
+        } else if (phase === 'all_rollback') {
+          txtB(mx + 10 + resultW / 2, ry + 12, '结果: 整个事务 TX1 回滚!', 11, '#ef4444');
+          txt(mx + 10 + resultW / 2, ry + 28, 'REQUIRED 共享同一事务 — 内层异常标记 rollback-only, 外层也无法提交', 9, cssVar('--text-secondary'));
+        } else if (phase === 'error_result') {
+          txtB(mx + 10 + resultW / 2, ry + 12, `结果: ${sc.id === 'none_mandatory' ? 'MANDATORY' : 'NEVER'} 抛出异常`, 11, '#ef4444');
+          txt(mx + 10 + resultW / 2, ry + 28, sc.id === 'none_mandatory' ? 'MANDATORY 要求必须存在事务上下文' : 'NEVER 要求必须不存在事务上下文', 9, cssVar('--text-secondary'));
+        }
+      }
+    }
+
+    function updatePrompt() {
+      const sc = SCENARIOS[state.activeScenario];
+      const outerP = sc.outer;
+      const innerP = sc.inner;
+      const parts = [];
+      parts.push(`请详细解释 Spring 事务传播特性中「${sc.name}」的行为。`);
+      parts.push(`场景：ServiceA.methodA()(propagation=${outerP}) 调用 ServiceB.methodB()(propagation=${innerP})${sc.throwInner ? '，methodB() 中抛出 RuntimeException' : ''}。`);
+      parts.push(`请说明：1) 事务管理器在每个方法调用时的具体行为（创建/加入/挂起/Savepoint）；`);
+      parts.push(`2) 底层数据库连接的使用方式（共享连接 vs 新连接）；`);
+      parts.push(`3) ${sc.throwInner ? '异常发生后的回滚范围和机制' : '提交时的行为'}；`);
+      if (innerP === 'REQUIRED' && sc.throwInner) parts.push(`4) 为什么捕获异常也无法阻止回滚（rollback-only 标记）；`);
+      if (innerP === 'REQUIRES_NEW') parts.push(`4) 挂起/恢复事务的实现原理（ThreadLocal + SuspendedResourcesHolder）；`);
+      if (innerP === 'NESTED') parts.push(`4) Savepoint 的底层实现和与 REQUIRES_NEW 的区别（同一物理事务 vs 不同事务）；`);
+      parts.push(`以及该传播特性的典型使用场景。`);
+      document.getElementById('promptText').textContent = parts.join(' ');
+    }
+
+    // Boot
+    resize();
+    init();
+
+    // Re-draw when theme changes
+    const observer = new MutationObserver(function () { draw() });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

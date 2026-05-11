@@ -1,0 +1,1549 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redis 与数据库一致性</title>
+  <meta name="description" content="交互式演示 Redis 与数据库双写一致性问题及解决方案，包括缓存更新策略、延迟双删、分布式锁等模式">
+  <meta name="keywords" content="Redis, 双写一致性, 缓存更新, 延迟双删, 缓存穿透, 交互式演示">
+  <meta property="og:title" content="Redis 与数据库一致性">
+  <meta property="og:description" content="交互式演示 Redis 与数据库双写一致性问题及解决方案，包括缓存更新策略、延迟双删、分布式锁等模式">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --bg: var(--bg-primary);
+      --s1: var(--bg-card);
+      --s2: var(--bg-elevated);
+      --bd: var(--border);
+      --tx: var(--text-primary);
+      --tx2: var(--text-secondary);
+      --acc: var(--accent-blue);
+      --acc2: #3b8ae6;
+      --red: var(--accent-red);
+      --grn: var(--accent-green);
+      --ylw: var(--accent-orange);
+      --org: var(--accent-orange);
+      --cyn: var(--accent-cyan);
+      --pur: var(--accent-purple);
+      --pnk: var(--accent-pink);
+      --r: var(--radius-sm);
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 0%, rgba(77, 163, 255, 0.04) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 100%, rgba(176, 122, 255, 0.03) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      grid-template-rows: 1fr auto;
+      height: 100vh;
+      position: relative;
+      z-index: 1
+    }
+
+    .controls {
+      grid-row: 1/3;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 24px 18px;
+    }
+
+    .controls::-webkit-scrollbar {
+      width: 6px
+    }
+
+    .controls::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    .controls::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px
+    }
+
+    .preview {
+      grid-column: 2;
+      overflow-y: auto;
+      padding: 28px 32px
+    }
+
+    .preview::-webkit-scrollbar {
+      width: 6px
+    }
+
+    .preview::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    .preview::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px
+    }
+
+    .prompt-bar {
+      grid-column: 2;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 4px
+    }
+
+    .title-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent-red), var(--accent-orange));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 4px 12px rgba(255, 92, 108, 0.2);
+    }
+
+    h1 {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -.3px;
+      background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      margin-bottom: 22px
+    }
+
+    .section {
+      margin-bottom: 20px
+    }
+
+    .section-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title::before {
+      content: '';
+      width: 3px;
+      height: 14px;
+      background: var(--accent-blue);
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 5px
+    }
+
+    select {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      margin-bottom: 12px;
+      transition: border-color .2s, box-shadow .2s;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%237d8da0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 32px;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    input[type=range] {
+      width: 100%;
+      -webkit-appearance: none;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      margin-bottom: 10px
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      background: var(--accent-blue);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(77, 163, 255, 0.5);
+      transition: transform .15s
+    }
+
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.2)
+    }
+
+    .range-val {
+      font-size: 0.7rem;
+      color: var(--accent-blue);
+      font-weight: 600;
+      float: right
+    }
+
+    .btn {
+      padding: 9px 16px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .2s cubic-bezier(.4, 0, .2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn:hover {
+      background: var(--border);
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-acc {
+      background: linear-gradient(135deg, var(--accent-blue), #3b8ae6);
+      border-color: var(--accent-blue);
+      color: #fff;
+      font-weight: 600;
+      font-size: 13px;
+      padding: 11px 20px;
+    }
+
+    .btn-acc::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent);
+      pointer-events: none;
+    }
+
+    .btn-acc:hover {
+      background: linear-gradient(135deg, #5db4ff, var(--accent-blue));
+      box-shadow: 0 4px 20px rgba(77, 163, 255, 0.35);
+    }
+
+    @keyframes btnPulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 0 rgba(77, 163, 255, 0.4)
+      }
+
+      50% {
+        box-shadow: 0 0 0 8px rgba(77, 163, 255, 0)
+      }
+    }
+
+    .btn-acc.pulse {
+      animation: btnPulse 2s infinite
+    }
+
+    .btn-red {
+      background: linear-gradient(135deg, var(--accent-red), #e04555);
+      border-color: var(--accent-red);
+      color: #fff
+    }
+
+    .btn-grn {
+      background: linear-gradient(135deg, var(--accent-green), #2bb870);
+      border-color: var(--accent-green);
+      color: #111
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px
+    }
+
+    .preset-btn {
+      padding: 7px 14px;
+      font-size: 0.7rem;
+      border-radius: 16px;
+      transition: all .2s cubic-bezier(.4, 0, .2, 1);
+      font-weight: 500;
+    }
+
+    .preset-btn:hover {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 12px rgba(77, 163, 255, 0.15);
+    }
+
+    .preset-btn.active {
+      background: linear-gradient(135deg, var(--accent-blue), #3b8ae6);
+      border-color: var(--accent-blue);
+      color: #fff;
+      box-shadow: 0 2px 12px rgba(77, 163, 255, 0.3);
+    }
+
+    .info-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      margin-bottom: 16px;
+      backdrop-filter: blur(12px);
+      transition: border-color .2s, box-shadow .2s, transform .2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .info-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 3px;
+      border-radius: 3px 0 0 3px;
+      background: var(--accent-blue);
+      opacity: 0;
+      transition: opacity .2s;
+    }
+
+    .info-card:hover {
+      border-color: var(--border-hover);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .info-card:hover::before {
+      opacity: 1
+    }
+
+    .info-card h3 {
+      font-size: 14px;
+      margin-bottom: 10px;
+      color: var(--text-primary);
+      font-weight: 600
+    }
+
+    .info-card p {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.8
+    }
+
+    .info-card code {
+      background: var(--bg-elevated);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.68rem;
+      color: var(--accent-cyan);
+    }
+
+    .prompt-text {
+      flex: 1;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .copy-btn {
+      white-space: nowrap
+    }
+
+    .log-area {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.7rem;
+      max-height: 200px;
+      overflow-y: auto;
+      line-height: 2;
+    }
+
+    .log-area::-webkit-scrollbar {
+      width: 6px
+    }
+
+    .log-area::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    .log-area::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px
+    }
+
+    .log-area .log-entry {
+      padding: 3px 8px;
+      border-radius: 4px;
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .log-area .log-entry:nth-child(odd) {
+      background: rgba(255, 255, 255, 0.02)
+    }
+
+    .log-step-num {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .log-time {
+      color: var(--text-muted)
+    }
+
+    .log-info {
+      color: var(--accent-cyan)
+    }
+
+    .log-warn {
+      color: var(--accent-orange)
+    }
+
+    .log-error {
+      color: var(--accent-red)
+    }
+
+    .log-ok {
+      color: var(--accent-green)
+    }
+
+    .log-pur {
+      color: var(--accent-purple)
+    }
+
+    .canvas-wrap {
+      position: relative;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: 8px;
+    }
+
+    canvas {
+      border-radius: var(--radius-sm);
+      display: block;
+      width: 100%
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 600;
+      margin: 2px
+    }
+
+    .badge-ok {
+      background: rgba(54, 217, 134, 0.12);
+      color: var(--accent-green);
+      border: 1px solid rgba(54, 217, 134, 0.25)
+    }
+
+    .badge-err {
+      background: rgba(255, 92, 108, 0.12);
+      color: var(--accent-red);
+      border: 1px solid rgba(255, 92, 108, 0.25)
+    }
+
+    .badge-warn {
+      background: rgba(255, 159, 67, 0.12);
+      color: var(--accent-orange);
+      border: 1px solid rgba(255, 159, 67, 0.25)
+    }
+
+    .verdict {
+      margin-top: 16px;
+      padding: 16px 20px;
+      border-radius: var(--radius);
+      font-size: 12px;
+      line-height: 1.8;
+      backdrop-filter: blur(8px)
+    }
+
+    .verdict-ok {
+      background: rgba(54, 217, 134, 0.06);
+      border: 1px solid rgba(54, 217, 134, 0.2)
+    }
+
+    .verdict-err {
+      background: rgba(255, 92, 108, 0.06);
+      border: 1px solid rgba(255, 92, 108, 0.2)
+    }
+
+    .verdict-warn {
+      background: rgba(255, 159, 67, 0.06);
+      border: 1px solid rgba(255, 159, 67, 0.2)
+    }
+
+    .cb {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent-blue);
+      vertical-align: middle;
+      margin-right: 5px
+    }
+
+    .sep {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 18px 0
+    }
+
+    .tag {
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+      display: inline-block;
+      margin-bottom: 8px
+    }
+
+    .data-state-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+      margin-top: 16px
+    }
+
+    .data-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 16px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      transition: all .3s cubic-bezier(.4, 0, .2, 1);
+    }
+
+    .data-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--accent-blue);
+      opacity: 0.6;
+    }
+
+    .data-card.db::before {
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue))
+    }
+
+    .data-card.cache::before {
+      background: linear-gradient(90deg, var(--accent-red), var(--accent-orange))
+    }
+
+    .data-card.consistency::before {
+      background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan))
+    }
+
+    .data-card-icon {
+      font-size: 20px;
+      margin-bottom: 6px
+    }
+
+    .data-card-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      font-weight: 500
+    }
+
+    .data-card-value {
+      font-size: 28px;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      transition: all .3s;
+    }
+
+    .data-card-value.changed {
+      animation: valueFlash .4s ease
+    }
+
+    @keyframes valueFlash {
+      0% {
+        transform: scale(1)
+      }
+
+      50% {
+        transform: scale(1.15)
+      }
+
+      100% {
+        transform: scale(1)
+      }
+    }
+
+    .progress-bar {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-top: 12px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+      border-radius: 2px;
+      transition: width .3s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    @keyframes fadeSlideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-8px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0)
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0
+      }
+
+      to {
+        opacity: 1
+      }
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: 0.5
+      }
+    }
+
+    .info-card {
+      animation: slideIn .3s cubic-bezier(.4, 0, .2, 1) both
+    }
+
+    .log-area .log-entry {
+      animation: fadeSlideIn .25s cubic-bezier(.4, 0, .2, 1) both
+    }
+  </style>
+</head>
+
+<body>
+  <div class="layout">
+    <div class="controls">
+      <div class="title-row">
+        <div>
+          <h1>Redis 与数据库一致性</h1>
+          <div class="subtitle">交互式策略对比与时序演示</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">缓存策略</div>
+        <select id="strategy" onchange="onStrategyChange()">
+          <option value="cache-aside">Cache Aside（旁路缓存）</option>
+          <option value="read-through">Read Through（读穿透）</option>
+          <option value="write-through">Write Through（写穿透）</option>
+          <option value="write-behind">Write Behind（异步写回）</option>
+        </select>
+      </div>
+
+      <div class="section">
+        <div class="section-title">写操作顺序（Cache Aside）</div>
+        <select id="writeOrder" onchange="onWriteOrderChange()">
+          <option value="update-db-del-cache">先更新 DB，再删缓存 ✅</option>
+          <option value="del-cache-update-db">先删缓存，再更新 DB ⚠️</option>
+          <option value="update-db-update-cache">先更新 DB，再更新缓存</option>
+          <option value="double-delete">延迟双删</option>
+          <option value="mq-async">消息队列异步删缓存</option>
+        </select>
+      </div>
+
+      <div class="section">
+        <div class="section-title">并发场景</div>
+        <select id="scenario" onchange="renderAll()">
+          <option value="normal">正常流程（无并发）</option>
+          <option value="read-write">读写并发</option>
+          <option value="write-write">双写并发</option>
+          <option value="cache-miss-storm">缓存击穿 / 并发回填</option>
+        </select>
+      </div>
+
+      <hr class="sep">
+
+      <div class="section">
+        <div class="section-title">快速场景预设</div>
+        <div class="btn-row">
+          <button class="btn preset-btn active" onclick="applyPreset('classic')">经典方案</button>
+          <button class="btn preset-btn" onclick="applyPreset('danger')">危险模式</button>
+          <button class="btn preset-btn" onclick="applyPreset('safe')">安全方案</button>
+          <button class="btn preset-btn" onclick="applyPreset('async')">异步方案</button>
+        </div>
+      </div>
+
+      <hr class="sep">
+
+      <div class="section">
+        <div class="section-title">模拟控制</div>
+        <label>网络延迟 <span class="range-val" id="latencyVal">50ms</span></label>
+        <input type="range" id="latency" min="10" max="200" value="50"
+          oninput="document.getElementById('latencyVal').textContent=this.value+'ms'">
+        <label>动画速度 <span class="range-val" id="speedVal">1x</span></label>
+        <input type="range" id="speed" min="0.5" max="3" step="0.5" value="1"
+          oninput="document.getElementById('speedVal').textContent=this.value+'x'">
+        <div style="margin-top:6px">
+          <label><input type="checkbox" class="cb" id="showRace" checked onchange="renderAll()">显示竞态窗口</label>
+          <label><input type="checkbox" class="cb" id="showData" checked onchange="renderAll()">显示数据状态</label>
+        </div>
+      </div>
+
+      <hr class="sep">
+
+      <div class="section">
+        <div class="btn-row">
+          <button class="btn btn-acc pulse" onclick="runSimulation()" id="runBtn">&#9654; 运行模拟</button>
+          <button class="btn" onclick="resetSimulation()">重置</button>
+        </div>
+        <div class="progress-bar" id="progressBar" style="display:none">
+          <div class="progress-fill" id="progressFill" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview" id="previewArea">
+      <div id="strategyDesc"></div>
+      <div class="canvas-wrap">
+        <canvas id="timeline" height="440"></canvas>
+      </div>
+      <div id="dataState"></div>
+      <div id="verdict"></div>
+      <div class="log-area" id="simLog" style="margin-top:14px"></div>
+    </div>
+
+    <div class="prompt-bar">
+      <div class="prompt-text" id="promptText">选择缓存策略和并发场景，点击运行查看时序动画。</div>
+      <button class="btn copy-btn btn-acc" onclick="copyPrompt()">复制</button>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════════════ DATA ═══════════════════════
+    const STRATEGIES = {
+      'cache-aside': {
+        name: 'Cache Aside（旁路缓存）',
+        tag: '最常用', tagColor: '#4ecdc4',
+        desc: '应用程序直接管理缓存。<strong>读</strong>：先读 Redis，未命中则读 DB 并回填缓存。<strong>写</strong>：先更新 DB，再删除缓存（而非更新缓存）。',
+        pros: ['实现简单，应用层控制', '缓存只存热数据，内存友好', '适合读多写少场景'],
+        cons: ['首次请求必 miss', '写操作与缓存非原子', '并发下可能短暂不一致'],
+      },
+      'read-through': {
+        name: 'Read Through（读穿透）',
+        tag: '缓存代理', tagColor: '#6c7aff',
+        desc: '缓存层封装了 DB 读取逻辑。应用只与缓存交互，缓存 miss 时由缓存层自动从 DB 加载。',
+        pros: ['应用代码更简洁', '缓存加载逻辑集中管理', '可内置防击穿'],
+        cons: ['需要缓存中间件支持', '首次仍然 miss', '缓存层成为单点'],
+      },
+      'write-through': {
+        name: 'Write Through（写穿透）',
+        tag: '强一致', tagColor: '#ffd93d',
+        desc: '写操作同时写缓存和 DB，由缓存层保证两者同步完成后才返回。',
+        pros: ['缓存与 DB 强一致', '读取永远命中', '逻辑简单'],
+        cons: ['写延迟高（两次写操作）', '缓存可能存冷数据', '缓存层实现复杂'],
+      },
+      'write-behind': {
+        name: 'Write Behind（异步写回）',
+        tag: '高性能', tagColor: '#ff8c42',
+        desc: '写操作只更新缓存，由后台异步批量将变更刷入 DB。类似 Linux Page Cache 的思想。',
+        pros: ['写性能极高', '可合并写操作减少 DB 压力', '适合写密集场景'],
+        cons: ['数据可能丢失（缓存宕机）', '一致性最弱', '实现复杂度高'],
+      },
+    };
+
+    const WRITE_ORDERS = {
+      'update-db-del-cache': {
+        name: '先更新 DB，再删缓存',
+        safety: 'ok', safetyText: '推荐',
+        desc: '经典 Cache Aside 写策略。并发时不一致窗口极小（仅在 DB 更新后、缓存删除前的一小段时间），且不一致数据会在下次读取时自愈。',
+        raceWindow: '极小',
+      },
+      'del-cache-update-db': {
+        name: '先删缓存，再更新 DB',
+        safety: 'err', safetyText: '危险',
+        desc: '删缓存后、DB 更新前，并发读会将旧值回填缓存，造成长期不一致（直到缓存过期）。这是最常见的错误做法。',
+        raceWindow: '大',
+      },
+      'update-db-update-cache': {
+        name: '先更新 DB，再更新缓存',
+        safety: 'warn', safetyText: '有风险',
+        desc: '两个并发写可能导致缓存值与 DB 值不匹配（ABA 问题）。且更新缓存比删除缓存更容易出现 race condition。',
+        raceWindow: '中等',
+      },
+      'double-delete': {
+        name: '延迟双删',
+        safety: 'ok', safetyText: '较安全',
+        desc: '先删缓存 → 更新 DB → 延迟 N 毫秒 → 再次删缓存。第二次删除覆盖了并发读可能回填的旧数据。延迟时间需大于一次读操作的耗时。',
+        raceWindow: '极小',
+      },
+      'mq-async': {
+        name: '消息队列异步删缓存',
+        safety: 'ok', safetyText: '可靠',
+        desc: '更新 DB → 发送删除缓存消息到 MQ → 消费者异步删缓存。如果删除失败可重试，保证最终一致性。结合 Canal 监听 binlog 可做到更可靠。',
+        raceWindow: '小（最终一致）',
+      },
+    };
+
+    // ═══════════════════════ STATE ═══════════════════════
+    let state = {
+      strategy: 'cache-aside',
+      writeOrder: 'update-db-del-cache',
+      scenario: 'normal',
+      running: false,
+      step: 0,
+      steps: [],
+      dbValue: 'V1',
+      cacheValue: 'V1',
+      cacheExists: true,
+    };
+
+    let animTimer = null;
+    let dashOffset = 0;
+    let animFrame = null;
+
+    // ═══════════════════════ SIMULATION STEPS ═══════════════════════
+    function buildSteps() {
+      const s = state.strategy;
+      const w = state.writeOrder;
+      const sc = state.scenario;
+      const steps = [];
+
+      if (s === 'cache-aside') {
+        if (sc === 'normal') {
+          steps.push(...buildCacheAsideNormal(w));
+        } else if (sc === 'read-write') {
+          steps.push(...buildCacheAsideRace(w));
+        } else if (sc === 'write-write') {
+          steps.push(...buildWriteWriteRace(w));
+        } else if (sc === 'cache-miss-storm') {
+          steps.push(...buildCacheMissStorm());
+        }
+      } else if (s === 'read-through') {
+        steps.push(...buildReadThrough(sc));
+      } else if (s === 'write-through') {
+        steps.push(...buildWriteThrough(sc));
+      } else if (s === 'write-behind') {
+        steps.push(...buildWriteBehind(sc));
+      }
+      return steps;
+    }
+
+    function buildCacheAsideNormal(w) {
+      if (w === 'update-db-del-cache') return [
+        { t: 0, actor: 'app', action: 'write', target: 'db', label: '① 更新 DB: V1→V2', db: 'V2', cache: 'V1', cacheExists: true, type: 'info' },
+        { t: 1, actor: 'app', action: 'del', target: 'cache', label: '② 删除缓存', db: 'V2', cache: null, cacheExists: false, type: 'warn' },
+        { t: 2, actor: 'app2', action: 'read', target: 'cache', label: '③ 读请求: 缓存 MISS', db: 'V2', cache: null, cacheExists: false, type: 'pur' },
+        { t: 3, actor: 'app2', action: 'read', target: 'db', label: '④ 从 DB 读取 V2', db: 'V2', cache: null, cacheExists: false, type: 'info' },
+        { t: 4, actor: 'app2', action: 'write', target: 'cache', label: '⑤ 回填缓存: V2', db: 'V2', cache: 'V2', cacheExists: true, type: 'ok' },
+      ];
+      if (w === 'del-cache-update-db') return [
+        { t: 0, actor: 'app', action: 'del', target: 'cache', label: '① 删除缓存', db: 'V1', cache: null, cacheExists: false, type: 'warn' },
+        { t: 1, actor: 'app', action: 'write', target: 'db', label: '② 更新 DB: V1→V2', db: 'V2', cache: null, cacheExists: false, type: 'info' },
+        { t: 2, actor: 'app2', action: 'read', target: 'cache', label: '③ 读请求: 缓存 MISS', db: 'V2', cache: null, cacheExists: false, type: 'pur' },
+        { t: 3, actor: 'app2', action: 'read', target: 'db', label: '④ 从 DB 读取 V2', db: 'V2', cache: null, cacheExists: false, type: 'info' },
+        { t: 4, actor: 'app2', action: 'write', target: 'cache', label: '⑤ 回填缓存: V2', db: 'V2', cache: 'V2', cacheExists: true, type: 'ok' },
+      ];
+      if (w === 'update-db-update-cache') return [
+        { t: 0, actor: 'app', action: 'write', target: 'db', label: '① 更新 DB: V1→V2', db: 'V2', cache: 'V1', cacheExists: true, type: 'info' },
+        { t: 1, actor: 'app', action: 'write', target: 'cache', label: '② 更新缓存: V1→V2', db: 'V2', cache: 'V2', cacheExists: true, type: 'ok' },
+      ];
+      if (w === 'double-delete') return [
+        { t: 0, actor: 'app', action: 'del', target: 'cache', label: '① 第一次删缓存', db: 'V1', cache: null, cacheExists: false, type: 'warn' },
+        { t: 1, actor: 'app', action: 'write', target: 'db', label: '② 更新 DB: V1→V2', db: 'V2', cache: null, cacheExists: false, type: 'info' },
+        { t: 2, actor: 'app', action: 'sleep', target: 'none', label: '③ 延迟等待（~500ms）', db: 'V2', cache: null, cacheExists: false, type: 'pur' },
+        { t: 3, actor: 'app', action: 'del', target: 'cache', label: '④ 第二次删缓存', db: 'V2', cache: null, cacheExists: false, type: 'warn' },
+        { t: 4, actor: 'app2', action: 'read', target: 'cache', label: '⑤ 读请求: MISS → 从 DB 读 V2', db: 'V2', cache: 'V2', cacheExists: true, type: 'ok' },
+      ];
+      if (w === 'mq-async') return [
+        { t: 0, actor: 'app', action: 'write', target: 'db', label: '① 更新 DB: V1→V2', db: 'V2', cache: 'V1', cacheExists: true, type: 'info' },
+        { t: 1, actor: 'app', action: 'send', target: 'mq', label: '② 发送删缓存消息到 MQ', db: 'V2', cache: 'V1', cacheExists: true, type: 'pur' },
+        { t: 2, actor: 'mq', action: 'consume', target: 'cache', label: '③ 消费者消费消息', db: 'V2', cache: 'V1', cacheExists: true, type: 'info' },
+        { t: 3, actor: 'mq', action: 'del', target: 'cache', label: '④ 异步删除缓存', db: 'V2', cache: null, cacheExists: false, type: 'warn' },
+        { t: 4, actor: 'app2', action: 'read', target: 'cache', label: '⑤ 读请求: MISS → 回填 V2', db: 'V2', cache: 'V2', cacheExists: true, type: 'ok' },
+      ];
+      return [];
+    }
+
+    function buildCacheAsideRace(w) {
+      if (w === 'update-db-del-cache') return [
+        { t: 0, actor: 'app', action: 'write', target: 'db', label: '① 写线程: 更新 DB→V2', db: 'V2', cache: 'V1', cacheExists: true, type: 'info', race: false },
+        { t: 0.5, actor: 'app2', action: 'read', target: 'cache', label: '② 读线程: 读缓存 HIT→V1（旧值）', db: 'V2', cache: 'V1', cacheExists: true, type: 'warn', race: true },
+        { t: 1, actor: 'app', action: 'del', target: 'cache', label: '③ 写线程: 删除缓存', db: 'V2', cache: null, cacheExists: false, type: 'info', race: false },
+        { t: 2, actor: 'app2', action: 'read', target: 'cache', label: '④ 读线程: 缓存 MISS', db: 'V2', cache: null, cacheExists: false, type: 'pur' },
+        { t: 3, actor: 'app2', action: 'read', target: 'db', label: '⑤ 读线程: 从 DB 读 V2（新值）', db: 'V2', cache: 'V2', cacheExists: true, type: 'ok' },
+      ];
+      if (w === 'del-cache-update-db') return [
+        { t: 0, actor: 'app', action: 'del', target: 'cache', label: '① 写线程: 删除缓存', db: 'V1', cache: null, cacheExists: false, type: 'warn' },
+        { t: 0.5, actor: 'app2', action: 'read', target: 'cache', label: '② 读线程: 缓存 MISS', db: 'V1', cache: null, cacheExists: false, type: 'pur', race: true },
+        { t: 1, actor: 'app2', action: 'read', target: 'db', label: '③ 读线程: 从 DB 读 V1（旧值！）', db: 'V1', cache: null, cacheExists: false, type: 'error', race: true },
+        { t: 1.5, actor: 'app2', action: 'write', target: 'cache', label: '④ 读线程: 回填缓存 V1（旧值！）', db: 'V1', cache: 'V1', cacheExists: true, type: 'error', race: true },
+        { t: 2, actor: 'app', action: 'write', target: 'db', label: '⑤ 写线程: 更新 DB→V2', db: 'V2', cache: 'V1', cacheExists: true, type: 'info' },
+        { t: 3, actor: 'result', action: 'check', target: 'none', label: '⚠ DB=V2, 缓存=V1 → 长期不一致!', db: 'V2', cache: 'V1', cacheExists: true, type: 'error' },
+      ];
+      if (w === 'update-db-update-cache') return [
+        { t: 0, actor: 'app', action: 'write', target: 'db', label: '① 写线程: 更新 DB→V2', db: 'V2', cache: 'V1', cacheExists: true, type: 'info' },
+        { t: 0.5, actor: 'app2', action: 'read', target: 'cache', label: '② 读线程: 读缓存 HIT→V1（旧值）', db: 'V2', cache: 'V1', cacheExists: true, type: 'warn', race: true },
+        { t: 1, actor: 'app', action: 'write', target: 'cache', label: '③ 写线程: 更新缓存→V2', db: 'V2', cache: 'V2', cacheExists: true, type: 'ok' },
+      ];
+      if (w === 'double-delete') return [
+        { t: 0, actor: 'app', action: 'del', target: 'cache', label: '① 写线程: 第一次删缓存', db: 'V1', cache: null, cacheExists: false, type: 'warn' },
+        { t: 0.5, actor: 'app2', action: 'read', target: 'db', label: '② 读线程: MISS→读 DB→V1（旧值）', db: 'V1', cache: null, cacheExists: false, type: 'error', race: true },
+        { t: 1, actor: 'app2', action: 'write', target: 'cache', label: '③ 读线程: 回填缓存 V1', db: 'V1', cache: 'V1', cacheExists: true, type: 'error', race: true },
+        { t: 1.5, actor: 'app', action: 'write', target: 'db', label: '④ 写线程: 更新 DB→V2', db: 'V2', cache: 'V1', cacheExists: true, type: 'info' },
+        { t: 2, actor: 'app', action: 'sleep', target: 'none', label: '⑤ 延迟等待 500ms...', db: 'V2', cache: 'V1', cacheExists: true, type: 'pur' },
+        { t: 3, actor: 'app', action: 'del', target: 'cache', label: '⑥ 第二次删缓存（修正!）', db: 'V2', cache: null, cacheExists: false, type: 'ok' },
+        { t: 4, actor: 'app2', action: 'read', target: 'db', label: '⑦ 下次读: MISS→DB→V2 ✓', db: 'V2', cache: 'V2', cacheExists: true, type: 'ok' },
+      ];
+      if (w === 'mq-async') return [
+        { t: 0, actor: 'app', action: 'write', target: 'db', label: '① 写线程: 更新 DB→V2', db: 'V2', cache: 'V1', cacheExists: true, type: 'info' },
+        { t: 0.5, actor: 'app2', action: 'read', target: 'cache', label: '② 读线程: HIT→V1（短暂旧值）', db: 'V2', cache: 'V1', cacheExists: true, type: 'warn', race: true },
+        { t: 1, actor: 'app', action: 'send', target: 'mq', label: '③ 发送删缓存消息', db: 'V2', cache: 'V1', cacheExists: true, type: 'pur' },
+        { t: 2, actor: 'mq', action: 'del', target: 'cache', label: '④ MQ 消费 → 删缓存', db: 'V2', cache: null, cacheExists: false, type: 'info' },
+        { t: 3, actor: 'app2', action: 'read', target: 'db', label: '⑤ 下次读: MISS→DB→V2 ✓', db: 'V2', cache: 'V2', cacheExists: true, type: 'ok' },
+      ];
+      return buildCacheAsideNormal(w);
+    }
+
+    function buildWriteWriteRace(w) {
+      if (w === 'update-db-update-cache') return [
+        { t: 0, actor: 'app', action: 'write', target: 'db', label: '① 线程A: 更新 DB→V2', db: 'V2', cache: 'V1', cacheExists: true, type: 'info' },
+        { t: 0.5, actor: 'app2', action: 'write', target: 'db', label: '② 线程B: 更新 DB→V3', db: 'V3', cache: 'V1', cacheExists: true, type: 'pur' },
+        { t: 1, actor: 'app2', action: 'write', target: 'cache', label: '③ 线程B: 更新缓存→V3（先到）', db: 'V3', cache: 'V3', cacheExists: true, type: 'info' },
+        { t: 1.5, actor: 'app', action: 'write', target: 'cache', label: '④ 线程A: 更新缓存→V2（后到, 覆盖!）', db: 'V3', cache: 'V2', cacheExists: true, type: 'error', race: true },
+        { t: 2, actor: 'result', action: 'check', target: 'none', label: '⚠ DB=V3, 缓存=V2 → 不一致!', db: 'V3', cache: 'V2', cacheExists: true, type: 'error' },
+      ];
+      if (w === 'update-db-del-cache') return [
+        { t: 0, actor: 'app', action: 'write', target: 'db', label: '① 线程A: 更新 DB→V2', db: 'V2', cache: 'V1', cacheExists: true, type: 'info' },
+        { t: 0.5, actor: 'app2', action: 'write', target: 'db', label: '② 线程B: 更新 DB→V3', db: 'V3', cache: 'V1', cacheExists: true, type: 'pur' },
+        { t: 1, actor: 'app', action: 'del', target: 'cache', label: '③ 线程A: 删缓存', db: 'V3', cache: null, cacheExists: false, type: 'warn' },
+        { t: 1.5, actor: 'app2', action: 'del', target: 'cache', label: '④ 线程B: 删缓存', db: 'V3', cache: null, cacheExists: false, type: 'warn' },
+        { t: 2, actor: 'app2', action: 'read', target: 'db', label: '⑤ 下次读: MISS→DB→V3 ✓', db: 'V3', cache: 'V3', cacheExists: true, type: 'ok' },
+      ];
+      return buildCacheAsideNormal(w);
+    }
+
+    function buildCacheMissStorm() {
+      return [
+        { t: 0, actor: 'app', action: 'read', target: 'cache', label: '① 热点 Key 过期，缓存 MISS', db: 'V1', cache: null, cacheExists: false, type: 'warn' },
+        { t: 0.3, actor: 'app2', action: 'read', target: 'cache', label: '② 并发请求 B: MISS', db: 'V1', cache: null, cacheExists: false, type: 'warn' },
+        { t: 0.5, actor: 'app3', action: 'read', target: 'cache', label: '③ 并发请求 C: MISS', db: 'V1', cache: null, cacheExists: false, type: 'warn' },
+        { t: 1, actor: 'app', action: 'read', target: 'db', label: '④ 所有请求同时穿透到 DB!', db: 'V1', cache: null, cacheExists: false, type: 'error' },
+        { t: 2, actor: 'app', action: 'lock', target: 'cache', label: '⑤ 正确做法: 加分布式锁 SETNX', db: 'V1', cache: null, cacheExists: false, type: 'pur' },
+        { t: 3, actor: 'app', action: 'read', target: 'db', label: '⑥ 仅一个线程读 DB', db: 'V1', cache: null, cacheExists: false, type: 'info' },
+        { t: 4, actor: 'app', action: 'write', target: 'cache', label: '⑦ 回填缓存，其他线程从缓存读', db: 'V1', cache: 'V1', cacheExists: true, type: 'ok' },
+      ];
+    }
+
+    function buildReadThrough(sc) {
+      if (sc === 'normal' || sc === 'read-write') return [
+        { t: 0, actor: 'app', action: 'read', target: 'cache', label: '① 应用读缓存层', db: 'V1', cache: null, cacheExists: false, type: 'info' },
+        { t: 1, actor: 'cache-layer', action: 'read', target: 'cache', label: '② 缓存层检查: MISS', db: 'V1', cache: null, cacheExists: false, type: 'warn' },
+        { t: 2, actor: 'cache-layer', action: 'read', target: 'db', label: '③ 缓存层自动从 DB 加载', db: 'V1', cache: null, cacheExists: false, type: 'info' },
+        { t: 3, actor: 'cache-layer', action: 'write', target: 'cache', label: '④ 缓存层写入 Redis', db: 'V1', cache: 'V1', cacheExists: true, type: 'ok' },
+        { t: 4, actor: 'cache-layer', action: 'return', target: 'app', label: '⑤ 返回数据给应用', db: 'V1', cache: 'V1', cacheExists: true, type: 'ok' },
+      ];
+      return buildReadThrough('normal');
+    }
+
+    function buildWriteThrough(sc) {
+      return [
+        { t: 0, actor: 'app', action: 'write', target: 'cache', label: '① 应用写缓存层 (V1→V2)', db: 'V1', cache: 'V1', cacheExists: true, type: 'info' },
+        { t: 1, actor: 'cache-layer', action: 'write', target: 'cache', label: '② 缓存层更新 Redis→V2', db: 'V1', cache: 'V2', cacheExists: true, type: 'info' },
+        { t: 2, actor: 'cache-layer', action: 'write', target: 'db', label: '③ 缓存层同步更新 DB→V2', db: 'V2', cache: 'V2', cacheExists: true, type: 'info' },
+        { t: 3, actor: 'cache-layer', action: 'return', target: 'app', label: '④ 两者均完成，返回成功', db: 'V2', cache: 'V2', cacheExists: true, type: 'ok' },
+      ];
+    }
+
+    function buildWriteBehind(sc) {
+      return [
+        { t: 0, actor: 'app', action: 'write', target: 'cache', label: '① 应用写缓存 (V1→V2)', db: 'V1', cache: 'V2', cacheExists: true, type: 'info' },
+        { t: 0.5, actor: 'app', action: 'return', target: 'app', label: '② 立即返回成功（极低延迟）', db: 'V1', cache: 'V2', cacheExists: true, type: 'ok' },
+        { t: 1, actor: 'app2', action: 'write', target: 'cache', label: '③ 更多写操作 V2→V3→V4', db: 'V1', cache: 'V4', cacheExists: true, type: 'info' },
+        { t: 2, actor: 'bg', action: 'flush', target: 'db', label: '④ 后台线程: 批量刷入 DB', db: 'V1', cache: 'V4', cacheExists: true, type: 'pur' },
+        { t: 3, actor: 'bg', action: 'write', target: 'db', label: '⑤ 合并写: 直接写 V4（跳过 V2,V3）', db: 'V4', cache: 'V4', cacheExists: true, type: 'ok' },
+        { t: 3.5, actor: 'result', action: 'check', target: 'none', label: '⚠ 刷盘前 Redis 宕机 = 数据丢失', db: 'V4', cache: 'V4', cacheExists: true, type: 'warn' },
+      ];
+    }
+
+    // ═══════════════════════ RENDERING ═══════════════════════
+    const TYPE_COLORS = { info: '#4da3ff', warn: '#ffd93d', error: '#ff5f6d', ok: '#36d986', pur: '#b07aff' };
+    const TARGET_X_RATIO = { cache: 0.43, db: 0.72, mq: 0.57, none: 0.57, app: 0.18, 'cache-layer': 0.43 };
+
+    function renderTimeline() {
+      const canvas = document.getElementById('timeline');
+      const container = canvas.parentElement;
+      const dpr = window.devicePixelRatio || 1;
+      const W = container.clientWidth - 16;
+      const H = 440;
+      canvas.width = W * dpr;
+      canvas.height = H * dpr;
+      canvas.style.width = W + 'px';
+      canvas.style.height = H + 'px';
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, W, H);
+
+      const steps = state.steps;
+      if (!steps.length) {
+        ctx.font = '14px Inter, -apple-system, sans-serif';
+        ctx.fillStyle = 'var(--text-secondary)';
+        ctx.fillStyle = '#7d8da0';
+        ctx.textAlign = 'center';
+        ctx.fillText('点击「▶ 运行模拟」开始时序动画', W / 2, H / 2);
+        return;
+      }
+
+      const showRace = document.getElementById('showRace').checked;
+      const showData = document.getElementById('showData').checked;
+      const cols = getColumns(W);
+      const colY = 50;
+
+      // Draw column headers with pill-shaped backgrounds
+      cols.forEach(c => {
+        // Vertical dashed line
+        ctx.beginPath();
+        ctx.setLineDash([4, 6]);
+        ctx.strokeStyle = c.color + '15';
+        ctx.lineWidth = 1;
+        ctx.moveTo(c.x, colY + 42);
+        ctx.lineTo(c.x, H - 10);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Pill background
+        const pillW = 100, pillH = 36;
+        ctx.beginPath();
+        roundRect(ctx, c.x - pillW / 2, colY - 4, pillW, pillH, 12);
+        const grad = ctx.createLinearGradient(c.x - pillW / 2, colY, c.x + pillW / 2, colY + pillH);
+        grad.addColorStop(0, c.color + '18');
+        grad.addColorStop(1, c.color + '08');
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.strokeStyle = c.color + '40';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Icon + Label
+        ctx.font = '600 11px Inter, -apple-system, sans-serif';
+        ctx.fillStyle = c.color;
+        ctx.textAlign = 'center';
+        ctx.fillText(c.icon, c.x, colY + 14);
+        ctx.font = '10px Inter, -apple-system, sans-serif';
+        ctx.fillStyle = c.color + 'aa';
+        ctx.fillText(c.label, c.x, colY + 28);
+      });
+
+      // Draw steps
+      const stepH = Math.min(48, (H - 120) / steps.length);
+      const startY = colY + 56;
+
+      steps.forEach((step, i) => {
+        if (i > state.step) return;
+        const y = startY + i * stepH;
+        const isActive = i === state.step;
+        const opacity = isActive ? 1 : 0.65;
+
+        const srcX = getActorX(step.actor, cols);
+        const tgtX = getTargetX(step.target, cols, W);
+
+        // Race window highlight
+        if (showRace && step.race) {
+          const raceGrad = ctx.createLinearGradient(0, y - stepH / 2, W, y - stepH / 2);
+          raceGrad.addColorStop(0, 'transparent');
+          raceGrad.addColorStop(0.1, '#ff5f6d08');
+          raceGrad.addColorStop(0.9, '#ff5f6d08');
+          raceGrad.addColorStop(1, 'transparent');
+          ctx.fillStyle = raceGrad;
+          ctx.fillRect(0, y - stepH / 2 + 2, W, stepH - 4);
+
+          // Race marker
+          ctx.font = '600 9px JetBrains Mono, monospace';
+          ctx.fillStyle = '#ff5f6d60';
+          ctx.textAlign = 'right';
+          ctx.fillText('⚡ RACE', W - 14, y + 3);
+        }
+
+        // Arrow with gradient and glow
+        if (step.target !== 'none' && step.target !== 'app') {
+          const color = TYPE_COLORS[step.type] || '#7d8da0';
+
+          // Glow for active step
+          if (isActive) {
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 8;
+          }
+
+          // Gradient arrow line
+          const arrowGrad = ctx.createLinearGradient(srcX, y, tgtX, y);
+          arrowGrad.addColorStop(0, color + (isActive ? 'dd' : '50'));
+          arrowGrad.addColorStop(1, color + (isActive ? 'ff' : '80'));
+
+          ctx.beginPath();
+          ctx.strokeStyle = arrowGrad;
+          ctx.lineWidth = isActive ? 2.5 : 1.5;
+          ctx.moveTo(srcX, y);
+          ctx.lineTo(tgtX, y);
+          ctx.stroke();
+
+          // Arrowhead
+          const dir = tgtX > srcX ? 1 : -1;
+          ctx.beginPath();
+          ctx.moveTo(tgtX, y);
+          ctx.lineTo(tgtX - dir * 10, y - 4);
+          ctx.lineTo(tgtX - dir * 10, y + 4);
+          ctx.fillStyle = color + (isActive ? 'ff' : '80');
+          ctx.fill();
+
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+        }
+
+        // Label
+        const labelColor = TYPE_COLORS[step.type] || '#7d8da0';
+        ctx.font = `${isActive ? '600' : '400'} 11px Inter, -apple-system, sans-serif`;
+        ctx.fillStyle = labelColor + (isActive ? '' : 'bb');
+        ctx.textAlign = 'left';
+        const effectiveTgtX = (step.target === 'none' || step.target === 'app') ? srcX + 50 : getTargetX(step.target, cols, W);
+        const labelX = Math.min(srcX, effectiveTgtX) + Math.abs(effectiveTgtX - srcX) / 2;
+        const labelText = step.label;
+        const textWidth = ctx.measureText(labelText).width;
+        ctx.fillText(labelText, Math.max(10, labelX - textWidth / 2), y - 10);
+
+        // Step dot with pulse
+        ctx.beginPath();
+        if (isActive) {
+          ctx.shadowColor = labelColor;
+          ctx.shadowBlur = 10;
+          ctx.arc(srcX, y, 6, 0, Math.PI * 2);
+          ctx.fillStyle = labelColor;
+          ctx.fill();
+          // Outer ring
+          ctx.beginPath();
+          ctx.arc(srcX, y, 10, 0, Math.PI * 2);
+          ctx.strokeStyle = labelColor + '40';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+        } else {
+          ctx.arc(srcX, y, 3.5, 0, Math.PI * 2);
+          ctx.fillStyle = labelColor + '80';
+          ctx.fill();
+        }
+
+        // Data state badges on canvas (for active step)
+        if (showData && isActive && step.db) {
+          const bx = W - 160;
+          // DB badge
+          drawBadge(ctx, bx, y - 11, 68, 22, '#4da3ff', 'DB:' + step.db);
+          // Cache badge
+          const cacheColor = step.cacheExists ? '#36d986' : '#ff5f6d';
+          const cacheText = step.cacheExists ? 'Cache:' + step.cache : 'Cache:∅';
+          drawBadge(ctx, bx + 74, y - 11, 78, 22, cacheColor, cacheText);
+        }
+      });
+    }
+
+    function drawBadge(ctx, x, y, w, h, color, text) {
+      ctx.beginPath();
+      roundRect(ctx, x, y, w, h, 6);
+      ctx.fillStyle = color + '12';
+      ctx.fill();
+      ctx.strokeStyle = color + '30';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.font = '600 10px JetBrains Mono, monospace';
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.fillText(text, x + w / 2, y + h / 2 + 3.5);
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function getColumns(W) {
+      const s = state.strategy;
+      const cols = [
+        { key: 'app', x: W * 0.16, label: 'Application', icon: '📱 App', color: '#6c7aff' },
+        { key: 'cache', x: W * 0.44, label: 'Redis Cache', icon: '⚡ Redis', color: '#ff5f6d' },
+        { key: 'db', x: W * 0.72, label: 'MySQL DB', icon: '💾 MySQL', color: '#4ecdc4' },
+      ];
+      const w = state.writeOrder;
+      if (s === 'cache-aside' && w === 'mq-async') {
+        cols.splice(2, 0, { key: 'mq', x: W * 0.58, label: 'MQ', icon: '📨 Queue', color: '#b44dff' });
+      }
+      return cols;
+    }
+
+    function getActorX(actor, cols) {
+      if (actor === 'app' || actor === 'app2' || actor === 'app3') return cols.find(c => c.key === 'app').x;
+      if (actor === 'cache-layer') return cols.find(c => c.key === 'cache').x;
+      if (actor === 'mq') { const c = cols.find(c => c.key === 'mq'); return c ? c.x : cols[1].x; }
+      if (actor === 'bg') return cols.find(c => c.key === 'app').x;
+      if (actor === 'result') return (cols[0].x + cols[cols.length - 1].x) / 2;
+      return cols[0].x;
+    }
+
+    function getTargetX(target, cols, W) {
+      if (target === 'cache') return cols.find(c => c.key === 'cache').x;
+      if (target === 'db') return cols.find(c => c.key === 'db').x;
+      if (target === 'mq') { const c = cols.find(c => c.key === 'mq'); return c ? c.x : W * 0.58; }
+      if (target === 'app') return cols.find(c => c.key === 'app').x;
+      if (target === 'cache-layer') return cols.find(c => c.key === 'cache').x;
+      return W * 0.5;
+    }
+
+    function renderStrategyDesc() {
+      const s = STRATEGIES[state.strategy];
+      const w = WRITE_ORDERS[state.writeOrder];
+      const isCacheAside = state.strategy === 'cache-aside';
+
+      let html = `<div class="info-card" style="--card-accent:${s.tagColor}">
+    <div class="tag" style="background:${s.tagColor}15;color:${s.tagColor};border:1px solid ${s.tagColor}30">${s.tag}</div>
+    <h3>${s.name}</h3>
+    <p>${s.desc}</p>
+    <div style="display:flex;gap:20px;margin-top:10px;font-size:11px">
+      <div><span style="color:var(--grn)">✓ 优点：</span><span style="color:var(--tx2)">${s.pros.join('、')}</span></div>
+    </div>
+    <div style="margin-top:5px;font-size:11px">
+      <span style="color:var(--red)">✗ 缺点：</span><span style="color:var(--tx2)">${s.cons.join('、')}</span>
+    </div>
+  </div>`;
+
+      if (isCacheAside) {
+        const safetyColors = { ok: 'var(--grn)', err: 'var(--red)', warn: 'var(--ylw)' };
+        html += `<div class="info-card">
+      <h3>写顺序：${w.name} <span class="badge badge-${w.safety}">${w.safetyText}</span></h3>
+      <p>${w.desc}</p>
+      <div style="margin-top:8px;font-size:11px;color:var(--tx2)">竞态窗口: <strong style="color:${safetyColors[w.safety] || 'var(--ylw)'}">${w.raceWindow}</strong></div>
+    </div>`;
+      }
+
+      document.getElementById('strategyDesc').innerHTML = html;
+    }
+
+    function renderDataState() {
+      if (!document.getElementById('showData').checked) {
+        document.getElementById('dataState').innerHTML = '';
+        return;
+      }
+      const step = state.steps[state.step];
+      if (!step) return;
+      const consistent = !step.cacheExists || step.db === step.cache;
+      document.getElementById('dataState').innerHTML = `
+    <div class="data-state-row">
+      <div class="data-card db">
+        <div class="data-card-icon">💾</div>
+        <div class="data-card-label">MySQL DB</div>
+        <div class="data-card-value changed" style="color:var(--accent-cyan)">${step.db}</div>
+      </div>
+      <div class="data-card cache">
+        <div class="data-card-icon">⚡</div>
+        <div class="data-card-label">Redis Cache</div>
+        <div class="data-card-value changed" style="color:${step.cacheExists ? 'var(--accent-green)' : 'var(--accent-red)'}">${step.cacheExists ? step.cache : '∅ MISS'}</div>
+      </div>
+      <div class="data-card consistency">
+        <div class="data-card-icon">${!step.cacheExists ? '➖' : consistent ? '✅' : '❌'}</div>
+        <div class="data-card-label">一致性</div>
+        <div class="data-card-value" style="color:${!step.cacheExists ? 'var(--text-muted)' : consistent ? 'var(--accent-green)' : 'var(--accent-red)'}">${!step.cacheExists ? '—' : consistent ? '一致' : '不一致'}</div>
+      </div>
+    </div>`;
+    }
+
+    function renderVerdict() {
+      const steps = state.steps;
+      if (!steps.length || state.step < steps.length - 1) {
+        document.getElementById('verdict').innerHTML = '';
+        return;
+      }
+      const last = steps[steps.length - 1];
+      const consistent = !last.cacheExists || last.db === last.cache;
+      const hasRace = steps.some(s => s.race);
+
+      let cls, msg;
+      if (consistent && !hasRace) {
+        cls = 'verdict-ok';
+        msg = `<strong style="color:var(--grn)">✓ 最终一致</strong>：DB 和缓存数据一致（DB=${last.db}, Cache=${last.cacheExists ? last.cache : '将被回填'}）。该方案在此场景下是安全的。`;
+      } else if (consistent && hasRace) {
+        cls = 'verdict-warn';
+        msg = `<strong style="color:var(--ylw)">⚠ 最终一致，但存在短暂不一致窗口</strong>：在竞态窗口期间读到了旧数据，但最终数据恢复一致。可接受取决于业务容忍度。`;
+      } else {
+        cls = 'verdict-err';
+        msg = `<strong style="color:var(--red)">✗ 数据不一致！</strong>：DB=${last.db}，Cache=${last.cache}。缓存中存储的是过期数据，且不会自动修复（直到缓存 TTL 过期）。这是一个严重的一致性问题！`;
+      }
+      document.getElementById('verdict').innerHTML = `<div class="verdict ${cls}">${msg}</div>`;
+    }
+
+    function renderAll() {
+      state.steps = buildSteps();
+      renderStrategyDesc();
+      renderTimeline();
+      renderDataState();
+      renderVerdict();
+      updatePrompt();
+    }
+
+    // ═══════════════════════ SIMULATION ═══════════════════════
+    function runSimulation() {
+      if (state.running) return;
+      state.running = true;
+      state.step = 0;
+      state.steps = buildSteps();
+      document.getElementById('simLog').innerHTML = '';
+      document.getElementById('runBtn').textContent = '⏳ 运行中…';
+      document.getElementById('runBtn').disabled = true;
+      document.getElementById('runBtn').classList.remove('pulse');
+
+      const progressBar = document.getElementById('progressBar');
+      const progressFill = document.getElementById('progressFill');
+      progressBar.style.display = 'block';
+      progressFill.style.width = '0%';
+
+      const speed = +document.getElementById('speed').value;
+      const interval = 800 / speed;
+      let i = 0;
+
+      function tick() {
+        if (i >= state.steps.length) {
+          state.running = false;
+          document.getElementById('runBtn').textContent = '▶ 运行模拟';
+          document.getElementById('runBtn').disabled = false;
+          progressFill.style.width = '100%';
+          setTimeout(() => { progressBar.style.display = 'none'; }, 600);
+          renderVerdict();
+          return;
+        }
+        state.step = i;
+        const step = state.steps[i];
+        addLog(document.getElementById('simLog'), step.type, step.label, i + 1);
+        progressFill.style.width = ((i + 1) / state.steps.length * 100) + '%';
+        renderTimeline();
+        renderDataState();
+        i++;
+        animTimer = setTimeout(tick, interval);
+      }
+      tick();
+    }
+
+    function resetSimulation() {
+      if (animTimer) clearTimeout(animTimer);
+      state.running = false;
+      state.step = 0;
+      state.steps = buildSteps();
+      document.getElementById('runBtn').textContent = '▶ 运行模拟';
+      document.getElementById('runBtn').disabled = false;
+      document.getElementById('runBtn').classList.add('pulse');
+      document.getElementById('simLog').innerHTML = '';
+      document.getElementById('verdict').innerHTML = '';
+      document.getElementById('progressBar').style.display = 'none';
+      renderAll();
+    }
+
+    // ═══════════════════════ CONTROLS ═══════════════════════
+    function onStrategyChange() {
+      state.strategy = document.getElementById('strategy').value;
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      resetSimulation();
+    }
+
+    function onWriteOrderChange() {
+      state.writeOrder = document.getElementById('writeOrder').value;
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      resetSimulation();
+    }
+
+    function applyPreset(name) {
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      if (name === 'classic') {
+        state.strategy = 'cache-aside'; state.writeOrder = 'update-db-del-cache'; state.scenario = 'normal';
+      } else if (name === 'danger') {
+        state.strategy = 'cache-aside'; state.writeOrder = 'del-cache-update-db'; state.scenario = 'read-write';
+      } else if (name === 'safe') {
+        state.strategy = 'cache-aside'; state.writeOrder = 'double-delete'; state.scenario = 'read-write';
+      } else if (name === 'async') {
+        state.strategy = 'cache-aside'; state.writeOrder = 'mq-async'; state.scenario = 'read-write';
+      }
+      document.getElementById('strategy').value = state.strategy;
+      document.getElementById('writeOrder').value = state.writeOrder;
+      document.getElementById('scenario').value = state.scenario;
+      resetSimulation();
+    }
+
+    function updatePrompt() {
+      const s = STRATEGIES[state.strategy];
+      const w = WRITE_ORDERS[state.writeOrder];
+      const sc = document.getElementById('scenario').value;
+      const parts = [s.name];
+      if (state.strategy === 'cache-aside') parts.push(`写顺序: ${w.name}`);
+      const scLabels = { normal: '无并发', 'read-write': '读写并发', 'write-write': '双写并发', 'cache-miss-storm': '缓存击穿' };
+      parts.push(`场景: ${scLabels[sc]}`);
+      if (state.steps.length && state.step >= state.steps.length - 1) {
+        const last = state.steps[state.steps.length - 1];
+        const ok = !last.cacheExists || last.db === last.cache;
+        parts.push(ok ? '结果: 一致 ✓' : '结果: 不一致 ✗');
+      }
+      document.getElementById('promptText').textContent = parts.join(' · ');
+    }
+
+    function copyPrompt() {
+      navigator.clipboard.writeText(document.getElementById('promptText').textContent).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.textContent = '已复制!';
+        setTimeout(() => btn.textContent = '复制', 1500);
+      });
+    }
+
+    function addLog(el, type, msg, stepNum) {
+      const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+      const cls = type === 'ok' ? 'log-ok' : type === 'error' ? 'log-error' : type === 'warn' ? 'log-warn' : type === 'pur' ? 'log-pur' : 'log-info';
+      const color = TYPE_COLORS[type] || '#4da3ff';
+      el.innerHTML += `<div class="log-entry"><span class="log-step-num" style="background:${color}20;color:${color}">${stepNum || ''}</span><span class="log-time">[${time}]</span> <span class="${cls}">${msg}</span></div>`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // Responsive canvas
+    const resizeObserver = new ResizeObserver(() => { if (!state.running) renderTimeline(); });
+    resizeObserver.observe(document.querySelector('.canvas-wrap'));
+
+    // Init
+    renderAll();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

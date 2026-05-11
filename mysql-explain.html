@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MySQL EXPLAIN 执行计划</title>
+  <meta name="description" content="交互式演示 MySQL EXPLAIN 执行计划的各字段含义，理解查询优化器如何选择索引、连接方式和扫描策略">
+  <meta name="keywords" content="MySQL, EXPLAIN, 执行计划, 查询优化, 索引, 交互式演示">
+  <meta property="og:title" content="MySQL EXPLAIN 执行计划">
+  <meta property="og:description" content="交互式演示 MySQL EXPLAIN 执行计划的各字段含义，理解查询优化器如何选择索引、连接方式和扫描策略">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --accent-yellow: #fbbf24;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --mono: 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: radial-gradient(ellipse at 20% 0%, rgba(77, 163, 255, 0.06) 0%, transparent 60%), radial-gradient(ellipse at 80% 100%, rgba(176, 122, 255, 0.04) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    header {
+      padding: 16px 24px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    header h1 {
+      font-size: 18px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #fff, #a8c8ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    header h1 span {
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Left Panel */
+    .controls {
+      width: 340px;
+      min-width: 340px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .section-title {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      margin-bottom: 8px;
+      position: relative;
+      padding-left: 10px;
+    }
+
+    .section-title::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 12px;
+      background: var(--accent-blue);
+      border-radius: 2px;
+    }
+
+    .preset-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .preset-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 10px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      text-align: left;
+      transition: all .2s;
+    }
+
+    .preset-btn:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-elevated);
+      transform: translateY(-1px);
+    }
+
+    .preset-btn.active {
+      border-color: var(--accent-blue);
+      background: rgba(77, 163, 255, 0.08);
+      box-shadow: 0 0 12px var(--glow-blue), inset 0 0 0 1px rgba(77, 163, 255, 0.1);
+    }
+
+    .preset-btn .preset-name {
+      font-weight: 600;
+      display: block;
+      margin-bottom: 3px;
+      color: var(--text-primary);
+    }
+
+    .preset-btn .preset-desc {
+      color: var(--text-muted);
+      font-size: 10px;
+      line-height: 1.3;
+    }
+
+    .schema-box {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      line-height: 1.7;
+      color: var(--text-secondary);
+    }
+
+    .schema-box .tbl {
+      color: var(--accent-blue);
+      font-weight: 600;
+    }
+
+    .schema-box .col {
+      color: var(--text-primary);
+    }
+
+    .schema-box .idx {
+      color: var(--accent-green);
+    }
+
+    .schema-box .fk {
+      color: var(--accent-orange);
+    }
+
+    .sql-input {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      padding: 12px;
+      resize: vertical;
+      min-height: 80px;
+      line-height: 1.5;
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    .sql-input:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 0;
+    }
+
+    .toggle-row label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      flex: 1;
+    }
+
+    .toggle {
+      width: 36px;
+      height: 20px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      position: relative;
+      transition: all .2s;
+      flex-shrink: 0;
+    }
+
+    .toggle.on {
+      background: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+
+    .toggle::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform .2s;
+    }
+
+    .toggle.on::after {
+      transform: translateX(16px);
+    }
+
+    /* Right Panel */
+    .right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Explain Table */
+    .explain-area {
+      flex: 1;
+      overflow: auto;
+      padding: 20px;
+    }
+
+    .explain-table-wrap {
+      overflow-x: auto;
+    }
+
+    table.explain {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+    }
+
+    table.explain th {
+      background: var(--bg-elevated);
+      padding: 10px 12px;
+      text-align: left;
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      border-bottom: 2px solid var(--accent-blue);
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    table.explain td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      vertical-align: top;
+    }
+
+    table.explain tr:hover td {
+      background: rgba(77, 163, 255, 0.04);
+    }
+
+    table.explain tr.highlight td {
+      background: rgba(77, 163, 255, 0.08);
+      border-left: 3px solid var(--accent-blue);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-const {
+      background: rgba(54, 217, 134, 0.15);
+      color: var(--accent-green);
+    }
+
+    .badge-eq_ref {
+      background: rgba(77, 163, 255, 0.15);
+      color: var(--accent-blue);
+    }
+
+    .badge-ref {
+      background: rgba(176, 122, 255, 0.15);
+      color: var(--accent-purple);
+    }
+
+    .badge-range {
+      background: rgba(251, 191, 36, 0.15);
+      color: var(--accent-yellow);
+    }
+
+    .badge-index {
+      background: rgba(255, 159, 67, 0.15);
+      color: var(--accent-orange);
+    }
+
+    .badge-ALL {
+      background: rgba(255, 92, 108, 0.15);
+      color: var(--accent-red);
+    }
+
+    .rows-bar {
+      display: inline-block;
+      height: 8px;
+      border-radius: 4px;
+      min-width: 4px;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    /* Detail Panel */
+    .detail-panel {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 16px 20px;
+      max-height: 45%;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .detail-panel.visible {
+      display: block;
+    }
+
+    .detail-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .detail-header h3 {
+      font-size: 14px;
+      color: var(--accent-blue);
+      font-weight: 700;
+    }
+
+    .detail-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 18px;
+      transition: color .2s;
+    }
+
+    .detail-close:hover {
+      color: var(--text-primary);
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .detail-card {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+    }
+
+    .detail-card h4 {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    .detail-card p {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+
+    .detail-card .val {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .detail-card.full {
+      grid-column: 1 / -1;
+    }
+
+    .detail-card .tip {
+      color: var(--accent-green);
+      font-size: 12px;
+      margin-top: 6px;
+      display: block;
+    }
+
+    .detail-card .warn {
+      color: var(--accent-red);
+      font-size: 12px;
+      margin-top: 6px;
+      display: block;
+    }
+
+    /* Cost Indicator */
+    .cost-bar {
+      margin-top: 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+
+    .cost-label {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    .cost-track {
+      height: 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .cost-fill {
+      height: 100%;
+      border-radius: 6px;
+      transition: width .4s ease, background .4s ease;
+    }
+
+    .cost-legend {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+      font-size: 0.68rem;
+      color: var(--text-muted);
+    }
+
+    .cost-summary {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* Prompt Output */
+    .prompt-area {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 12px 20px;
+      flex-shrink: 0;
+    }
+
+    .prompt-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .prompt-header span {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 500;
+    }
+
+    .copy-btn {
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      border: none;
+      color: #fff;
+      padding: 5px 16px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all .2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .copy-btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.1);
+      opacity: 0;
+      transition: opacity .2s;
+    }
+
+    .copy-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(77, 163, 255, 0.3);
+    }
+
+    .copy-btn:hover::after {
+      opacity: 1;
+    }
+
+    .prompt-text {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      max-height: 60px;
+      overflow-y: auto;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-hover);
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <h1>MySQL <span>EXPLAIN</span> 执行计划 Playground</h1>
+  </header>
+
+  <div class="main">
+    <div class="controls">
+      <div>
+        <div class="section-title">场景预设</div>
+        <div class="preset-grid" id="presets"></div>
+      </div>
+
+      <div>
+        <div class="section-title">表结构 Schema</div>
+        <div class="schema-box" id="schemaBox"></div>
+      </div>
+
+      <div>
+        <div class="section-title">SQL 查询</div>
+        <textarea class="sql-input" id="sqlInput" spellcheck="false"></textarea>
+      </div>
+
+      <div>
+        <div class="section-title">显示选项</div>
+        <div class="toggle-row">
+          <label>显示行数估算条</label>
+          <div class="toggle on" id="togRows" onclick="this.classList.toggle('on'); updateAll()"></div>
+        </div>
+        <div class="toggle-row">
+          <label>显示优化建议</label>
+          <div class="toggle on" id="togTips" onclick="this.classList.toggle('on'); updateAll()"></div>
+        </div>
+        <div class="toggle-row">
+          <label>显示查询成本</label>
+          <div class="toggle on" id="togCost" onclick="this.classList.toggle('on'); updateAll()"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="explain-area">
+        <div class="explain-table-wrap">
+          <table class="explain" id="explainTable"></table>
+        </div>
+        <div class="cost-bar" id="costBar"></div>
+      </div>
+      <div class="detail-panel" id="detailPanel">
+        <div class="detail-header">
+          <h3 id="detailTitle"></h3>
+          <button class="detail-close" onclick="closeDetail()">&times;</button>
+        </div>
+        <div class="detail-grid" id="detailGrid"></div>
+      </div>
+      <div class="prompt-area">
+        <div class="prompt-header">
+          <span>Prompt 输出</span>
+          <button class="copy-btn" id="copyBtn" onclick="copyPrompt()">复制</button>
+        </div>
+        <div class="prompt-text" id="promptText"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SCHEMA = {
+      users: {
+        columns: ['id (PK)', 'name', 'email (UNIQUE)', 'age', 'city', 'created_at'],
+        indexes: ['PRIMARY (id)', 'idx_email (email)', 'idx_city_age (city, age)'],
+        rows: 100000
+      },
+      orders: {
+        columns: ['id (PK)', 'user_id (FK)', 'amount', 'status', 'order_date'],
+        indexes: ['PRIMARY (id)', 'idx_user_id (user_id)', 'idx_status_date (status, order_date)'],
+        rows: 500000
+      },
+      order_items: {
+        columns: ['id (PK)', 'order_id (FK)', 'product_id (FK)', 'quantity', 'price'],
+        indexes: ['PRIMARY (id)', 'idx_order_id (order_id)', 'idx_product_id (product_id)'],
+        rows: 1500000
+      },
+      products: {
+        columns: ['id (PK)', 'name', 'category', 'price', 'stock'],
+        indexes: ['PRIMARY (id)', 'idx_category (category)'],
+        rows: 10000
+      }
+    };
+
+    const ACCESS_TYPE_RANK = { system: 0, const: 1, eq_ref: 2, ref: 3, fulltext: 4, ref_or_null: 5, index_merge: 6, unique_subquery: 7, index_subquery: 8, range: 9, index: 10, ALL: 11 };
+
+    const ACCESS_TYPE_INFO = {
+      const: { label: '常量查找', desc: '通过主键或唯一索引精确匹配一行。最优的访问方式。', color: 'green', cost: 1 },
+      eq_ref: { label: '唯一索引关联', desc: '多表 JOIN 时，对驱动表的每一行，通过唯一索引或主键在被驱动表中精确匹配一行。', color: 'blue', cost: 5 },
+      ref: { label: '非唯一索引查找', desc: '使用非唯一索引查找匹配的行，可能返回多行。常见于普通索引等值查询。', color: 'purple', cost: 20 },
+      range: { label: '索引范围扫描', desc: '在索引上做范围扫描（BETWEEN、>、<、IN 等）。只扫描索引中满足条件的部分。', color: 'yellow', cost: 40 },
+      index: { label: '全索引扫描', desc: '扫描整个索引树（覆盖索引场景）。比全表扫描好，因为索引通常比数据小，但仍需遍历全部。', color: 'orange', cost: 70 },
+      ALL: { label: '全表扫描', desc: '扫描整张表的每一行，没有用到任何索引。通常需要优化。', color: 'red', cost: 100 }
+    };
+
+    const EXTRA_INFO = {
+      'Using index': { desc: '覆盖索引：查询所需列都在索引中，无需回表。', good: true },
+      'Using where': { desc: '在存储引擎返回行后，Server 层进行 WHERE 过滤。', good: null },
+      'Using temporary': { desc: '需要创建临时表来处理查询（常见于 GROUP BY、DISTINCT）。', good: false },
+      'Using filesort': { desc: '需要额外的排序操作，无法利用索引排序。', good: false },
+      'Using index condition': { desc: '索引条件下推（ICP）：将 WHERE 条件下推到存储引擎层在索引上过滤。', good: true },
+      'Using join buffer': { desc: '使用连接缓冲区（Block Nested Loop），被驱动表没有可用索引。', good: false },
+      'Using index for group-by': { desc: '使用索引来完成 GROUP BY 操作，无需额外排序。', good: true },
+      'Impossible WHERE': { desc: 'WHERE 条件始终为 false，不会返回任何行。', good: null }
+    };
+
+    const PRESETS = [
+      {
+        name: '主键精确查找',
+        desc: 'const 类型，最快',
+        sql: `SELECT * FROM users\nWHERE id = 42;`,
+        explain: [
+          { id: 1, select_type: 'SIMPLE', table: 'users', type: 'const', possible_keys: 'PRIMARY', key: 'PRIMARY', key_len: '4', ref: 'const', rows: 1, filtered: 100, Extra: '' }
+        ]
+      },
+      {
+        name: '单表索引范围',
+        desc: 'range 扫描 + 覆盖索引',
+        sql: `SELECT id, city, age\nFROM users\nWHERE city = '北京'\n  AND age BETWEEN 20 AND 30;`,
+        explain: [
+          { id: 1, select_type: 'SIMPLE', table: 'users', type: 'range', possible_keys: 'idx_city_age', key: 'idx_city_age', key_len: '206', ref: null, rows: 3500, filtered: 100, Extra: 'Using where; Using index' }
+        ]
+      },
+      {
+        name: '双表 JOIN',
+        desc: 'eq_ref + ref 关联',
+        sql: `SELECT u.name, o.amount\nFROM orders o\nJOIN users u ON u.id = o.user_id\nWHERE o.status = 'paid'\n  AND o.order_date > '2024-01-01';`,
+        explain: [
+          { id: 1, select_type: 'SIMPLE', table: 'o', type: 'range', possible_keys: 'idx_user_id,idx_status_date', key: 'idx_status_date', key_len: '7', ref: null, rows: 85000, filtered: 100, Extra: 'Using index condition' },
+          { id: 1, select_type: 'SIMPLE', table: 'u', type: 'eq_ref', possible_keys: 'PRIMARY', key: 'PRIMARY', key_len: '4', ref: 'db.o.user_id', rows: 1, filtered: 100, Extra: '' }
+        ]
+      },
+      {
+        name: '全表扫描 (无索引)',
+        desc: 'ALL 类型，需要优化',
+        sql: `SELECT * FROM users\nWHERE YEAR(created_at) = 2024;`,
+        explain: [
+          { id: 1, select_type: 'SIMPLE', table: 'users', type: 'ALL', possible_keys: null, key: null, key_len: null, ref: null, rows: 100000, filtered: 11.11, Extra: 'Using where' }
+        ]
+      },
+      {
+        name: '子查询',
+        desc: 'DEPENDENT SUBQUERY',
+        sql: `SELECT u.name, u.email\nFROM users u\nWHERE u.id IN (\n  SELECT o.user_id\n  FROM orders o\n  WHERE o.amount > 1000\n);`,
+        explain: [
+          { id: 1, select_type: 'SIMPLE', table: 'o', type: 'range', possible_keys: 'idx_user_id', key: 'idx_user_id', key_len: '4', ref: null, rows: 15000, filtered: 33.33, Extra: 'Using where; Using index' },
+          { id: 1, select_type: 'SIMPLE', table: 'u', type: 'eq_ref', possible_keys: 'PRIMARY', key: 'PRIMARY', key_len: '4', ref: 'db.o.user_id', rows: 1, filtered: 100, Extra: '' }
+        ]
+      },
+      {
+        name: '三表 JOIN + 排序',
+        desc: 'filesort + 临时表',
+        sql: `SELECT u.name,\n  SUM(oi.quantity * oi.price) AS total\nFROM users u\nJOIN orders o ON o.user_id = u.id\nJOIN order_items oi\n  ON oi.order_id = o.id\nWHERE o.status = 'paid'\nGROUP BY u.name\nORDER BY total DESC\nLIMIT 10;`,
+        explain: [
+          { id: 1, select_type: 'SIMPLE', table: 'o', type: 'ref', possible_keys: 'PRIMARY,idx_user_id,idx_status_date', key: 'idx_status_date', key_len: '3', ref: 'const', rows: 150000, filtered: 100, Extra: 'Using index; Using temporary; Using filesort' },
+          { id: 1, select_type: 'SIMPLE', table: 'u', type: 'eq_ref', possible_keys: 'PRIMARY', key: 'PRIMARY', key_len: '4', ref: 'db.o.user_id', rows: 1, filtered: 100, Extra: '' },
+          { id: 1, select_type: 'SIMPLE', table: 'oi', type: 'ref', possible_keys: 'idx_order_id', key: 'idx_order_id', key_len: '4', ref: 'db.o.id', rows: 3, filtered: 100, Extra: '' }
+        ]
+      },
+      {
+        name: '覆盖索引',
+        desc: 'Using index，无回表',
+        sql: `SELECT user_id, COUNT(*)\nFROM orders\nGROUP BY user_id;`,
+        explain: [
+          { id: 1, select_type: 'SIMPLE', table: 'orders', type: 'index', possible_keys: 'idx_user_id', key: 'idx_user_id', key_len: '4', ref: null, rows: 500000, filtered: 100, Extra: 'Using index' }
+        ]
+      },
+      {
+        name: '缺失索引的 JOIN',
+        desc: 'Using join buffer',
+        sql: `SELECT p.name, oi.quantity\nFROM order_items oi\nJOIN products p\n  ON p.name = oi.product_id\nWHERE oi.quantity > 5;`,
+        explain: [
+          { id: 1, select_type: 'SIMPLE', table: 'oi', type: 'ALL', possible_keys: null, key: null, key_len: null, ref: null, rows: 1500000, filtered: 33.33, Extra: 'Using where' },
+          { id: 1, select_type: 'SIMPLE', table: 'p', type: 'ALL', possible_keys: null, key: null, key_len: null, ref: null, rows: 10000, filtered: 10, Extra: 'Using where; Using join buffer (hash join)' }
+        ]
+      }
+    ];
+
+    let state = {
+      activePreset: 0,
+      sql: '',
+      explainRows: [],
+      showRows: true,
+      showTips: true,
+      showCost: true,
+      selectedRow: -1
+    };
+
+    function init() {
+      renderPresets();
+      renderSchema();
+      selectPreset(0);
+    }
+
+    function renderPresets() {
+      const el = document.getElementById('presets');
+      el.innerHTML = PRESETS.map((p, i) =>
+        `<button class="preset-btn" data-idx="${i}" onclick="selectPreset(${i})">
+      <span class="preset-name">${p.name}</span>
+      <span class="preset-desc">${p.desc}</span>
+    </button>`
+      ).join('');
+    }
+
+    function renderSchema() {
+      const el = document.getElementById('schemaBox');
+      let html = '';
+      for (const [tbl, info] of Object.entries(SCHEMA)) {
+        html += `<div style="margin-bottom:8px"><span class="tbl">${tbl}</span> <span style="color:#666">(~${info.rows.toLocaleString()} rows)</span>\n`;
+        html += `  <span class="col">${info.columns.join(', ')}</span>\n`;
+        html += `  <span class="idx">索引: ${info.indexes.join(', ')}</span></div>`;
+      }
+      el.innerHTML = html;
+    }
+
+    function selectPreset(idx) {
+      state.activePreset = idx;
+      state.sql = PRESETS[idx].sql;
+      state.explainRows = PRESETS[idx].explain;
+      state.selectedRow = -1;
+      document.getElementById('sqlInput').value = state.sql;
+      document.querySelectorAll('.preset-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+      closeDetail();
+      updateAll();
+    }
+
+    document.getElementById('sqlInput').addEventListener('input', function () {
+      state.sql = this.value;
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      updatePrompt();
+    });
+
+    function updateAll() {
+      state.showRows = document.getElementById('togRows').classList.contains('on');
+      state.showTips = document.getElementById('togTips').classList.contains('on');
+      state.showCost = document.getElementById('togCost').classList.contains('on');
+      renderExplainTable();
+      renderCost();
+      updatePrompt();
+    }
+
+    function renderExplainTable() {
+      const table = document.getElementById('explainTable');
+      const rows = state.explainRows;
+      let html = `<thead><tr>
+    <th>id</th><th>select_type</th><th>table</th><th>type</th>
+    <th>possible_keys</th><th>key</th><th>key_len</th><th>ref</th>
+    <th>rows</th><th>filtered</th><th>Extra</th>
+  </tr></thead><tbody>`;
+
+      rows.forEach((r, i) => {
+        const typeInfo = ACCESS_TYPE_INFO[r.type] || { color: 'text2', cost: 50 };
+        const badgeClass = `badge-${r.type}`;
+        const maxRows = Math.max(...rows.map(x => x.rows));
+        const barWidth = maxRows > 0 ? Math.max(4, (r.rows / maxRows) * 80) : 4;
+        const barColor = typeInfo.cost > 70 ? 'var(--red)' : typeInfo.cost > 40 ? 'var(--yellow)' : 'var(--green)';
+
+        html += `<tr class="${i === state.selectedRow ? 'highlight' : ''}" onclick="showDetail(${i})" style="cursor:pointer">
+      <td>${r.id}</td>
+      <td>${r.select_type}</td>
+      <td style="color:var(--accent2);font-weight:600">${r.table}</td>
+      <td><span class="badge ${badgeClass}">${r.type}</span></td>
+      <td style="color:var(--text3)">${r.possible_keys || '<span style="color:#555">NULL</span>'}</td>
+      <td style="color:${r.key ? 'var(--green)' : 'var(--red)'};font-weight:600">${r.key || 'NULL'}</td>
+      <td>${r.key_len || '-'}</td>
+      <td style="color:var(--text3)">${r.ref || '-'}</td>
+      <td>${state.showRows ? `<span class="rows-bar" style="width:${barWidth}px;background:${barColor}"></span>` : ''}${r.rows.toLocaleString()}</td>
+      <td>${r.filtered}%</td>
+      <td>${renderExtra(r.Extra)}</td>
+    </tr>`;
+      });
+
+      html += '</tbody>';
+      table.innerHTML = html;
+    }
+
+    function renderExtra(extra) {
+      if (!extra) return '<span style="color:#555">-</span>';
+      return extra.split('; ').map(e => {
+        const info = EXTRA_INFO[e];
+        if (!info) return `<span style="color:var(--text2)">${e}</span>`;
+        const color = info.good === true ? 'var(--green)' : info.good === false ? 'var(--red)' : 'var(--text2)';
+        return `<span style="color:${color};cursor:help" title="${info.desc}">${e}</span>`;
+      }).join('; ');
+    }
+
+    function showDetail(idx) {
+      state.selectedRow = idx;
+      const r = state.explainRows[idx];
+      const typeInfo = ACCESS_TYPE_INFO[r.type] || { label: r.type, desc: '未知访问类型', color: 'text2', cost: 50 };
+      const panel = document.getElementById('detailPanel');
+      const title = document.getElementById('detailTitle');
+      const grid = document.getElementById('detailGrid');
+
+      title.textContent = `${r.table} — ${typeInfo.label} (${r.type})`;
+
+      let html = '';
+
+      html += `<div class="detail-card">
+    <h4>访问类型 (type)</h4>
+    <p><span class="val">${r.type}</span> — ${typeInfo.desc}</p>
+    ${typeInfo.cost >= 70 ? '<span class="warn">性能较差，建议优化</span>' : typeInfo.cost <= 20 ? '<span class="tip">性能良好</span>' : ''}
+  </div>`;
+
+      html += `<div class="detail-card">
+    <h4>使用的索引 (key)</h4>
+    <p>可选索引: <span class="val">${r.possible_keys || 'NULL'}</span></p>
+    <p>实际使用: <span class="val">${r.key || 'NULL (未使用索引)'}</span></p>
+    ${!r.key ? '<span class="warn">未使用任何索引！考虑添加合适的索引。</span>' : ''}
+    ${r.key_len ? `<p>索引长度: <span class="val">${r.key_len}</span> bytes</p>` : ''}
+  </div>`;
+
+      html += `<div class="detail-card">
+    <h4>扫描行数估算 (rows)</h4>
+    <p>预估扫描 <span class="val">${r.rows.toLocaleString()}</span> 行</p>
+    <p>过滤率: <span class="val">${r.filtered}%</span> 的行满足条件</p>
+    <p>估算结果行数: <span class="val">~${Math.round(r.rows * r.filtered / 100).toLocaleString()}</span> 行</p>
+  </div>`;
+
+      if (r.Extra) {
+        html += `<div class="detail-card">
+      <h4>额外信息 (Extra)</h4>`;
+        r.Extra.split('; ').forEach(e => {
+          const info = EXTRA_INFO[e];
+          if (info) {
+            html += `<p><span class="val">${e}</span> — ${info.desc}</p>`;
+            if (info.good === true) html += `<span class="tip">这是正面优化信号</span>`;
+            if (info.good === false) html += `<span class="warn">这是性能瓶颈信号，需要关注</span>`;
+          } else {
+            html += `<p><span class="val">${e}</span></p>`;
+          }
+        });
+        html += '</div>';
+      }
+
+      if (state.showTips) {
+        const tips = generateTips(r);
+        if (tips.length) {
+          html += `<div class="detail-card full">
+        <h4>优化建议</h4>
+        ${tips.map(t => `<p>💡 ${t}</p>`).join('')}
+      </div>`;
+        }
+      }
+
+      grid.innerHTML = html;
+      panel.classList.add('visible');
+      renderExplainTable();
+    }
+
+    function closeDetail() {
+      state.selectedRow = -1;
+      document.getElementById('detailPanel').classList.remove('visible');
+      renderExplainTable();
+    }
+
+    function generateTips(row) {
+      const tips = [];
+      if (row.type === 'ALL') {
+        tips.push('全表扫描：检查 WHERE 条件中的列是否有索引。避免在索引列上使用函数（如 YEAR(col)），这会导致索引失效。');
+        if (row.rows > 10000) tips.push(`扫描 ${row.rows.toLocaleString()} 行代价很高。考虑添加复合索引覆盖 WHERE 条件中的列。`);
+      }
+      if (row.type === 'index' && row.rows > 50000) {
+        tips.push('全索引扫描行数较多。如果可以添加 WHERE 条件缩小范围，访问类型可能提升为 range。');
+      }
+      if (row.Extra && row.Extra.includes('Using filesort')) {
+        tips.push('文件排序：考虑让 ORDER BY 的列包含在索引中，以避免额外的排序操作。');
+      }
+      if (row.Extra && row.Extra.includes('Using temporary')) {
+        tips.push('临时表：GROUP BY / DISTINCT / UNION 导致创建临时表。确保 GROUP BY 的列有合适的索引。');
+      }
+      if (row.Extra && row.Extra.includes('Using join buffer')) {
+        tips.push('连接缓冲：被驱动表缺少 JOIN 条件上的索引。为 ON 子句中的关联列添加索引。');
+      }
+      if (!row.key && row.possible_keys) {
+        tips.push('有可用索引但未被使用。检查 WHERE 条件的写法，确保与索引列匹配。');
+      }
+      if (row.filtered < 50 && row.type !== 'const' && row.type !== 'eq_ref') {
+        tips.push(`过滤率仅 ${row.filtered}%，大量行被扫描后丢弃。考虑让索引更精准地覆盖过滤条件。`);
+      }
+      return tips;
+    }
+
+    function renderCost() {
+      const el = document.getElementById('costBar');
+      if (!state.showCost) { el.innerHTML = ''; return; }
+
+      const rows = state.explainRows;
+      let totalScan = 0;
+      let worstType = 'const';
+      let issues = [];
+
+      rows.forEach(r => {
+        totalScan += r.rows;
+        if ((ACCESS_TYPE_RANK[r.type] || 0) > (ACCESS_TYPE_RANK[worstType] || 0)) worstType = r.type;
+        if (r.Extra && r.Extra.includes('Using filesort')) issues.push('filesort');
+        if (r.Extra && r.Extra.includes('Using temporary')) issues.push('临时表');
+        if (r.Extra && r.Extra.includes('Using join buffer')) issues.push('join buffer');
+      });
+
+      const uniqueIssues = [...new Set(issues)];
+      const worstInfo = ACCESS_TYPE_INFO[worstType] || { cost: 50 };
+      const costPct = Math.min(100, Math.max(3, worstInfo.cost + (uniqueIssues.length * 10)));
+      const costColor = costPct > 70 ? 'var(--red)' : costPct > 40 ? 'var(--yellow)' : 'var(--green)';
+
+      let summary = `总预估扫描行数: <strong>${totalScan.toLocaleString()}</strong>`;
+      summary += ` | 最差访问类型: <strong>${worstType}</strong>`;
+      if (uniqueIssues.length) summary += ` | 性能问题: <strong>${uniqueIssues.join(', ')}</strong>`;
+
+      let rating = costPct <= 20 ? '优秀' : costPct <= 40 ? '良好' : costPct <= 70 ? '一般' : '需要优化';
+
+      el.innerHTML = `
+    <div class="cost-label">查询成本评估 — <span style="color:${costColor};font-weight:600">${rating}</span></div>
+    <div class="cost-track"><div class="cost-fill" style="width:${costPct}%;background:${costColor}"></div></div>
+    <div class="cost-legend"><span>低成本</span><span>高成本</span></div>
+    <div class="cost-summary">${summary}</div>
+  `;
+    }
+
+    function updatePrompt() {
+      const rows = state.explainRows;
+      const parts = [];
+
+      parts.push(`分析以下 MySQL 查询的执行计划：`);
+      parts.push(`\nSQL: ${state.sql.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()}`);
+
+      rows.forEach(r => {
+        const typeInfo = ACCESS_TYPE_INFO[r.type];
+        parts.push(`\n表 ${r.table}: 访问类型 ${r.type}${typeInfo ? ` (${typeInfo.label})` : ''}，使用索引 ${r.key || '无'}，预估扫描 ${r.rows.toLocaleString()} 行（过滤率 ${r.filtered}%）${r.Extra ? '，Extra: ' + r.Extra : ''}`);
+      });
+
+      const issues = [];
+      rows.forEach(r => {
+        if (r.type === 'ALL') issues.push(`${r.table} 全表扫描`);
+        if (r.Extra && r.Extra.includes('Using filesort')) issues.push(`${r.table} 文件排序`);
+        if (r.Extra && r.Extra.includes('Using temporary')) issues.push(`${r.table} 临时表`);
+        if (r.Extra && r.Extra.includes('Using join buffer')) issues.push(`${r.table} 缺少 JOIN 索引`);
+      });
+
+      if (issues.length) {
+        parts.push(`\n发现的性能问题: ${issues.join('、')}。请给出具体的优化方案，包括建议添加的索引和改写后的 SQL。`);
+      } else {
+        parts.push(`\n该查询执行计划看起来合理。请确认是否还有进一步优化空间。`);
+      }
+
+      document.getElementById('promptText').textContent = parts.join('');
+    }
+
+    function copyPrompt() {
+      const text = document.getElementById('promptText').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = '已复制!';
+        setTimeout(() => btn.textContent = '复制', 1500);
+      });
+    }
+
+    init();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

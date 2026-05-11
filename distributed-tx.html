@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Java 分布式事务方案</title>
+  <meta name="description" content="交互式可视化 Java 分布式事务方案，演示 2PC、TCC、Saga、本地消息表等方案的执行流程与异常处理">
+  <meta name="keywords" content="分布式事务, 2PC, TCC, Saga, 本地消息表, Java, 微服务, Seata">
+  <meta property="og:title" content="Java 分布式事务方案">
+  <meta property="og:description" content="交互式可视化 Java 分布式事务方案，演示 2PC、TCC、Saga、本地消息表等方案的执行流程与异常处理">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --mono: 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 13px;
+      position: relative
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(77, 163, 255, 0.06), transparent 70%);
+      pointer-events: none;
+      z-index: 0
+    }
+
+    header {
+      padding: 12px 20px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1
+    }
+
+    header h1 {
+      font-size: 17px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text
+    }
+
+    .tag {
+      font-size: 0.68rem;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      padding: 3px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      letter-spacing: 0.3px
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      z-index: 1
+    }
+
+    .left {
+      width: 320px;
+      min-width: 320px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px
+    }
+
+    .sec {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      backdrop-filter: blur(8px);
+      transition: border-color .2s
+    }
+
+    .sec:hover {
+      border-color: var(--border-hover)
+    }
+
+    .sec-t {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .sec-t::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-blue)
+    }
+
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px
+    }
+
+    .pbtn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 9px 11px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      text-align: left;
+      transition: all .15s;
+      display: flex;
+      gap: 8px;
+      align-items: center
+    }
+
+    .pbtn:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-elevated)
+    }
+
+    .pbtn.active {
+      border-color: var(--accent-blue);
+      background: rgba(77, 163, 255, 0.06);
+      box-shadow: inset 3px 0 0 var(--accent-blue), 0 0 12px var(--glow-blue)
+    }
+
+    .pbtn .pi {
+      font-size: 16px;
+      width: 22px;
+      text-align: center;
+      flex-shrink: 0
+    }
+
+    .pbtn .pn {
+      font-weight: 600;
+      display: block;
+      font-size: 12px
+    }
+
+    .pbtn .pd {
+      color: var(--text-muted);
+      font-size: 10px;
+      line-height: 1.3;
+      margin-top: 2px
+    }
+
+    .btns {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px
+    }
+
+    .btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 0;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 11px;
+      transition: all .15s;
+      flex: 1;
+      text-align: center
+    }
+
+    .btn:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3)
+    }
+
+    .btn.pri {
+      background: linear-gradient(135deg, var(--accent-green), #2bb870);
+      color: #000;
+      font-weight: 600;
+      border-color: var(--accent-green);
+      box-shadow: 0 2px 10px rgba(54, 217, 134, 0.2)
+    }
+
+    .btn.pri:hover {
+      box-shadow: 0 4px 16px rgba(54, 217, 134, 0.35);
+      transform: translateY(-1px)
+    }
+
+    .btn.red {
+      color: var(--accent-red);
+      border-color: rgba(255, 92, 108, 0.25)
+    }
+
+    .btn.red:hover {
+      border-color: var(--accent-red);
+      box-shadow: 0 4px 12px rgba(255, 92, 108, 0.15)
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0
+    }
+
+    .toggle-row label {
+      font-size: 11px;
+      color: var(--text-secondary)
+    }
+
+    .toggle-row select {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: var(--radius-sm);
+      padding: 4px 8px;
+      font-size: 11px;
+      width: 130px
+    }
+
+    .toggle-row select:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue)
+    }
+
+    .info {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 11px;
+      font-size: 11px;
+      line-height: 1.7;
+      color: var(--text-secondary)
+    }
+
+    .info b {
+      color: var(--text-primary)
+    }
+
+    .info .hl {
+      color: var(--accent-green);
+      font-weight: 600
+    }
+
+    .info .r {
+      color: var(--accent-red)
+    }
+
+    .info .b {
+      color: var(--accent-blue)
+    }
+
+    .info .p {
+      color: var(--accent-purple)
+    }
+
+    .info .y {
+      color: var(--accent-orange)
+    }
+
+    .right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden
+    }
+
+    .canvas-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%
+    }
+
+    .log-panel {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      height: 140px;
+      overflow-y: auto;
+      padding: 10px 16px;
+      flex-shrink: 0
+    }
+
+    .log-panel .log-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-weight: 600
+    }
+
+    .log-item {
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 3px 0;
+      color: var(--text-secondary);
+      border-bottom: 1px solid rgba(30, 42, 58, 0.4)
+    }
+
+    .log-item .lt {
+      color: var(--text-muted);
+      margin-right: 8px
+    }
+
+    .log-item.success {
+      color: var(--accent-green)
+    }
+
+    .log-item.error {
+      color: var(--accent-red)
+    }
+
+    .log-item.warn {
+      color: var(--accent-orange)
+    }
+
+    .log-item.info {
+      color: var(--accent-blue)
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.14)
+    }
+
+    [data-theme="light"] .log-item {
+      color: var(--text-secondary);
+      border-bottom-color: var(--border)
+    }
+
+    [data-theme="light"] .log-item .lt {
+      color: var(--text-muted)
+    }
+
+    [data-theme="light"] .log-item.success {
+      color: var(--accent-green)
+    }
+
+    [data-theme="light"] .log-item.error {
+      color: var(--accent-red)
+    }
+
+    [data-theme="light"] .log-item.warn {
+      color: var(--accent-orange)
+    }
+
+    [data-theme="light"] .log-item.info {
+      color: var(--accent-blue)
+    }
+
+    [data-theme="light"] .log-panel {
+      background: var(--bg-card);
+      border-top-color: var(--border)
+    }
+
+    [data-theme="light"] .log-panel .log-title {
+      color: var(--text-muted)
+    }
+
+    [data-theme="light"] header h1 {
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      -webkit-background-clip: text;
+      background-clip: text
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Java 分布式事务方案</h1>
+    <div class="tag">交互式动画演示</div>
+  </header>
+  <div class="main">
+    <div class="left">
+      <div class="sec">
+        <div class="sec-t">方案选择</div>
+        <div class="preset-list" id="presets"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-t">场景模拟</div>
+        <div class="toggle-row">
+          <label>故障注入</label>
+          <select id="faultSelect">
+            <option value="none">无故障（正常流程）</option>
+            <option value="participant_fail">参与者执行失败</option>
+            <option value="network_timeout">网络超时</option>
+            <option value="coordinator_crash">协调者宕机</option>
+          </select>
+        </div>
+        <div class="toggle-row">
+          <label>执行速度</label>
+          <select id="speedSelect">
+            <option value="1">正常</option>
+            <option value="0.5">慢速</option>
+            <option value="2">快速</option>
+          </select>
+        </div>
+        <div class="btns">
+          <button class="btn pri" id="btnRun">&#9654; 执行</button>
+          <button class="btn red" id="btnReset">重置</button>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-t">方案说明</div>
+        <div class="info" id="infoPanel"></div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="canvas-wrap"><canvas id="cv"></canvas></div>
+      <div class="log-panel">
+        <div class="log-title">执行日志</div>
+        <div id="logList"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const cv = document.getElementById('cv'), cx = cv.getContext('2d');
+    let W, H, dpr;
+    function resize() {
+      const r = cv.parentElement.getBoundingClientRect();
+      dpr = devicePixelRatio || 1;
+      W = r.width; H = r.height;
+      cv.width = W * dpr; cv.height = H * dpr;
+      cv.style.width = W + 'px'; cv.style.height = H + 'px';
+      cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    addEventListener('resize', () => { resize(); draw(); });
+
+    const FF = () => getComputedStyle(document.body).fontFamily;
+    const MF = () => 'JetBrains Mono, Consolas, monospace';
+    function cssVar(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+    // Theme-aware color helpers
+    function C(name) { return cssVar(name); }
+    function colors() {
+      return {
+        bg: C('--bg-primary'), card: C('--bg-card'), elevated: C('--bg-elevated'), input: C('--bg-input'),
+        border: C('--border'), borderHover: C('--border-hover'),
+        text: C('--text-primary'), text2: C('--text-secondary'), text3: C('--text-muted'),
+        blue: C('--accent-blue'), green: C('--accent-green'), purple: C('--accent-purple'),
+        orange: C('--accent-orange'), red: C('--accent-red'), cyan: C('--accent-cyan'), pink: C('--accent-pink'),
+      };
+    }
+    function hexAlpha(hex, alpha) {
+      const rgb = parseHex(hex);
+      return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`;
+    }
+    function parseHex(hex) {
+      hex = (hex || '#000000').trim();
+      if (hex.length === 4) return [parseInt(hex[1] + hex[1], 16), parseInt(hex[2] + hex[2], 16), parseInt(hex[3] + hex[3], 16)];
+      return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+    }
+
+    function txt(x, y, t, sz, c, al = 'center', bl = 'middle') { cx.fillStyle = c; cx.font = `${sz}px ${FF()}`; cx.textAlign = al; cx.textBaseline = bl; cx.fillText(t, x, y); }
+    function txtB(x, y, t, sz, c, al = 'center', bl = 'middle') { cx.font = `bold ${sz}px ${FF()}`; txt(x, y, t, sz, c, al, bl); }
+    function txtM(x, y, t, sz, c, al = 'center', bl = 'middle') { cx.fillStyle = c; cx.font = `${sz}px ${MF()}`; cx.textAlign = al; cx.textBaseline = bl; cx.fillText(t, x, y); }
+    function rr(x, y, w, h, r) { cx.beginPath(); cx.moveTo(x + r, y); cx.lineTo(x + w - r, y); cx.quadraticCurveTo(x + w, y, x + w, y + r); cx.lineTo(x + w, y + h - r); cx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); cx.lineTo(x + r, y + h); cx.quadraticCurveTo(x, y + h, x, y + h - r); cx.lineTo(x, y + r); cx.quadraticCurveTo(x, y, x + r, y); cx.closePath(); }
+    function box(x, y, w, h, fill, stroke, r = 8) { cx.fillStyle = fill; cx.strokeStyle = stroke; cx.lineWidth = 1.5; rr(x, y, w, h, r); cx.fill(); cx.stroke(); }
+    function arrow(x1, y1, x2, y2, c, w = 1.5) { cx.strokeStyle = c; cx.lineWidth = w; cx.beginPath(); cx.moveTo(x1, y1); cx.lineTo(x2, y2); cx.stroke(); const a = Math.atan2(y2 - y1, x2 - x1), l = 7; cx.fillStyle = c; cx.beginPath(); cx.moveTo(x2, y2); cx.lineTo(x2 - l * Math.cos(a - .3), y2 - l * Math.sin(a - .3)); cx.lineTo(x2 - l * Math.cos(a + .3), y2 - l * Math.sin(a + .3)); cx.closePath(); cx.fill(); }
+    function dashedLine(x1, y1, x2, y2, c) { cx.strokeStyle = c; cx.lineWidth = 1; cx.setLineDash([5, 4]); cx.beginPath(); cx.moveTo(x1, y1); cx.lineTo(x2, y2); cx.stroke(); cx.setLineDash([]); }
+    function circle(x, y, r, fill, stroke) { cx.fillStyle = fill; cx.strokeStyle = stroke; cx.lineWidth = 1.5; cx.beginPath(); cx.arc(x, y, r, 0, Math.PI * 2); cx.fill(); cx.stroke(); }
+
+    // State
+    let currentScheme = '2pc';
+    let animState = { phase: 'idle', step: 0, progress: 0, messages: [] };
+    let animTimer = null;
+    let speed = 1;
+
+    const schemes = [
+      { id: '2pc', name: '2PC 两阶段提交', icon: '🔄', desc: 'XA 协议，强一致性', info: '<b>两阶段提交 (2PC)</b><br><br>阶段一（Prepare）：协调者向所有参与者发送 <span class="b">Prepare</span> 请求，参与者执行事务但不提交，锁定资源并回复 <span class="hl">Yes/No</span><br><br>阶段二（Commit/Rollback）：如果所有参与者回复 Yes，协调者发送 <span class="hl">Commit</span>；否则发送 <span class="r">Rollback</span><br><br><b>优点：</b>强一致性<br><b>缺点：</b>同步阻塞、单点故障、数据不一致风险<br><b>实现：</b>Seata AT 模式、XA 规范' },
+      { id: 'tcc', name: 'TCC 补偿事务', icon: '✅', desc: 'Try-Confirm-Cancel', info: '<b>TCC (Try-Confirm-Cancel)</b><br><br><span class="b">Try</span>：尝试执行，预留业务资源（如冻结金额）<br><span class="hl">Confirm</span>：确认执行，使用 Try 阶段预留的资源完成业务<br><span class="r">Cancel</span>：取消执行，释放 Try 阶段预留的资源<br><br><b>优点：</b>无全局锁、性能好、最终一致<br><b>缺点：</b>业务侵入大、需实现三个接口、幂等性要求高<br><b>实现：</b>Seata TCC 模式、Hmily、ByteTCC' },
+      { id: 'saga', name: 'Saga 编排模式', icon: '📋', desc: '长事务拆分+补偿', info: '<b>Saga 模式</b><br><br>将长事务拆分为多个<span class="b">本地事务</span>，每个本地事务有对应的<span class="r">补偿事务</span><br><br><span class="hl">正向流程：</span>T1 → T2 → T3 依次执行<br><span class="r">补偿流程：</span>若 T3 失败，则逆序执行 C2 → C1<br><br><b>优点：</b>无锁、高性能、适合长流程<br><b>缺点：</b>最终一致性、补偿逻辑复杂、无隔离性<br><b>实现：</b>Seata Saga、Eventuate、Axon Framework' },
+      { id: 'msg', name: '本地消息表', icon: '📨', desc: '可靠消息最终一致', info: '<b>本地消息表</b><br><br>核心思想：利用<span class="b">本地事务</span>保证业务操作和消息写入的原子性<br><br>1. 业务操作 + 写消息表在<span class="hl">同一本地事务</span>中完成<br>2. 后台定时任务扫描消息表，发送到 <span class="p">MQ</span><br>3. 下游消费消息，执行本地事务<br>4. 消费成功后更新消息状态<br><br><b>优点：</b>实现简单、可靠性高<br><b>缺点：</b>有延迟、需轮询、消息表膨胀<br><b>实现：</b>RocketMQ 事务消息、自研消息表方案' },
+    ];
+
+    const presetEl = document.getElementById('presets');
+    const infoEl = document.getElementById('infoPanel');
+    const logEl = document.getElementById('logList');
+    const faultSel = document.getElementById('faultSelect');
+    const speedSel = document.getElementById('speedSelect');
+
+    schemes.forEach(s => {
+      const d = document.createElement('div');
+      d.className = 'pbtn' + (s.id === currentScheme ? ' active' : '');
+      d.dataset.id = s.id;
+      d.innerHTML = `<span class="pi">${s.icon}</span><div><span class="pn">${s.name}</span><span class="pd">${s.desc}</span></div>`;
+      d.onclick = () => selectScheme(s.id);
+      presetEl.appendChild(d);
+    });
+
+    function selectScheme(id) {
+      currentScheme = id;
+      presetEl.querySelectorAll('.pbtn').forEach(b => b.classList.toggle('active', b.dataset.id === id));
+      const s = schemes.find(x => x.id === id);
+      infoEl.innerHTML = s.info;
+      resetAnim();
+      draw();
+    }
+
+    function resetAnim() {
+      if (animTimer) { clearTimeout(animTimer); animTimer = null; }
+      animState = { phase: 'idle', step: 0, progress: 0, messages: [] };
+      logEl.innerHTML = '';
+    }
+
+    function addLog(text, type = '') {
+      const now = new Date();
+      const ts = now.toTimeString().slice(0, 8);
+      const d = document.createElement('div');
+      d.className = 'log-item ' + type;
+      d.innerHTML = `<span class="lt">${ts}</span>${text}`;
+      logEl.appendChild(d);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    document.getElementById('btnRun').onclick = () => { resetAnim(); runAnimation(); };
+    document.getElementById('btnReset').onclick = () => { resetAnim(); draw(); };
+    speedSel.onchange = () => { speed = parseFloat(speedSel.value); };
+
+    selectScheme('2pc');
+    resize();
+
+    // Animation runner
+    function delay(ms) { return new Promise(r => { animTimer = setTimeout(r, ms / speed); }); }
+
+    async function runAnimation() {
+      const fault = faultSel.value;
+      switch (currentScheme) {
+        case '2pc': await run2PC(fault); break;
+        case 'tcc': await runTCC(fault); break;
+        case 'saga': await runSaga(fault); break;
+        case 'msg': await runMsg(fault); break;
+      }
+    }
+
+    // ===== 2PC Animation =====
+    async function run2PC(fault) {
+      animState.phase = 'prepare'; animState.step = 0; draw();
+      addLog('协调者 (TM) 开始分布式事务', 'info');
+      await delay(800);
+
+      addLog('Phase 1: 发送 Prepare 请求给所有参与者', 'info');
+      animState.step = 1; draw(); await delay(1000);
+
+      if (fault === 'coordinator_crash') {
+        animState.step = 2; animState.phase = 'prepare_ok'; draw();
+        addLog('参与者A: Prepare 成功，资源已锁定', 'success');
+        await delay(600);
+        addLog('参与者B: Prepare 成功，资源已锁定', 'success');
+        await delay(800);
+        animState.phase = 'coordinator_crash'; draw();
+        addLog('⚠ 协调者宕机！参与者阻塞等待...', 'error');
+        await delay(1500);
+        addLog('参与者资源被锁定，无法释放（阻塞问题）', 'error');
+        animState.phase = 'blocked'; draw();
+        return;
+      }
+
+      if (fault === 'network_timeout') {
+        animState.step = 2; animState.phase = 'prepare_ok'; draw();
+        addLog('参与者A: Prepare 成功', 'success');
+        await delay(600);
+        animState.phase = 'timeout'; draw();
+        addLog('参与者B: 网络超时，无响应...', 'warn');
+        await delay(1200);
+        addLog('协调者等待超时，执行 Rollback', 'error');
+        animState.phase = 'rollback'; animState.step = 3; draw();
+        await delay(800);
+        addLog('Phase 2: 发送 Rollback 给所有参与者', 'error');
+        await delay(800);
+        addLog('参与者A: Rollback 完成，资源释放', 'warn');
+        animState.phase = 'done_fail'; draw();
+        return;
+      }
+
+      animState.step = 2; animState.phase = 'prepare_ok'; draw();
+      addLog('参与者A: Prepare 成功，资源已锁定', 'success');
+      await delay(600);
+
+      if (fault === 'participant_fail') {
+        addLog('参与者B: Prepare 失败！本地事务回滚', 'error');
+        animState.phase = 'prepare_fail'; draw();
+        await delay(1000);
+        addLog('Phase 2: 协调者收到 No，发送 Rollback', 'error');
+        animState.phase = 'rollback'; animState.step = 3; draw();
+        await delay(800);
+        addLog('参与者A: Rollback 完成，资源释放', 'warn');
+        animState.phase = 'done_fail'; draw();
+        return;
+      }
+
+      addLog('参与者B: Prepare 成功，资源已锁定', 'success');
+      await delay(800);
+
+      addLog('Phase 2: 所有参与者回复 Yes，发送 Commit', 'info');
+      animState.phase = 'commit'; animState.step = 3; draw();
+      await delay(1000);
+      addLog('参与者A: Commit 完成 ✓', 'success');
+      await delay(500);
+      addLog('参与者B: Commit 完成 ✓', 'success');
+      animState.phase = 'done_ok'; draw();
+      await delay(500);
+      addLog('分布式事务提交成功！', 'success');
+    }
+
+    // ===== TCC Animation =====
+    async function runTCC(fault) {
+      animState.phase = 'try'; animState.step = 0; draw();
+      addLog('TCC 事务开始 - Try 阶段', 'info');
+      await delay(800);
+
+      animState.step = 1; draw();
+      addLog('订单服务 Try: 创建订单（状态: CREATING）', 'info');
+      await delay(800);
+
+      if (fault === 'participant_fail') {
+        addLog('库存服务 Try: 冻结库存失败！库存不足', 'error');
+        animState.phase = 'try_fail'; draw();
+        await delay(1000);
+        addLog('进入 Cancel 阶段，补偿已执行的 Try', 'warn');
+        animState.phase = 'cancel'; animState.step = 2; draw();
+        await delay(800);
+        addLog('订单服务 Cancel: 删除订单', 'warn');
+        animState.phase = 'done_fail'; draw();
+        await delay(500);
+        addLog('TCC 事务取消完成', 'warn');
+        return;
+      }
+
+      addLog('库存服务 Try: 冻结库存 -1（可用库存减少）', 'success');
+      await delay(600);
+      animState.step = 2; draw();
+      addLog('账户服务 Try: 冻结金额 ¥99（可用余额减少）', 'success');
+      await delay(800);
+
+      if (fault === 'network_timeout') {
+        addLog('⚠ 确认阶段网络超时', 'warn');
+        animState.phase = 'confirm_timeout'; draw();
+        await delay(1200);
+        addLog('事务管理器重试 Confirm...', 'info');
+        await delay(800);
+        addLog('重试成功（幂等设计保证）', 'success');
+      }
+
+      addLog('所有 Try 成功，进入 Confirm 阶段', 'info');
+      animState.phase = 'confirm'; animState.step = 3; draw();
+      await delay(800);
+      addLog('订单服务 Confirm: 更新订单状态 → CONFIRMED', 'success');
+      await delay(600);
+      addLog('库存服务 Confirm: 扣减冻结库存（实际减库存）', 'success');
+      await delay(600);
+      addLog('账户服务 Confirm: 扣减冻结金额（实际扣款）', 'success');
+      animState.phase = 'done_ok'; draw();
+      await delay(500);
+      addLog('TCC 事务确认完成！', 'success');
+    }
+
+    // ===== Saga Animation =====
+    async function runSaga(fault) {
+      animState.phase = 'forward'; animState.step = 0; draw();
+      addLog('Saga 编排器启动正向流程', 'info');
+      await delay(800);
+
+      animState.step = 1; draw();
+      addLog('T1: 创建订单 → 成功', 'success');
+      await delay(800);
+
+      animState.step = 2; draw();
+      addLog('T2: 扣减库存 → 成功', 'success');
+      await delay(800);
+
+      if (fault === 'participant_fail') {
+        animState.step = 3; draw();
+        addLog('T3: 扣减账户余额 → 失败！余额不足', 'error');
+        await delay(1000);
+        addLog('触发补偿流程（逆序执行）', 'warn');
+        animState.phase = 'compensate'; animState.step = 4; draw();
+        await delay(800);
+        addLog('C2: 恢复库存 +1', 'warn');
+        await delay(800);
+        animState.step = 5; draw();
+        addLog('C1: 取消订单', 'warn');
+        animState.phase = 'done_fail'; draw();
+        await delay(500);
+        addLog('Saga 补偿完成，事务已回滚', 'warn');
+        return;
+      }
+
+      if (fault === 'network_timeout') {
+        animState.step = 3; draw();
+        addLog('T3: 扣减账户 → 网络超时', 'warn');
+        await delay(1200);
+        addLog('Saga 编排器重试 T3...', 'info');
+        await delay(800);
+        addLog('T3: 重试成功', 'success');
+      } else {
+        animState.step = 3; draw();
+        addLog('T3: 扣减账户余额 → 成功', 'success');
+      }
+      await delay(800);
+
+      animState.step = 4; draw();
+      addLog('T4: 发送通知 → 成功', 'success');
+      animState.phase = 'done_ok'; draw();
+      await delay(500);
+      addLog('Saga 正向流程全部完成！', 'success');
+    }
+
+    // ===== 本地消息表 Animation =====
+    async function runMsg(fault) {
+      animState.phase = 'local_tx'; animState.step = 0; draw();
+      addLog('开始本地事务（业务操作 + 写消息表）', 'info');
+      await delay(1000);
+
+      animState.step = 1; draw();
+      addLog('执行业务SQL: 创建订单', 'success');
+      await delay(600);
+      addLog('写消息表: INSERT INTO msg_table (status=PENDING)', 'success');
+      await delay(600);
+      addLog('本地事务提交 ✓（原子性保证）', 'success');
+      await delay(800);
+
+      animState.phase = 'scan'; animState.step = 2; draw();
+      addLog('定时任务扫描消息表...', 'info');
+      await delay(1000);
+
+      addLog('发现待发送消息，投递到 MQ', 'info');
+      animState.step = 3; draw();
+      await delay(800);
+
+      if (fault === 'network_timeout') {
+        addLog('⚠ MQ 投递超时', 'warn');
+        await delay(800);
+        addLog('下次定时任务将重试投递（消息状态仍为 PENDING）', 'info');
+        await delay(1000);
+        addLog('重试投递成功', 'success');
+      }
+
+      animState.phase = 'consume'; animState.step = 4; draw();
+      addLog('下游服务消费消息...', 'info');
+      await delay(1000);
+
+      if (fault === 'participant_fail') {
+        addLog('下游服务消费失败！', 'error');
+        await delay(800);
+        addLog('MQ 重新投递（重试机制）', 'warn');
+        await delay(1000);
+        addLog('重试消费成功（幂等设计）', 'success');
+      } else {
+        addLog('下游服务: 执行扣减库存成功', 'success');
+      }
+      await delay(600);
+
+      animState.step = 5; draw();
+      addLog('更新消息表状态 → DONE', 'success');
+      animState.phase = 'done_ok'; draw();
+      await delay(500);
+      addLog('本地消息表方案执行完成！', 'success');
+    }
+
+    // ===== Drawing =====
+    function draw() {
+      cx.clearRect(0, 0, W, H);
+      switch (currentScheme) {
+        case '2pc': draw2PC(); break;
+        case 'tcc': drawTCC(); break;
+        case 'saga': drawSaga(); break;
+        case 'msg': drawMsg(); break;
+      }
+    }
+
+
+    function drawNode(x, y, w, h, label, sublabel, color, state) {
+      const c = colors();
+      const fill = state === 'active' ? hexAlpha(color, 0.12) : state === 'fail' ? hexAlpha(c.red, 0.08) : c.card;
+      const stroke = state === 'active' ? color : state === 'fail' ? c.red : c.border;
+      box(x, y, w, h, fill, stroke);
+      txtB(x + w / 2, y + h / 2 - (sublabel ? 8 : 0), label, 13, state === 'fail' ? c.red : c.text);
+      if (sublabel) txtM(x + w / 2, y + h / 2 + 12, sublabel, 10, state === 'active' ? color : c.text2);
+    }
+
+    function drawMsgArrow(x1, y1, x2, y2, label, color, active) {
+      const c = colors();
+      if (active) {
+        arrow(x1, y1, x2, y2, color, 2);
+      } else {
+        dashedLine(x1, y1, x2, y2, c.border);
+      }
+      if (label) {
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - 10;
+        txtM(mx, my, label, 9, active ? color : c.text3);
+      }
+    }
+
+    // 2PC Drawing
+    function draw2PC() {
+      const c = colors();
+      const cx0 = W / 2, cy0 = 60;
+      const pAx = W / 2 - 140, pAy = 200;
+      const pBx = W / 2 + 40, pBy = 200;
+      const nw = 150, nh = 60;
+
+      const phase = animState.phase;
+      const tmState = phase === 'coordinator_crash' || phase === 'blocked' ? 'fail' : (phase !== 'idle' ? 'active' : '');
+      const paState = phase === 'prepare_fail' || phase === 'done_fail' ? 'fail' : (phase !== 'idle' ? 'active' : '');
+      const pbState = phase === 'prepare_fail' || phase === 'timeout' || phase === 'done_fail' ? 'fail' : (phase !== 'idle' ? 'active' : '');
+
+      drawNode(cx0 - nw / 2, cy0, nw, nh, '协调者 (TM)', phase === 'blocked' ? '已宕机' : 'Transaction Manager', c.blue, tmState);
+      drawNode(pAx, pAy, nw, nh, '参与者A', '订单服务', c.green, paState);
+      drawNode(pBx, pBy, nw, nh, '参与者B', '库存服务', c.orange, pbState);
+
+      const step = animState.step;
+      const prepareActive = step >= 1;
+      const responseActive = step >= 2;
+      const commitActive = step >= 3;
+
+      drawMsgArrow(cx0, cy0 + nh, pAx + nw / 2, pAy, prepareActive ? 'Prepare' : '', c.blue, prepareActive);
+      drawMsgArrow(cx0, cy0 + nh, pBx + nw / 2, pBy, prepareActive ? 'Prepare' : '', c.blue, prepareActive);
+
+      if (responseActive) {
+        const paOk = phase !== 'prepare_fail';
+        const pbOk = phase !== 'prepare_fail' && phase !== 'timeout';
+        drawMsgArrow(pAx + nw / 2, pAy, cx0 - 20, cy0 + nh, paOk ? 'Yes ✓' : 'No ✗', paOk ? c.green : c.red, true);
+        if (phase !== 'timeout') {
+          drawMsgArrow(pBx + nw / 2, pBy, cx0 + 20, cy0 + nh, pbOk ? 'Yes ✓' : 'No ✗', pbOk ? c.green : c.red, true);
+        } else {
+          txtM(pBx + nw / 2, pBy - 15, '⏱ 超时', 11, c.orange);
+        }
+      }
+
+      if (commitActive) {
+        const isCommit = phase === 'commit' || phase === 'done_ok';
+        const label = isCommit ? 'Commit' : 'Rollback';
+        const color = isCommit ? c.green : c.red;
+        drawMsgArrow(cx0, cy0 + nh + 10, pAx + nw / 2, pAy + nh, label, color, true);
+        if (phase !== 'timeout') drawMsgArrow(cx0, cy0 + nh + 10, pBx + nw / 2, pAy + nh, label, color, true);
+      }
+
+      if (phase === 'done_ok') {
+        txtB(W / 2, H - 50, '✓ 事务提交成功', 16, c.green);
+      } else if (phase === 'done_fail' || phase === 'blocked') {
+        txtB(W / 2, H - 50, phase === 'blocked' ? '⚠ 参与者阻塞（2PC 缺陷）' : '✗ 事务已回滚', 16, c.red);
+      }
+
+      txtB(W / 2, H - 20, '2PC 两阶段提交', 11, c.text3);
+    }
+
+    // TCC Drawing
+    function drawTCC() {
+      const c = colors();
+      const services = [
+        { label: '订单服务', x: W / 2 - 220, color: c.blue },
+        { label: '库存服务', x: W / 2 - 30, color: c.green },
+        { label: '账户服务', x: W / 2 + 160, color: c.orange },
+      ];
+      const sy = 50, sh = 50, sw = 140;
+      const phase = animState.phase;
+
+      txtB(W / 2, 25, 'TCC 事务管理器', 12, c.purple);
+
+      services.forEach((s, i) => {
+        const state = (phase === 'try_fail' && i === 1) ? 'fail' : (phase !== 'idle' ? 'active' : '');
+        drawNode(s.x, sy, sw, sh, s.label, '', s.color, state);
+      });
+
+      const phases = ['Try', 'Confirm', 'Cancel'];
+      const phaseY = [140, 210, 280];
+      const phaseColors = [c.blue, c.green, c.red];
+
+      phases.forEach((p, pi) => {
+        const isActive = (pi === 0 && (phase === 'try' || phase === 'try_fail')) ||
+          (pi === 1 && (phase === 'confirm' || phase === 'done_ok')) ||
+          (pi === 2 && (phase === 'cancel' || phase === 'done_fail'));
+        const y = phaseY[pi];
+        txtB(40, y + 20, p, 13, isActive ? phaseColors[pi] : c.text3, 'left');
+
+        services.forEach((s, si) => {
+          const bx = s.x, by = y, bw = sw, bh = 40;
+          let content = '';
+          let st = '';
+          if (pi === 0) {
+            content = si === 0 ? '创建订单' : si === 1 ? '冻结库存' : '冻结金额';
+            st = isActive ? 'active' : '';
+            if (phase === 'try_fail' && si === 1) st = 'fail';
+          } else if (pi === 1) {
+            content = si === 0 ? '确认订单' : si === 1 ? '扣减库存' : '扣减金额';
+            st = isActive ? 'active' : '';
+          } else {
+            content = si === 0 ? '取消订单' : si === 1 ? '恢复库存' : '恢复金额';
+            st = isActive ? 'active' : '';
+          }
+          const fill = st === 'active' ? hexAlpha(phaseColors[pi], 0.08) : st === 'fail' ? hexAlpha(c.red, 0.08) : c.input;
+          const stroke = st === 'active' ? phaseColors[pi] : st === 'fail' ? c.red : c.border;
+          box(bx, by, bw, bh, fill, stroke, 6);
+          txt(bx + bw / 2, by + bh / 2, content, 11, st === 'active' ? phaseColors[pi] : st === 'fail' ? c.red : c.text2);
+        });
+      });
+
+      if (phase === 'done_ok') txtB(W / 2, H - 40, '✓ TCC 事务确认成功', 15, c.green);
+      else if (phase === 'done_fail') txtB(W / 2, H - 40, '✗ TCC Cancel 补偿完成', 15, c.orange);
+    }
+
+    // Saga Drawing
+    function drawSaga() {
+      const c = colors();
+      const phase = animState.phase;
+      const step = animState.step;
+      const steps = [
+        { label: 'T1: 创建订单', comp: 'C1: 取消订单', color: c.blue },
+        { label: 'T2: 扣减库存', comp: 'C2: 恢复库存', color: c.green },
+        { label: 'T3: 扣减余额', comp: 'C3: 恢复余额', color: c.orange },
+        { label: 'T4: 发送通知', comp: '—', color: c.purple },
+      ];
+
+      txtB(W / 2, 30, 'Saga 编排器 (Orchestrator)', 13, c.cyan);
+
+      const startX = 60, gap = (W - 120) / steps.length;
+      const fwdY = 90, compY = 220;
+
+      txtB(30, fwdY + 22, '正向', 10, c.green, 'left');
+      txtB(30, compY + 22, '补偿', 10, c.red, 'left');
+
+      steps.forEach((s, i) => {
+        const x = startX + i * gap;
+        const bw = gap - 20, bh = 50;
+
+        let fwdState = '';
+        if (phase === 'forward' && step >= i + 1) fwdState = 'active';
+        if (phase === 'forward' && step === i + 1 && i === step - 1) fwdState = 'active';
+        if (phase === 'compensate' || phase === 'done_fail') {
+          if (i < 3) fwdState = i === 2 ? 'fail' : 'active';
+        }
+        if (phase === 'done_ok') fwdState = 'active';
+
+        const ff = fwdState === 'active' ? hexAlpha(s.color, 0.09) : fwdState === 'fail' ? hexAlpha(c.red, 0.09) : c.input;
+        const fs = fwdState === 'active' ? s.color : fwdState === 'fail' ? c.red : c.border;
+        box(x, fwdY, bw, bh, ff, fs, 8);
+        txt(x + bw / 2, fwdY + bh / 2, s.label, 11, fwdState === 'fail' ? c.red : (fwdState === 'active' ? s.color : c.text2));
+
+        if (i < steps.length - 1) {
+          const arrActive = phase === 'forward' && step > i + 1 || phase === 'done_ok';
+          if (arrActive) arrow(x + bw + 2, fwdY + bh / 2, x + gap - 2, fwdY + bh / 2, c.green, 1.5);
+          else dashedLine(x + bw + 2, fwdY + bh / 2, x + gap - 2, fwdY + bh / 2, c.border);
+        }
+
+        if (i < 3) {
+          let compState = '';
+          if (phase === 'compensate' || phase === 'done_fail') {
+            if (i === 0 && step >= 5) compState = 'active';
+            if (i === 1 && step >= 4) compState = 'active';
+          }
+          const cf = compState === 'active' ? hexAlpha(c.red, 0.09) : c.input;
+          const cs = compState === 'active' ? c.red : c.border;
+          box(x, compY, bw, bh, cf, cs, 8);
+          txt(x + bw / 2, compY + bh / 2, s.comp, 11, compState === 'active' ? c.red : c.text3);
+
+          dashedLine(x + bw / 2, fwdY + bh, x + bw / 2, compY, compState === 'active' ? hexAlpha(c.red, 0.5) : hexAlpha(c.border, 0.5));
+        }
+      });
+
+      if (phase === 'compensate' || phase === 'done_fail') {
+        const x2 = startX + 1 * gap, x1 = startX + 0 * gap;
+        const bw = gap - 20;
+        arrow(x2 + bw / 2 - 2, compY + 25, x1 + bw + 2, compY + 25, c.red, 1.5);
+      }
+
+      if (phase === 'done_ok') txtB(W / 2, H - 40, '✓ Saga 全部步骤执行成功', 15, c.green);
+      else if (phase === 'done_fail') txtB(W / 2, H - 40, '✗ Saga 补偿回滚完成', 15, c.orange);
+    }
+
+    // 本地消息表 Drawing
+    function drawMsg() {
+      const c = colors();
+      const phase = animState.phase;
+      const step = animState.step;
+
+      const prodX = 60, prodY = 40, nw = 160, nh = 55;
+      const msgTblX = 60, msgTblY = 140;
+      const mqX = W / 2 - 40, mqY = 140;
+      const consX = W - 220, consY = 40;
+      const consTblX = W - 220, consTblY = 140;
+
+      drawNode(prodX, prodY, nw, nh, '生产者服务', '订单服务', c.blue, step >= 1 ? 'active' : '');
+      drawNode(consX, consY, nw, nh, '消费者服务', '库存服务', c.green, step >= 4 ? 'active' : '');
+
+      // 本地消息表
+      const tblActive = step >= 1;
+      box(msgTblX, msgTblY, nw, 80, tblActive ? hexAlpha(c.orange, 0.08) : c.input, tblActive ? c.orange : c.border, 8);
+      txtB(msgTblX + nw / 2, msgTblY + 15, '本地消息表', 11, tblActive ? c.orange : c.text2);
+      txtM(msgTblX + nw / 2, msgTblY + 38, 'msg_id | status', 9, c.text2);
+      if (step >= 1) {
+        const status = step >= 5 ? 'DONE' : 'PENDING';
+        const sc = step >= 5 ? c.green : c.orange;
+        txtM(msgTblX + nw / 2, msgTblY + 56, `001  |  ${status}`, 9, sc);
+      }
+
+      // MQ
+      const mqActive = step >= 3;
+      box(mqX, mqY, 100, 55, mqActive ? hexAlpha(c.purple, 0.08) : c.input, mqActive ? c.purple : c.border, 8);
+      txtB(mqX + 50, mqY + 20, 'MQ', 13, mqActive ? c.purple : c.text2);
+      txtM(mqX + 50, mqY + 40, 'RocketMQ', 9, c.text3);
+
+      // 下游DB
+      const cTblActive = step >= 4;
+      box(consTblX, consTblY, nw, 55, cTblActive ? hexAlpha(c.green, 0.08) : c.input, cTblActive ? c.green : c.border, 8);
+      txtB(consTblX + nw / 2, consTblY + 20, '库存表', 11, cTblActive ? c.green : c.text2);
+      if (step >= 4) txtM(consTblX + nw / 2, consTblY + 40, 'stock - 1', 9, c.green);
+
+      // Arrows
+      drawMsgArrow(prodX + nw / 2, prodY + nh, msgTblX + nw / 2, msgTblY, step >= 1 ? '本地事务' : '', c.orange, step >= 1);
+      drawMsgArrow(msgTblX + nw, msgTblY + 40, mqX, mqY + 28, step >= 2 ? '定时扫描投递' : '', c.purple, step >= 2);
+      drawMsgArrow(mqX + 100, mqY + 28, consTblX, consY + nh / 2, step >= 4 ? '消费' : '', c.green, step >= 4);
+
+      // 同一事务框
+      if (step >= 1) {
+        cx.strokeStyle = hexAlpha(c.blue, 0.3);
+        cx.lineWidth = 1.5;
+        cx.setLineDash([6, 4]);
+        rr(prodX - 10, prodY - 10, nw + 20, nh + 110, 10);
+        cx.stroke();
+        cx.setLineDash([]);
+        txtM(prodX + nw + 15, prodY + nh + 40, '同一本地事务', 9, hexAlpha(c.blue, 0.5));
+      }
+
+      if (phase === 'done_ok') txtB(W / 2, H - 30, '✓ 最终一致性达成', 15, c.green);
+    }
+
+    resize();
+    draw();
+
+    // Redraw on theme change
+    new MutationObserver(() => draw()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

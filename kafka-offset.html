@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kafka Consumer Offset</title>
+  <meta name="description" content="交互式演示 Kafka 消费者 Offset 管理机制，包括位移提交、重置与消费位移追踪">
+  <meta name="keywords" content="Kafka, Consumer Offset, 消费位移, 位移提交, 消息队列">
+  <meta property="og:title" content="Kafka Consumer Offset">
+  <meta property="og:description" content="交互式演示 Kafka 消费者 Offset 管理机制，包括位移提交、重置与消费位移追踪">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      /* Legacy aliases for inline styles in HTML/JS */
+      --grn: var(--accent-green);
+      --red: var(--accent-red);
+      --ylw: var(--accent-orange);
+      --org: var(--accent-orange);
+      --cyn: var(--accent-cyan);
+      --pur: var(--accent-purple);
+      --tx2: var(--text-secondary);
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .L {
+      display: grid;
+      grid-template-columns: 272px 1fr;
+      grid-template-rows: 1fr auto;
+      height: 100vh;
+      position: relative;
+      z-index: 1
+    }
+
+    .C {
+      grid-row: 1/3;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 18px 16px;
+      backdrop-filter: blur(8px)
+    }
+
+    .C::-webkit-scrollbar {
+      width: 6px
+    }
+
+    .C::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    .C::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px
+    }
+
+    .P {
+      grid-column: 2;
+      overflow-y: auto;
+      padding: 18px 22px
+    }
+
+    .P::-webkit-scrollbar {
+      width: 6px
+    }
+
+    .P::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    .P::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px
+    }
+
+    .BB {
+      grid-column: 2;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 12px 22px;
+      display: flex;
+      align-items: center;
+      gap: 12px
+    }
+
+    h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 0%, #a8c8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 4px;
+    }
+
+    .sub {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+      font-weight: 400
+    }
+
+    .sec {
+      margin-bottom: 14px
+    }
+
+    .sec-t {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sec-t::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    label {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 500
+    }
+
+    select {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.75rem;
+      margin-bottom: 8px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue)
+    }
+
+    input[type=range] {
+      width: 100%;
+      -webkit-appearance: none;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      margin-bottom: 8px
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--accent-blue);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 8px var(--glow-blue)
+    }
+
+    .rv {
+      font-size: 0.68rem;
+      color: var(--accent-blue);
+      font-weight: 700;
+      float: right
+    }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      color: var(--text-primary)
+    }
+
+    .btn:active {
+      transform: translateY(0)
+    }
+
+    .btn-a {
+      background: linear-gradient(135deg, #1a6ff0, #1f6feb);
+      color: #fff;
+      border: none
+    }
+
+    .btn-r {
+      background: rgba(255, 92, 108, 0.1);
+      border: 1px solid rgba(255, 92, 108, 0.3);
+      color: var(--accent-red)
+    }
+
+    .btn-g {
+      background: rgba(54, 217, 134, 0.1);
+      border: 1px solid rgba(54, 217, 134, 0.3);
+      color: var(--accent-green)
+    }
+
+    .btn-y {
+      background: rgba(255, 159, 67, 0.1);
+      border: 1px solid rgba(255, 159, 67, 0.3);
+      color: var(--accent-orange)
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px
+    }
+
+    .pbtn {
+      padding: 4px 10px;
+      font-size: 0.68rem;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-secondary)
+    }
+
+    .pbtn.on {
+      background: linear-gradient(135deg, #1a6ff0, #1f6feb);
+      border-color: var(--accent-blue);
+      color: #fff;
+      box-shadow: 0 0 12px var(--glow-blue)
+    }
+
+    .sep {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 12px 0
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .card:hover {
+      border-color: var(--border-hover)
+    }
+
+    .card h3 {
+      font-size: 0.78rem;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+      font-weight: 700
+    }
+
+    .card p {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      line-height: 1.7
+    }
+
+    .card code {
+      background: var(--bg-input);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'SF Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--accent-cyan)
+    }
+
+    .ptx {
+      flex: 1;
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .log {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.68rem;
+      max-height: 140px;
+      overflow-y: auto;
+      line-height: 1.7;
+    }
+
+    .log::-webkit-scrollbar {
+      width: 6px
+    }
+
+    .log::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    .log::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px
+    }
+
+    canvas {
+      display: block;
+      border-radius: var(--radius)
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-bottom: 12px
+    }
+
+    .st {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 8px;
+      text-align: center;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .st:hover {
+      border-color: var(--border-hover)
+    }
+
+    .st .n {
+      font-size: 1.1rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace
+    }
+
+    .st .l {
+      font-size: 0.6rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px
+    }
+
+    .sem-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px
+    }
+
+    .sem {
+      flex: 1;
+      text-align: center;
+      padding: 10px 6px;
+      border-radius: var(--radius-sm);
+      font-size: 0.7rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s;
+      opacity: .4;
+      border: 1px solid transparent;
+      position: relative;
+    }
+
+    .sem.on {
+      opacity: 1;
+      border-color: currentColor;
+      box-shadow: 0 0 16px rgba(77, 163, 255, 0.1);
+    }
+
+    /* Light mode overrides */
+    [data-theme="light"] {
+      --grn: #059669;
+      --red: #dc2626;
+      --ylw: #d97706;
+      --org: #d97706;
+      --cyn: #0891b2;
+      --pur: #7c3aed;
+      --tx2: #4b5563;
+    }
+
+    [data-theme="light"] h1 {
+      background: linear-gradient(135deg, #1f2937 0%, #2563eb 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    [data-theme="light"] .C {
+      background: #ffffff;
+      border-right-color: #e5e7eb;
+    }
+
+    [data-theme="light"] .BB {
+      background: #ffffff;
+      border-top-color: #e5e7eb;
+    }
+
+    [data-theme="light"] .st {
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    [data-theme="light"] .log {
+      background: #f0f3f8;
+      border-color: #d4dae5;
+    }
+
+    [data-theme="light"] canvas {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: var(--radius);
+    }
+
+    [data-theme="light"] .sem.on {
+      box-shadow: none;
+    }
+
+    [data-theme="light"] .btn:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="L">
+    <div class="C">
+      <h1>Kafka Offset 追踪</h1>
+      <div class="sub">Consumer Offset 机制可视化</div>
+
+      <div class="sec">
+        <div class="sec-t">预设场景</div>
+        <div class="btn-row">
+          <button class="btn pbtn on" onclick="preset('default')">标准</button>
+          <button class="btn pbtn" onclick="preset('many')">多分区</button>
+          <button class="btn pbtn" onclick="preset('single')">单消费者</button>
+          <button class="btn pbtn" onclick="preset('over')">消费者过多</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">Topic 配置</div>
+        <label>分区数 (Partitions) <span class="rv" id="partV">3</span></label>
+        <input type="range" id="partN" min="1" max="6" value="3" oninput="onCfg()">
+        <label>Consumer Group 消费者数 <span class="rv" id="consV">3</span></label>
+        <input type="range" id="consN" min="1" max="6" value="3" oninput="onCfg()">
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">Offset 提交策略</div>
+        <select id="commitMode" onchange="onCfg()">
+          <option value="auto">自动提交 (enable.auto.commit=true)</option>
+          <option value="sync">手动同步提交 (commitSync)</option>
+          <option value="async">手动异步提交 (commitAsync)</option>
+        </select>
+        <label>auto.commit.interval <span class="rv" id="intervalV">5s</span></label>
+        <input type="range" id="intervalN" min="1" max="15" value="5" oninput="onCfg()">
+      </div>
+
+      <div class="sep"></div>
+
+      <div class="sec">
+        <div class="sec-t">模拟操作</div>
+        <div class="btn-row">
+          <button class="btn btn-g" onclick="produce(3)">生产消息 ×3</button>
+          <button class="btn btn-a" onclick="consumeAll()">消费一轮</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-y" onclick="commitOffsets()">手动提交 Offset</button>
+          <button class="btn btn-r" onclick="crashConsumer()">Consumer 宕机</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn" onclick="restartConsumer()">重启 Consumer</button>
+          <button class="btn" onclick="triggerRebalance()">触发 Rebalance</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-a" onclick="autoDemo()">▶ 自动演示全流程</button>
+          <button class="btn" onclick="fullReset()">重置</button>
+        </div>
+      </div>
+
+      <div class="sep"></div>
+      <div class="card">
+        <h3>__consumer_offsets</h3>
+        <p>Kafka 将 offset 存储在内部 Topic <code>__consumer_offsets</code> 中（50个分区）。Key =
+          <code>group+topic+partition</code>，Value = <code>offset</code>。Consumer 重启后从此处恢复消费位置。
+        </p>
+      </div>
+    </div>
+
+    <div class="P">
+      <!-- Semantics selector -->
+      <div class="sem-bar">
+        <div class="sem on" style="background:#4ecdc415;color:var(--grn)" onclick="setSem('alc')">At-Least-Once<br><span
+            style="font-size:8px;font-weight:400">先处理再提交 · 可能重复</span></div>
+        <div class="sem" style="background:#ff5f6d15;color:var(--red)" onclick="setSem('amo')">At-Most-Once<br><span
+            style="font-size:8px;font-weight:400">先提交再处理 · 可能丢失</span></div>
+        <div class="sem" style="background:#b44dff15;color:var(--pur)" onclick="setSem('eo')">Exactly-Once<br><span
+            style="font-size:8px;font-weight:400">事务性提交 · 不丢不重</span></div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats">
+        <div class="st">
+          <div class="n" style="color:var(--cyn)" id="stProd">0</div>
+          <div class="l">已生产</div>
+        </div>
+        <div class="st">
+          <div class="n" style="color:var(--grn)" id="stCons">0</div>
+          <div class="l">已消费</div>
+        </div>
+        <div class="st">
+          <div class="n" style="color:var(--ylw)" id="stComm">0</div>
+          <div class="l">已提交Offset</div>
+        </div>
+        <div class="st">
+          <div class="n" style="color:var(--org)" id="stLag">0</div>
+          <div class="l">Consumer Lag</div>
+        </div>
+        <div class="st">
+          <div class="n" style="color:var(--red)" id="stDup">0</div>
+          <div class="l">重复/丢失</div>
+        </div>
+      </div>
+
+      <!-- Main Canvas -->
+      <canvas id="cv" width="890" height="380"></canvas>
+
+      <!-- Log -->
+      <div class="log" id="log" style="margin-top:8px"></div>
+    </div>
+
+    <div class="BB">
+      <div class="ptx" id="ptx">Kafka Offset 追踪 · 3 分区 · 3 消费者 · 自动提交</div>
+      <button class="btn btn-a" onclick="copyP()">复制</button>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════ THEME ═══════════════
+    function isLightMode() { return document.documentElement.getAttribute('data-theme') === 'light'; }
+    function tc() {
+      if (isLightMode()) return {
+        title: '#1f2937', sub: '#6b7280', panelBg: '#f0f3f8', panelStroke: '#d4dae5',
+        emptyBox: '#e8ecf2', emptyStroke: '#d4dae530', dimSlot: '#d4dae530',
+        uncommitted: '#8b90a5', legend: '#6b7280', stepText: '#1f2937'
+      };
+      return {
+        title: '#e2e4ed', sub: '#8b90a5', panelBg: '#1a1d27', panelStroke: '#2e3348',
+        emptyBox: '#242836', emptyStroke: '#2e3348', dimSlot: '#2e334830',
+        uncommitted: '#8b90a5', legend: '#8b90a5', stepText: '#e2e4ed'
+      };
+    }
+
+    // ═══════════════ STATE ═══════════════
+    const S = {
+      partN: 3, consN: 3, commitMode: 'auto', autoInterval: 5, semantic: 'alc',
+      partitions: [], consumers: [], assignment: {},
+      totalProduced: 0, totalConsumed: 0, totalCommitted: 0, duplicates: 0, losses: 0,
+    };
+
+    function initCluster() {
+      S.partitions = [];
+      for (let i = 0; i < S.partN; i++) {
+        S.partitions.push({
+          id: i,
+          messages: [], // [{offset, value, consumed, committed}]
+          leo: 0,       // Log End Offset (next offset to write)
+          hw: 0,        // High Watermark (all replicas synced)
+          committed: 0, // committed consumer offset
+          position: 0,  // current consumer position (fetched up to)
+        });
+      }
+      S.consumers = [];
+      for (let i = 0; i < S.consN; i++) {
+        S.consumers.push({ id: `C${i + 1}`, status: 'online', color: ['#6c7aff', '#4ecdc4', '#ff8c42', '#b44dff', '#ffd93d', '#ff6bb5'][i] });
+      }
+      S.totalProduced = 0; S.totalConsumed = 0; S.totalCommitted = 0; S.duplicates = 0; S.losses = 0;
+      assignPartitions();
+    }
+
+    function assignPartitions() {
+      S.assignment = {};
+      const online = S.consumers.filter(c => c.status === 'online');
+      S.partitions.forEach((p, i) => {
+        if (online.length === 0) return;
+        const c = online[i % online.length];
+        if (!S.assignment[c.id]) S.assignment[c.id] = [];
+        S.assignment[c.id].push(p.id);
+      });
+    }
+
+    function getConsumerForPartition(pid) {
+      for (const [cid, parts] of Object.entries(S.assignment)) {
+        if (parts.includes(pid)) return S.consumers.find(c => c.id === cid);
+      }
+      return null;
+    }
+
+    function onCfg() {
+      S.partN = +document.getElementById('partN').value;
+      S.consN = +document.getElementById('consN').value;
+      S.commitMode = document.getElementById('commitMode').value;
+      S.autoInterval = +document.getElementById('intervalN').value;
+      document.getElementById('partV').textContent = S.partN;
+      document.getElementById('consV').textContent = S.consN;
+      document.getElementById('intervalV').textContent = S.autoInterval + 's';
+      document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+      initCluster(); render();
+    }
+
+    function preset(n) {
+      document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+      event.target.classList.add('on');
+      const p = { default: [3, 3, 'auto', 5], many: [6, 3, 'sync', 5], single: [3, 1, 'auto', 5], over: [3, 5, 'async', 3] }[n];
+      S.partN = p[0]; S.consN = p[1]; S.commitMode = p[2]; S.autoInterval = p[3];
+      document.getElementById('partN').value = p[0]; document.getElementById('consN').value = p[1];
+      document.getElementById('commitMode').value = p[2]; document.getElementById('intervalN').value = p[3];
+      document.getElementById('partV').textContent = p[0]; document.getElementById('consV').textContent = p[1];
+      document.getElementById('intervalV').textContent = p[3] + 's';
+      fullReset();
+    }
+
+    function setSem(s) {
+      S.semantic = s;
+      document.querySelectorAll('.sem').forEach(e => e.classList.remove('on'));
+      event.currentTarget.classList.add('on');
+      render();
+    }
+
+    function fullReset() {
+      initCluster(); document.getElementById('log').innerHTML = ''; render();
+    }
+
+    // ═══════════════ ACTIONS ═══════════════
+    function produce(n) {
+      for (let i = 0; i < n; i++) {
+        const pid = S.totalProduced % S.partN;
+        const p = S.partitions[pid];
+        p.messages.push({ offset: p.leo, value: `msg-${S.totalProduced}`, consumed: false, committed: false });
+        p.leo++;
+        p.hw = p.leo; // simplified: all replicas in sync
+        S.totalProduced++;
+      }
+      addLog('cyn', `Producer 发送 ${n} 条消息 (轮询分配到各分区)`);
+      render();
+    }
+
+    function consumeAll() {
+      let consumed = 0;
+      S.partitions.forEach(p => {
+        const c = getConsumerForPartition(p.id);
+        if (!c || c.status !== 'online') return;
+        while (p.position < p.hw) {
+          const msg = p.messages[p.position];
+          if (msg) {
+            if (msg.consumed) { S.duplicates++; }
+            msg.consumed = true;
+            consumed++;
+            S.totalConsumed++;
+          }
+          p.position++;
+        }
+      });
+      if (consumed > 0) {
+        addLog('grn', `Consumer poll() → 消费 ${consumed} 条消息 (position 前进)`);
+        // At-Most-Once: commit before processing
+        if (S.semantic === 'amo') {
+          commitOffsets(true);
+          addLog('ylw', 'At-Most-Once: 先提交 offset，再处理消息（如果处理失败则消息丢失）');
+        }
+        // At-Least-Once: commit after processing (user clicks manually or auto)
+        if (S.semantic === 'alc' && S.commitMode === 'auto') {
+          addLog('ylw', `自动提交: 将在 ${S.autoInterval}s 后自动提交 offset`);
+        }
+      } else {
+        addLog('tx2', '没有新消息可消费 (position = HW)');
+      }
+      render();
+    }
+
+    function commitOffsets(silent) {
+      let committed = 0;
+      S.partitions.forEach(p => {
+        const c = getConsumerForPartition(p.id);
+        if (!c || c.status !== 'online') return;
+        if (p.position > p.committed) {
+          for (let i = p.committed; i < p.position; i++) {
+            if (p.messages[i]) p.messages[i].committed = true;
+          }
+          committed += p.position - p.committed;
+          S.totalCommitted += p.position - p.committed;
+          p.committed = p.position;
+        }
+      });
+      if (!silent) {
+        if (committed > 0) {
+          const mode = S.commitMode === 'auto' ? '自动' : S.commitMode === 'sync' ? 'commitSync()' : 'commitAsync()';
+          addLog('ylw', `${mode} → 提交 offset 到 __consumer_offsets (${committed} 条)`);
+        } else {
+          addLog('tx2', '没有新的 offset 需要提交');
+        }
+      }
+      render();
+    }
+
+    function crashConsumer() {
+      const online = S.consumers.filter(c => c.status === 'online');
+      if (!online.length) return;
+      const target = online[online.length - 1];
+      target.status = 'offline';
+
+      // Uncommitted work in its partitions
+      const parts = S.assignment[target.id] || [];
+      let uncommitted = 0;
+      parts.forEach(pid => {
+        const p = S.partitions[pid];
+        uncommitted += p.position - p.committed;
+        // Reset position back to committed (simulate restart recovery)
+        // But don't reset yet — show the gap
+      });
+
+      addLog('red', `★ ${target.id} 宕机! 负责分区 [${parts.join(',')}]`);
+      if (uncommitted > 0) {
+        if (S.semantic === 'alc') {
+          addLog('org', `${uncommitted} 条消息已消费但未提交 offset → 重启后将被重复消费!`);
+          S.duplicates += uncommitted;
+        } else if (S.semantic === 'amo') {
+          addLog('red', `offset 已提交但处理中断 → 可能有消息丢失!`);
+          S.losses += uncommitted;
+        }
+      }
+
+      // Rebalance
+      addLog('pur', '触发 Rebalance: 重新分配分区给存活的消费者...');
+      assignPartitions();
+      const newAssign = Object.entries(S.assignment).map(([k, v]) => `${k}→[${v.join(',')}]`).join(' ');
+      addLog('pur', `Rebalance 完成: ${newAssign}`);
+      render();
+    }
+
+    function restartConsumer() {
+      const offline = S.consumers.filter(c => c.status === 'offline');
+      if (!offline.length) return;
+      const target = offline[0];
+      target.status = 'online';
+
+      addLog('grn', `${target.id} 重启上线`);
+
+      // Reset positions to committed (recover from __consumer_offsets)
+      addLog('cyn', `${target.id} 从 __consumer_offsets 读取 committed offset，恢复消费位置`);
+
+      assignPartitions();
+      // Reset position to committed for reassigned partitions
+      const parts = S.assignment[target.id] || [];
+      parts.forEach(pid => {
+        const p = S.partitions[pid];
+        p.position = p.committed;
+      });
+
+      const newAssign = Object.entries(S.assignment).map(([k, v]) => `${k}→[${v.join(',')}]`).join(' ');
+      addLog('pur', `Rebalance: ${newAssign}`);
+      if (S.semantic === 'alc') addLog('org', 'position 回退到 committed offset → 之间的消息将被重复消费');
+      render();
+    }
+
+    function triggerRebalance() {
+      addLog('pur', '手动触发 Rebalance (模拟消费者加入/离开)');
+      assignPartitions();
+      const newAssign = Object.entries(S.assignment).map(([k, v]) => `${k}→[${v.join(',')}]`).join(' ');
+      addLog('pur', `Rebalance 完成: ${newAssign}`);
+      render();
+    }
+
+    function autoDemo() {
+      fullReset(); document.getElementById('log').innerHTML = '';
+      addLog('cyn', '▶ 自动演示 Kafka Offset 追踪全流程');
+      const q = [
+        [500, () => { addLog('cyn', '═══ 阶段 1: 生产消息 ═══'); produce(6); }],
+        [1500, () => { addLog('cyn', '═══ 阶段 2: 消费消息 ═══'); consumeAll(); }],
+        [2800, () => { addLog('cyn', '═══ 阶段 3: 提交 Offset ═══'); commitOffsets(); }],
+        [4000, () => { addLog('cyn', '═══ 阶段 4: 继续生产 ═══'); produce(6); }],
+        [5200, () => { addLog('cyn', '═══ 阶段 5: 消费但不提交 ═══'); consumeAll(); }],
+        [6500, () => { addLog('cyn', '═══ 阶段 6: Consumer 宕机 ═══'); crashConsumer(); }],
+        [8000, () => { addLog('cyn', '═══ 阶段 7: Consumer 重启恢复 ═══'); restartConsumer(); }],
+        [9500, () => { addLog('cyn', '═══ 阶段 8: 从 committed offset 继续消费 ═══'); consumeAll(); }],
+        [10800, () => { addLog('cyn', '═══ 阶段 9: 最终提交 ═══'); commitOffsets(); }],
+        [12000, () => { addLog('grn', '✅ 演示完成! 观察 committed offset 与 position 的关系'); }],
+      ];
+      q.forEach(([ms, fn]) => setTimeout(fn, ms));
+    }
+
+    // ═══════════════ RENDERING ═══════════════
+    function render() {
+      renderStats();
+      drawCanvas();
+      updatePrompt();
+    }
+
+    function renderStats() {
+      document.getElementById('stProd').textContent = S.totalProduced;
+      document.getElementById('stCons').textContent = S.totalConsumed;
+      document.getElementById('stComm').textContent = S.totalCommitted;
+      let lag = 0;
+      S.partitions.forEach(p => lag += p.hw - p.position);
+      document.getElementById('stLag').textContent = lag;
+      document.getElementById('stDup').textContent = S.duplicates + S.losses;
+      document.getElementById('stDup').style.color = (S.duplicates + S.losses) > 0 ? 'var(--red)' : 'var(--tx2)';
+    }
+
+    function drawCanvas() {
+      const cv = document.getElementById('cv'), ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
+      ctx.clearRect(0, 0, W, H);
+
+      const partH = Math.min(70, (H - 100) / S.partN);
+      const startY = 10;
+      const msgW = 42, msgH = partH - 22, startX = 160;
+      const maxShow = 14;
+
+      const _tc = tc();
+      S.partitions.forEach((p, pi) => {
+        const py = startY + pi * partH;
+
+        // Partition label
+        ctx.font = 'bold 11px -apple-system,sans-serif';
+        ctx.fillStyle = _tc.title;
+        ctx.textAlign = 'left';
+        ctx.fillText(`P${pi}`, 10, py + partH / 2 + 4);
+
+        // Consumer assignment badge
+        const cons = getConsumerForPartition(pi);
+        if (cons) {
+          ctx.font = '9px SF Mono,monospace';
+          ctx.fillStyle = cons.color;
+          ctx.fillText(`← ${cons.id}`, 32, py + partH / 2 + 4);
+          // consumer status
+          if (cons.status === 'offline') {
+            ctx.fillStyle = '#ff5f6d';
+            ctx.fillText('(offline)', 70, py + partH / 2 + 4);
+          }
+        }
+
+        // Offset markers text
+        ctx.font = '8px SF Mono,monospace';
+        ctx.textAlign = 'center';
+
+        // Message boxes
+        const showStart = Math.max(0, p.leo - maxShow);
+        for (let i = showStart; i < p.leo; i++) {
+          const msg = p.messages[i];
+          const xi = startX + (i - showStart) * (msgW + 2);
+          const yi = py + 4;
+
+          // Box
+          ctx.fillStyle = msg.committed ? '#4ecdc418' : msg.consumed ? '#ffd93d15' : _tc.emptyBox;
+          ctx.strokeStyle = msg.committed ? '#4ecdc440' : msg.consumed ? '#ffd93d30' : _tc.emptyStroke;
+          ctx.lineWidth = 1;
+          rr(ctx, xi, yi, msgW, msgH);
+          ctx.fill(); ctx.stroke();
+
+          // Offset number
+          ctx.font = 'bold 10px SF Mono,monospace';
+          ctx.fillStyle = msg.committed ? '#4ecdc4' : msg.consumed ? '#ffd93d' : _tc.uncommitted;
+          ctx.textAlign = 'center';
+          ctx.fillText(i, xi + msgW / 2, yi + msgH / 2 - 4);
+
+          // Message value
+          ctx.font = '7px SF Mono,monospace';
+          ctx.fillStyle = _tc.sub + '60';
+          ctx.fillText(msg.value, xi + msgW / 2, yi + msgH / 2 + 8);
+        }
+
+        // Empty slots (future)
+        for (let i = p.leo; i < p.leo + 2; i++) {
+          const xi = startX + (i - showStart) * (msgW + 2);
+          if (xi > W - 40) break;
+          ctx.setLineDash([3, 3]);
+          ctx.strokeStyle = _tc.dimSlot;
+          ctx.lineWidth = 1;
+          rr(ctx, xi, py + 4, msgW, msgH);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Pointer markers
+        const markers = [
+          { offset: p.committed, label: 'Committed', color: '#4ecdc4', yOff: -1 },
+          { offset: p.position, label: 'Position', color: '#ffd93d', yOff: partH - 6 },
+          { offset: p.leo, label: 'LEO', color: '#ff5f6d', yOff: -1 },
+          { offset: p.hw, label: 'HW', color: '#b44dff', yOff: partH - 6 },
+        ];
+
+        markers.forEach(m => {
+          const mx = startX + (m.offset - showStart) * (msgW + 2) - 1;
+          if (mx < startX - 20 || mx > W - 10) return;
+          const my = py + m.yOff;
+
+          // Triangle
+          ctx.beginPath();
+          if (m.yOff < 0) {
+            ctx.moveTo(mx, my + 8); ctx.lineTo(mx - 4, my); ctx.lineTo(mx + 4, my);
+          } else {
+            ctx.moveTo(mx, my - 3); ctx.lineTo(mx - 4, my + 5); ctx.lineTo(mx + 4, my + 5);
+          }
+          ctx.fillStyle = m.color;
+          ctx.fill();
+
+          ctx.font = 'bold 7px SF Mono,monospace';
+          ctx.fillStyle = m.color;
+          ctx.textAlign = 'center';
+          const ty = m.yOff < 0 ? my - 3 : my + 14;
+          ctx.fillText(`${m.label}=${m.offset}`, mx, ty);
+        });
+
+        // Lag indicator
+        const lag = p.hw - p.position;
+        if (lag > 0) {
+          const lx1 = startX + (p.position - showStart) * (msgW + 2);
+          const lx2 = startX + (p.hw - showStart) * (msgW + 2);
+          ctx.fillStyle = '#ff8c4210';
+          ctx.fillRect(lx1, py + 4, lx2 - lx1, msgH);
+          ctx.font = '8px SF Mono,monospace';
+          ctx.fillStyle = '#ff8c42';
+          ctx.textAlign = 'center';
+          ctx.fillText(`lag=${lag}`, (lx1 + lx2) / 2, py + partH / 2 + 4);
+        }
+
+        // Uncommitted region
+        const uncommitted = p.position - p.committed;
+        if (uncommitted > 0) {
+          const ux1 = startX + (p.committed - showStart) * (msgW + 2);
+          const ux2 = startX + (p.position - showStart) * (msgW + 2);
+          ctx.strokeStyle = '#ffd93d30';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 2]);
+          ctx.strokeRect(ux1 - 1, py + 3, ux2 - ux1, msgH + 2);
+          ctx.setLineDash([]);
+        }
+      });
+
+      // ── Bottom section: __consumer_offsets & semantics ──
+      const bottomY = startY + S.partN * partH + 10;
+
+      // __consumer_offsets visualization
+      ctx.fillStyle = _tc.panelBg;
+      ctx.strokeStyle = _tc.panelStroke;
+      ctx.lineWidth = 1;
+      rr(ctx, 10, bottomY, W / 2 - 20, H - bottomY - 10);
+      ctx.fill(); ctx.stroke();
+
+      ctx.font = 'bold 10px -apple-system,sans-serif';
+      ctx.fillStyle = '#ffd93d';
+      ctx.textAlign = 'left';
+      ctx.fillText('__consumer_offsets (内部 Topic)', 20, bottomY + 14);
+
+      ctx.font = '9px SF Mono,monospace';
+      S.partitions.forEach((p, i) => {
+        const ry = bottomY + 28 + i * 16;
+        ctx.fillStyle = _tc.sub;
+        ctx.fillText(`Key: group-1:topic:${i}`, 20, ry);
+        ctx.fillStyle = '#4ecdc4';
+        ctx.fillText(`→ offset=${p.committed}`, 180, ry);
+      });
+
+      // Semantics diagram
+      const sx = W / 2 + 10;
+      ctx.fillStyle = _tc.panelBg;
+      ctx.strokeStyle = _tc.panelStroke;
+      rr(ctx, sx, bottomY, W / 2 - 20, H - bottomY - 10);
+      ctx.fill(); ctx.stroke();
+
+      const semInfo = {
+        alc: {
+          title: 'At-Least-Once（至少一次）', color: '#4ecdc4',
+          steps: ['poll() 拉取消息', '处理业务逻辑', 'commitSync() 提交 offset'],
+          risk: 'Consumer 处理后、提交前宕机 → 重启后从 committed offset 重新消费 → 重复消费',
+          riskColor: '#ffd93d'
+        },
+        amo: {
+          title: 'At-Most-Once（至多一次）', color: '#ff5f6d',
+          steps: ['poll() 拉取消息', 'commitSync() 先提交 offset', '处理业务逻辑'],
+          risk: '提交后、处理前宕机 → offset 已前进 → 消息丢失',
+          riskColor: '#ff5f6d'
+        },
+        eo: {
+          title: 'Exactly-Once（精确一次）', color: '#b44dff',
+          steps: ['poll() 拉取消息', 'beginTransaction()', '处理 + 发送结果到输出 Topic', 'commitTransaction() (原子提交 offset + 结果)'],
+          risk: '需要 Kafka 事务 + idempotent producer，性能有一定开销',
+          riskColor: '#8b90a5'
+        },
+      };
+      const sem = semInfo[S.semantic];
+      ctx.font = 'bold 10px -apple-system,sans-serif';
+      ctx.fillStyle = sem.color;
+      ctx.textAlign = 'left';
+      ctx.fillText(sem.title, sx + 10, bottomY + 14);
+
+      ctx.font = '9px -apple-system,sans-serif';
+      sem.steps.forEach((step, i) => {
+        const ry = bottomY + 30 + i * 15;
+        ctx.fillStyle = sem.color;
+        ctx.fillText(`${i + 1}.`, sx + 14, ry);
+        ctx.fillStyle = _tc.stepText;
+        ctx.fillText(step, sx + 28, ry);
+      });
+
+      const riskY = bottomY + 30 + sem.steps.length * 15 + 4;
+      ctx.font = '9px -apple-system,sans-serif';
+      ctx.fillStyle = sem.riskColor;
+      const riskText = sem.risk;
+      wrapText(ctx, '⚠ ' + riskText, sx + 14, riskY, W / 2 - 44, 13);
+
+      // Legend at very bottom of canvas
+      const legY = H - 6;
+      const legs = [['#4ecdc4', '已提交(Committed)'], ['#ffd93d', '已消费未提交'], ['#8b90a5', '未消费'], ['#ff5f6d', 'LEO'], ['#b44dff', 'HW'], ['#ff8c42', 'Lag']];
+      ctx.font = '8px -apple-system,sans-serif';
+      legs.forEach(([c, l], i) => {
+        const lx = 10 + i * (W / legs.length);
+        ctx.fillStyle = c;
+        ctx.fillRect(lx, legY - 6, 7, 7);
+        ctx.fillStyle = _tc.legend;
+        ctx.textAlign = 'left';
+        ctx.fillText(l, lx + 10, legY);
+      });
+    }
+
+    function wrapText(ctx, text, x, y, maxW, lineH) {
+      let line = '';
+      for (let i = 0; i < text.length; i++) {
+        const test = line + text[i];
+        if (ctx.measureText(test).width > maxW && line) {
+          ctx.fillText(line, x, y);
+          line = text[i]; y += lineH;
+        } else { line = test; }
+      }
+      ctx.fillText(line, x, y);
+    }
+
+    function rr(ctx, x, y, w, h, r) { r = r || 4; ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+    function addLog(type, msg) {
+      const el = document.getElementById('log');
+      const t = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+      const colors = { grn: '#4ecdc4', red: '#ff5f6d', ylw: '#ffd93d', org: '#ff8c42', pur: '#b44dff', cyn: '#00d2ff', tx2: '#8b90a5' };
+      el.innerHTML += `<div><span style="color:var(--text-secondary)">[${t}]</span> <span style="color:${colors[type] || 'var(--text-primary)'}">${msg}</span></div>`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function updatePrompt() {
+      const modeNames = { auto: '自动提交', sync: '手动同步', async: '手动异步' };
+      const semNames = { alc: 'At-Least-Once', amo: 'At-Most-Once', eo: 'Exactly-Once' };
+      const parts = [`Kafka Offset · ${S.partN}分区 · ${S.consN}消费者 · ${modeNames[S.commitMode]}`];
+      parts.push(semNames[S.semantic]);
+      let lag = 0; S.partitions.forEach(p => lag += p.hw - p.position);
+      if (lag > 0) parts.push(`Lag=${lag}`);
+      if (S.duplicates > 0) parts.push(`重复=${S.duplicates}`);
+      if (S.losses > 0) parts.push(`丢失=${S.losses}`);
+      document.getElementById('ptx').textContent = parts.join(' · ');
+    }
+
+    function copyP() {
+      navigator.clipboard.writeText(document.getElementById('ptx').textContent).then(() => {
+        const b = event.target; b.textContent = '已复制!'; setTimeout(() => b.textContent = '复制', 1500);
+      });
+    }
+
+    // Theme toggle re-render
+    new MutationObserver(() => render()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    // Init
+    initCluster(); render();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,1666 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Agent & Harness 架构演示</title>
+  <meta name="description" content="交互式演示 AI Agent 执行框架原理，包括任务规划、工具调用、记忆管理与多步推理流程">
+  <meta name="keywords" content="AI Agent, Harness, 工具调用, 任务规划, 多步推理, LLM Agent">
+  <meta property="og:title" content="AI Agent & Harness 架构演示">
+  <meta property="og:description" content="交互式演示 AI Agent 执行框架原理，包括任务规划、工具调用、记忆管理与多步推理流程">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Subtle grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .header {
+      position: relative;
+      text-align: center;
+      padding: 28px 16px 18px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(77, 163, 255, 0.04) 0%, transparent 100%);
+    }
+
+    .header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 0%, #a8c8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header p {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      margin-top: 6px;
+      font-weight: 400;
+    }
+
+    .main {
+      position: relative;
+      z-index: 1;
+      max-width: 1560px;
+      margin: 0 auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .card:hover {
+      border-color: var(--border-hover);
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: end;
+    }
+
+    .ctrl-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .ctrl-group label {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .ctrl-group select,
+    .ctrl-group input[type="text"] {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      min-width: 120px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .ctrl-group select:focus,
+    .ctrl-group input:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-run {
+      background: linear-gradient(135deg, #1a9f4a, #238636);
+      color: #fff;
+    }
+
+    .btn-step {
+      background: linear-gradient(135deg, #1a6ff0, #1f6feb);
+      color: #fff;
+    }
+
+    .btn-inject {
+      background: linear-gradient(135deg, #e85d04, #f97316);
+      color: #fff;
+    }
+
+    .btn-reset {
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-reset:hover {
+      background: #1e2a3a;
+      color: var(--text-primary);
+    }
+
+    /* Flow panel */
+    .flow-panel {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    @media (max-width: 1000px) {
+      .flow-panel {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .section-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title::before {
+      content: '';
+      width: 3px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    /* Architecture SVG */
+    .arch-svg-container {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      overflow: hidden;
+    }
+
+    .arch-svg-container svg text {
+      font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    }
+
+    /* Loop steps */
+    .loop-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .loop-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.73rem;
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .loop-step::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: transparent;
+      border-radius: 0 2px 2px 0;
+      transition: background 0.3s;
+    }
+
+    .loop-step.active {
+      border-color: var(--accent-blue);
+      background: linear-gradient(135deg, rgba(77, 163, 255, 0.08), rgba(77, 163, 255, 0.02));
+      box-shadow: 0 0 20px var(--glow-blue), inset 0 1px 0 rgba(77, 163, 255, 0.1);
+    }
+
+    .loop-step.active::before {
+      background: var(--accent-blue);
+    }
+
+    .loop-step.completed {
+      border-color: rgba(54, 217, 134, 0.3);
+      opacity: 0.6;
+    }
+
+    .loop-step.completed::before {
+      background: var(--accent-green);
+    }
+
+    .step-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.68rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .step-content {
+      flex: 1;
+    }
+
+    .step-label {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 0.74rem;
+    }
+
+    .step-detail {
+      font-size: 0.65rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    /* Iteration badge */
+    .iter-badge {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 5px 12px;
+      font-size: 0.72rem;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .iter-badge .num {
+      color: var(--accent-blue);
+      font-weight: 700;
+    }
+
+    /* Message trace */
+    .message-trace {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      min-height: 320px;
+      max-height: 380px;
+      overflow-y: auto;
+    }
+
+    .message-trace::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .message-trace::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .message-trace::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .trace-entry {
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      border-radius: 10px;
+      font-size: 0.72rem;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      animation: slideIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      border-left: 3px solid;
+      backdrop-filter: blur(4px);
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-12px) scale(0.98);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+      }
+    }
+
+    .trace-user {
+      background: rgba(77, 163, 255, 0.06);
+      border-color: var(--accent-blue);
+    }
+
+    .trace-harness {
+      background: rgba(54, 217, 134, 0.05);
+      border-color: var(--accent-green);
+    }
+
+    .trace-llm {
+      background: rgba(176, 122, 255, 0.06);
+      border-color: var(--accent-purple);
+    }
+
+    .trace-tool {
+      background: rgba(255, 159, 67, 0.06);
+      border-color: var(--accent-orange);
+    }
+
+    .trace-error {
+      background: rgba(255, 92, 108, 0.06);
+      border-color: var(--accent-red);
+    }
+
+    .trace-entry .from {
+      font-weight: 700;
+      margin-bottom: 3px;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .trace-entry .content {
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      line-height: 1.5;
+    }
+
+    /* Context view */
+    .context-bar-track {
+      height: 10px;
+      background: var(--bg-primary);
+      border-radius: 5px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .context-bar-fill {
+      height: 100%;
+      border-radius: 5px;
+      transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
+    }
+
+    .context-bar-fill.warn {
+      background: linear-gradient(90deg, var(--accent-orange), var(--accent-red));
+    }
+
+    /* ACK flow */
+    .ack-flow {
+      margin-top: 12px;
+      padding: 10px 14px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.68rem;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      min-height: 65px;
+      max-height: 110px;
+      overflow-y: auto;
+    }
+
+    .ack-flow-entry {
+      padding: 3px 0;
+      animation: fadeIn 0.25s;
+      line-height: 1.5;
+    }
+
+    .ack-flow-entry.success {
+      color: var(--accent-green);
+    }
+
+    .ack-flow-entry.warning {
+      color: var(--accent-orange);
+    }
+
+    .ack-flow-entry.error {
+      color: var(--accent-red);
+    }
+
+    .ack-flow-entry.info {
+      color: var(--accent-blue);
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-4px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Info panel tabs */
+    .info-panel {
+      position: relative;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      padding: 10px 16px;
+      font-size: 0.74rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .tab:hover {
+      color: var(--text-primary);
+      background: rgba(77, 163, 255, 0.04);
+    }
+
+    .tab.active {
+      color: var(--accent-blue);
+      border-bottom-color: var(--accent-blue);
+      background: rgba(77, 163, 255, 0.06);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .info-text {
+      font-size: 0.74rem;
+      line-height: 1.8;
+      color: #c0cad8;
+      white-space: pre-wrap;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      padding: 6px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      font-size: 0.7rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: #1e2a3a;
+      color: var(--text-primary);
+      border-color: var(--border-hover);
+    }
+
+    .copy-btn.copied {
+      background: var(--accent-green);
+      color: #fff;
+      border-color: var(--accent-green);
+    }
+
+    /* Presets */
+    .presets {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .preset-btn {
+      padding: 6px 12px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      font-size: 0.7rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .preset-btn:hover {
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+      background: rgba(77, 163, 255, 0.06);
+    }
+
+    .preset-btn.active {
+      background: rgba(77, 163, 255, 0.1);
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+
+    /* Key legend */
+    .key-legend {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .key-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.66rem;
+      color: var(--text-secondary);
+    }
+
+    .key-item .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+    }
+
+    /* Producer node */
+    .producer-node {
+      padding: 12px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      font-size: 0.78rem;
+      border-left: 3px solid var(--accent-green);
+      transition: all 0.3s;
+    }
+
+    .producer-node.sending {
+      background: rgba(54, 217, 134, 0.08);
+      box-shadow: 0 0 16px rgba(54, 217, 134, 0.15);
+      border-color: var(--accent-green);
+    }
+
+    .ack-badge {
+      display: inline-block;
+      font-size: 0.6rem;
+      padding: 2px 7px;
+      border-radius: 4px;
+      margin-left: 8px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .ack-badge.ack0 {
+      background: rgba(255, 92, 108, 0.12);
+      color: var(--accent-red);
+    }
+
+    .ack-badge.ack1 {
+      background: rgba(255, 159, 67, 0.12);
+      color: var(--accent-orange);
+    }
+
+    .ack-badge.ackall {
+      background: rgba(54, 217, 134, 0.12);
+      color: var(--accent-green);
+    }
+
+    /* Event log */
+    .event-log {
+      max-height: 140px;
+      overflow-y: auto;
+    }
+
+    .event-log::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .event-log::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .log-entry {
+      font-size: 0.68rem;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      padding: 4px 0;
+      color: var(--text-secondary);
+      animation: fadeIn 0.2s;
+      border-bottom: 1px solid rgba(30, 42, 58, 0.5);
+    }
+
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+
+    .log-entry .time {
+      color: var(--text-muted);
+    }
+
+    .log-entry .produce {
+      color: var(--accent-green);
+    }
+
+    .log-entry .consume {
+      color: var(--accent-blue);
+    }
+
+    .log-entry .rebalance {
+      color: var(--accent-purple);
+    }
+
+    .log-entry .ack {
+      color: var(--accent-orange);
+    }
+
+    .log-entry .error {
+      color: var(--accent-red);
+    }
+
+    .log-entry .commit {
+      color: var(--accent-cyan);
+    }
+
+    /* Glow effects on active SVG elements */
+    .svg-glow {
+      filter: drop-shadow(0 0 6px var(--accent-blue));
+    }
+
+    /* Panel title */
+    .panel-title {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    /* Smooth scrollbar globally */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-hover);
+    }
+
+    /* Context window items */
+    .ctx-item {
+      font-size: 0.68rem;
+      padding: 5px 10px;
+      margin: 3px 0;
+      background: var(--bg-elevated);
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border: 1px solid var(--border);
+      transition: opacity 0.3s;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <h1>AI Agent & Harness 架构</h1>
+    <p>Agent Loop / Tool Use / Permission / Context Management / Memory — 交互式架构演示</p>
+  </div>
+  <div class="main">
+    <!-- Controls -->
+    <div class="card controls">
+      <div class="ctrl-group">
+        <label>Agent 类型</label>
+        <select id="agentType">
+          <option value="react">ReAct Agent</option>
+          <option value="plan-execute">Plan & Execute</option>
+          <option value="multi">Multi-Agent</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>工具权限</label>
+        <select id="permMode">
+          <option value="ask">每次询问</option>
+          <option value="auto">自动允许</option>
+          <option value="allowlist">白名单</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>上下文策略</label>
+        <select id="contextStrategy">
+          <option value="full">完整历史</option>
+          <option value="sliding">滑动窗口</option>
+          <option value="summary">摘要压缩</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>最大迭代</label>
+        <select id="maxIter">
+          <option value="3">3</option>
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>用户输入</label>
+        <input type="text" id="userInput" value="帮我修复登录页面的bug" style="width:200px;">
+      </div>
+      <button class="btn btn-run" id="runBtn">&#9654; 自动运行</button>
+      <button class="btn btn-step" id="stepBtn">&#9199; 单步执行</button>
+      <button class="btn btn-inject" id="injectBtn">&#9888; 注入错误</button>
+      <button class="btn btn-reset" id="resetBtn">重置</button>
+    </div>
+    <div class="card" style="padding:10px 22px;">
+      <div class="presets">
+        <span style="font-size:0.68rem;color:var(--text-muted);font-weight:500;">场景预设:</span>
+        <button class="preset-btn" data-preset="simple">简单问答</button>
+        <button class="preset-btn" data-preset="tool">单次工具</button>
+        <button class="preset-btn" data-preset="multi-tool">多轮工具</button>
+        <button class="preset-btn" data-preset="error">错误恢复</button>
+        <button class="preset-btn" data-preset="complex">复杂任务</button>
+      </div>
+    </div>
+
+    <!-- Architecture + Loop -->
+    <div class="flow-panel">
+      <div class="card" style="position:relative;">
+        <div class="section-title">架构组件 & 数据流</div>
+        <div class="arch-svg-container">
+          <svg viewBox="0 0 500 430" id="archSvg">
+            <defs>
+              <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                <path d="M0,0 L8,3 L0,6" fill="#3a4f6b" />
+              </marker>
+              <marker id="arrowPurple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                <path d="M0,0 L8,3 L0,6" fill="#b07aff" />
+              </marker>
+              <marker id="arrowOrange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                <path d="M0,0 L8,3 L0,6" fill="#ff9f43" />
+              </marker>
+              <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                <path d="M0,0 L8,3 L0,6" fill="#36d986" />
+              </marker>
+              <linearGradient id="harnessGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#162218" />
+                <stop offset="100%" stop-color="#0c1018" />
+              </linearGradient>
+              <filter id="glowBlue">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+
+            <!-- User -->
+            <rect x="185" y="8" width="130" height="38" rx="10" fill="#0f1a2e" stroke="#4da3ff" stroke-width="1.5" />
+            <text x="250" y="32" text-anchor="middle" fill="#4da3ff" font-size="11" font-weight="700">User / IDE</text>
+
+            <!-- Arrow User -> Harness -->
+            <line x1="250" y1="46" x2="250" y2="68" stroke="#3a4f6b" stroke-width="1.5" marker-end="url(#arrow)" />
+
+            <!-- Harness box -->
+            <rect x="35" y="72" width="430" height="345" rx="14" fill="url(#harnessGrad)" stroke="#36d986"
+              stroke-width="1.8" stroke-dasharray="8,4" opacity="0.9" />
+            <text x="58" y="92" fill="#36d986" font-size="10" font-weight="700" letter-spacing="0.5">HARNESS (Runtime /
+              Orchestrator)</text>
+
+            <!-- Permission layer -->
+            <rect x="55" y="102" width="390" height="32" rx="7" fill="#1f1015" stroke="#ff5c6c" stroke-width="1"
+              opacity="0.9" />
+            <text x="250" y="122" text-anchor="middle" fill="#ff5c6c" font-size="9" font-weight="600">Permission Layer /
+              Sandbox / Hooks</text>
+
+            <!-- Context Manager -->
+            <rect x="55" y="145" width="175" height="52" rx="8" fill="#0c1828" stroke="#4da3ff" stroke-width="1" />
+            <text x="142" y="166" text-anchor="middle" fill="#4da3ff" font-size="9" font-weight="600">Context
+              Manager</text>
+            <text x="142" y="182" text-anchor="middle" fill="#7d8da0" font-size="7.5">消息历史 / 压缩 / Token计数</text>
+
+            <!-- Memory -->
+            <rect x="250" y="145" width="195" height="52" rx="8" fill="#0c1820" stroke="#22d3ee" stroke-width="1" />
+            <text x="347" y="166" text-anchor="middle" fill="#22d3ee" font-size="9" font-weight="600">Memory /
+              State</text>
+            <text x="347" y="182" text-anchor="middle" fill="#7d8da0" font-size="7.5">长期记忆 / 会话状态 / CLAUDE.md</text>
+
+            <!-- LLM -->
+            <rect x="130" y="212" width="240" height="58" rx="10" fill="#1a102a" stroke="#b07aff" stroke-width="1.5"
+              id="llmBox" />
+            <text x="250" y="236" text-anchor="middle" fill="#b07aff" font-size="11" font-weight="700">LLM (Claude /
+              GPT)</text>
+            <text x="250" y="252" text-anchor="middle" fill="#7d8da0" font-size="8">推理 / 工具决策 / 内容生成</text>
+            <text x="250" y="264" text-anchor="middle" fill="#4a5568" font-size="7">System Prompt + Tools Schema</text>
+
+            <!-- Agent Loop arrow -->
+            <path d="M 370 240 C 435 240, 435 315, 370 315" fill="none" stroke="#b07aff" stroke-width="1.5"
+              stroke-dasharray="5,3" marker-end="url(#arrowPurple)" opacity="0.8" />
+            <text x="425" y="275" fill="#b07aff" font-size="8.5" font-weight="700">Agent</text>
+            <text x="425" y="288" fill="#b07aff" font-size="8.5">Loop</text>
+
+            <!-- Tool Executor -->
+            <rect x="55" y="288" width="165" height="58" rx="8" fill="#1a1400" stroke="#ff9f43" stroke-width="1" />
+            <text x="137" y="310" text-anchor="middle" fill="#ff9f43" font-size="9" font-weight="600">Tool
+              Executor</text>
+            <text x="137" y="325" text-anchor="middle" fill="#7d8da0" font-size="7.5">Read / Write / Bash / Grep</text>
+            <text x="137" y="338" text-anchor="middle" fill="#4a5568" font-size="7">MCP Servers / API Calls</text>
+
+            <!-- Output -->
+            <rect x="245" y="288" width="195" height="58" rx="8" fill="#0c1a12" stroke="#36d986" stroke-width="1" />
+            <text x="342" y="310" text-anchor="middle" fill="#36d986" font-size="9" font-weight="600">Output &
+              Streaming</text>
+            <text x="342" y="325" text-anchor="middle" fill="#7d8da0" font-size="7.5">流式输出 / 格式化 / 通知</text>
+            <text x="342" y="338" text-anchor="middle" fill="#4a5568" font-size="7">文件写入 / Git操作</text>
+
+            <!-- Error handler -->
+            <rect x="55" y="360" width="390" height="44" rx="8" fill="#0f1319" stroke="#2d4a6f" stroke-width="1" />
+            <text x="250" y="380" text-anchor="middle" fill="#7d8da0" font-size="9" font-weight="600">Error Recovery /
+              Retry / Guardrails</text>
+            <text x="250" y="395" text-anchor="middle" fill="#4a5568" font-size="7.5">异常处理 / 重试策略 / 安全护栏 / 超时控制</text>
+
+            <!-- Arrows inside -->
+            <line x1="250" y1="134" x2="250" y2="145" stroke="#3a4f6b" stroke-width="1" marker-end="url(#arrow)" />
+            <line x1="250" y1="197" x2="250" y2="212" stroke="#3a4f6b" stroke-width="1.5" marker-end="url(#arrow)" />
+            <line x1="190" y1="270" x2="137" y2="288" stroke="#ff9f43" stroke-width="1.2"
+              marker-end="url(#arrowOrange)" />
+            <line x1="310" y1="270" x2="342" y2="288" stroke="#36d986" stroke-width="1.2"
+              marker-end="url(#arrowGreen)" />
+
+            <!-- Active pulse -->
+            <circle cx="0" cy="0" r="6" fill="#4da3ff" opacity="0" id="activeIndicator">
+              <animate attributeName="opacity" values="0;0.8;0" dur="1.5s" repeatCount="indefinite" />
+              <animate attributeName="r" values="4;7;4" dur="1.5s" repeatCount="indefinite" />
+            </circle>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Agent Loop -->
+      <div class="card" style="position:relative;">
+        <div class="section-title">Agent Loop 执行过程</div>
+        <div class="iter-badge">迭代 <span class="num" id="iterCount">0</span> / <span id="maxIterDisplay">5</span></div>
+        <div class="loop-steps" id="loopSteps">
+          <div class="loop-step" data-step="input">
+            <div class="step-icon" style="background:rgba(77,163,255,0.12);color:var(--accent-blue);">1</div>
+            <div class="step-content">
+              <div class="step-label">接收输入</div>
+              <div class="step-detail">User message → Harness 预处理</div>
+            </div>
+          </div>
+          <div class="loop-step" data-step="context">
+            <div class="step-icon" style="background:rgba(34,211,238,0.12);color:var(--accent-cyan);">2</div>
+            <div class="step-content">
+              <div class="step-label">组装上下文</div>
+              <div class="step-detail">System prompt + History + Tools + Memory</div>
+            </div>
+          </div>
+          <div class="loop-step" data-step="llm">
+            <div class="step-icon" style="background:rgba(176,122,255,0.12);color:var(--accent-purple);">3</div>
+            <div class="step-content">
+              <div class="step-label">LLM 推理</div>
+              <div class="step-detail">生成文本 / 决定调用工具 / 结束标记</div>
+            </div>
+          </div>
+          <div class="loop-step" data-step="parse">
+            <div class="step-icon" style="background:rgba(54,217,134,0.12);color:var(--accent-green);">4</div>
+            <div class="step-content">
+              <div class="step-label">解析输出</div>
+              <div class="step-detail">提取 tool_use blocks / 文本内容</div>
+            </div>
+          </div>
+          <div class="loop-step" data-step="permission">
+            <div class="step-icon" style="background:rgba(255,92,108,0.12);color:var(--accent-red);">5</div>
+            <div class="step-content">
+              <div class="step-label">权限检查</div>
+              <div class="step-detail">Sandbox / Allowlist / User Approval</div>
+            </div>
+          </div>
+          <div class="loop-step" data-step="execute">
+            <div class="step-icon" style="background:rgba(255,159,67,0.12);color:var(--accent-orange);">6</div>
+            <div class="step-content">
+              <div class="step-label">执行工具</div>
+              <div class="step-detail">运行工具 → 获取结果 → 追加到历史</div>
+            </div>
+          </div>
+          <div class="loop-step" data-step="check">
+            <div class="step-icon" style="background:rgba(244,114,182,0.12);color:var(--accent-pink);">7</div>
+            <div class="step-content">
+              <div class="step-label">终止判断</div>
+              <div class="step-detail">还有 tool_use? 达到 max_iter?</div>
+            </div>
+          </div>
+          <div class="loop-step" data-step="output">
+            <div class="step-icon" style="background:rgba(54,217,134,0.12);color:var(--accent-green);">8</div>
+            <div class="step-content">
+              <div class="step-label">输出结果</div>
+              <div class="step-detail">流式返回最终文本给用户</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Message trace + Context -->
+    <div class="flow-panel">
+      <div class="message-trace" id="messageTrace">
+        <div class="section-title">消息流 (Messages)</div>
+      </div>
+      <div class="message-trace" id="contextView">
+        <div class="section-title">上下文窗口 (Context Window)</div>
+      </div>
+    </div>
+
+    <!-- Event log -->
+    <div class="card event-log">
+      <div class="panel-title">事件日志</div>
+      <div id="eventLog"></div>
+    </div>
+
+    <!-- Info panel -->
+    <div class="card info-panel">
+      <button class="copy-btn" id="copyBtn">复制</button>
+      <div class="tabs">
+        <div class="tab active" data-tab="harness">Harness 职责</div>
+        <div class="tab" data-tab="loop">Agent Loop</div>
+        <div class="tab" data-tab="tools">Tool Use</div>
+        <div class="tab" data-tab="context">上下文管理</div>
+        <div class="tab" data-tab="patterns">架构模式</div>
+      </div>
+      <div class="tab-content active" id="tab-harness">
+        <div class="info-text" id="infoHarness"></div>
+      </div>
+      <div class="tab-content" id="tab-loop">
+        <div class="info-text" id="infoLoop"></div>
+      </div>
+      <div class="tab-content" id="tab-tools">
+        <div class="info-text" id="infoTools"></div>
+      </div>
+      <div class="tab-content" id="tab-context">
+        <div class="info-text" id="infoContext"></div>
+      </div>
+      <div class="tab-content" id="tab-patterns">
+        <div class="info-text" id="infoPatterns"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STEPS = ['input', 'context', 'llm', 'parse', 'permission', 'execute', 'check', 'output'];
+
+    const state = {
+      agentType: 'react',
+      permMode: 'ask',
+      contextStrategy: 'full',
+      maxIter: 5,
+      userInput: '帮我修复登录页面的bug',
+      currentStep: -1,
+      iteration: 0,
+      running: false,
+      messages: [],
+      contextTokens: 0,
+      maxTokens: 200000,
+      errorInjected: false,
+      logs: [],
+    };
+
+    const SCENARIOS = {
+      simple: {
+        input: '1+1等于多少?',
+        steps: [
+          { type: 'llm', hasTools: false, text: '1+1=2。这是一个基础数学运算。' }
+        ]
+      },
+      tool: {
+        input: '读取 src/login.tsx 的内容',
+        steps: [
+          { type: 'llm', hasTools: true, tool: 'Read', args: 'src/login.tsx', text: '让我读取这个文件。' },
+          { type: 'tool_result', content: 'export function Login() {\n  const [user, setUser] = useState("");\n  return <form>...</form>;\n}' },
+          { type: 'llm', hasTools: false, text: '这是 Login 组件，使用了 React useState Hook 管理表单状态。' }
+        ]
+      },
+      'multi-tool': {
+        input: '帮我修复登录页面的bug',
+        steps: [
+          { type: 'llm', hasTools: true, tool: 'Grep', args: '"login" src/', text: '先搜索登录相关文件。' },
+          { type: 'tool_result', content: 'src/pages/login.tsx\nsrc/api/auth.ts\nsrc/hooks/useAuth.ts' },
+          { type: 'llm', hasTools: true, tool: 'Read', args: 'src/pages/login.tsx', text: '读取登录页面源码。' },
+          { type: 'tool_result', content: 'const handleSubmit = async () => {\n  await fetch("/api/login", { method: "POST" })\n  // BUG: 缺少 request body\n}' },
+          { type: 'llm', hasTools: true, tool: 'Edit', args: 'login.tsx +body', text: '找到问题：fetch 缺少 body。修复中...' },
+          { type: 'tool_result', content: '✓ File edited: src/pages/login.tsx' },
+          { type: 'llm', hasTools: false, text: '已修复：在 fetch 中添加了包含 username/password 的 JSON body。' }
+        ]
+      },
+      error: {
+        input: '删除 /etc/passwd',
+        steps: [
+          { type: 'llm', hasTools: true, tool: 'Bash', args: 'rm /etc/passwd', text: '' },
+          { type: 'permission_denied', content: '⛔ 权限拒绝：危险操作被 Sandbox 拦截 (destructive file operation)' },
+          { type: 'llm', hasTools: false, text: '抱歉，这是一个危险操作，已被安全层拦截。删除系统文件会导致系统不可用。' }
+        ]
+      },
+      complex: {
+        input: '重构 auth 模块，添加 OAuth 支持',
+        steps: [
+          { type: 'llm', hasTools: true, tool: 'Glob', args: 'src/auth/**/*', text: '探索现有 auth 结构。' },
+          { type: 'tool_result', content: 'src/auth/index.ts\nsrc/auth/jwt.ts\nsrc/auth/middleware.ts\nsrc/auth/types.ts' },
+          { type: 'llm', hasTools: true, tool: 'Read', args: 'src/auth/index.ts', text: '读取入口文件。' },
+          { type: 'tool_result', content: 'export { verifyToken } from "./jwt";\nexport { authMiddleware } from "./middleware";' },
+          { type: 'llm', hasTools: true, tool: 'Write', args: 'src/auth/oauth.ts', text: '创建 OAuth 提供者模块。' },
+          { type: 'tool_result', content: '✓ Created: src/auth/oauth.ts (OAuth2 provider implementation)' },
+          { type: 'llm', hasTools: true, tool: 'Edit', args: 'src/auth/index.ts', text: '更新 index 导出 OAuth。' },
+          { type: 'tool_result', content: '✓ Edited: src/auth/index.ts (+1 export)' },
+          { type: 'llm', hasTools: true, tool: 'Bash', args: 'npm test -- auth', text: '运行测试验证。' },
+          { type: 'tool_result', content: '✓ Test Suites: 3 passed\n✓ Tests: 12 passed, 0 failed' },
+          { type: 'llm', hasTools: false, text: '重构完成！新增 OAuth 模块，已导出并通过全部测试。' }
+        ]
+      }
+    };
+
+    let currentScenario = null;
+    let scenarioStepIdx = 0;
+
+    function init() {
+      state.currentStep = -1;
+      state.iteration = 0;
+      state.messages = [];
+      state.contextTokens = 0;
+      state.errorInjected = false;
+      state.running = false;
+      state.logs = [];
+      currentScenario = null;
+      scenarioStepIdx = 0;
+      renderAll();
+    }
+
+    function startScenario(name) {
+      init();
+      currentScenario = SCENARIOS[name];
+      state.userInput = currentScenario.input;
+      document.getElementById('userInput').value = state.userInput;
+      addMessage('user', state.userInput);
+      state.currentStep = 0;
+      addLog('info', `用户输入: "${state.userInput}"`);
+      renderAll();
+    }
+
+    function stepForward() {
+      if (!currentScenario) {
+        startScenario(detectScenario());
+        return;
+      }
+      if (scenarioStepIdx >= currentScenario.steps.length) {
+        state.currentStep = 7;
+        addLog('info', 'Agent Loop 结束');
+        renderAll();
+        return;
+      }
+
+      const step = currentScenario.steps[scenarioStepIdx];
+
+      if (step.type === 'llm') {
+        state.currentStep = 1;
+        state.contextTokens += 500;
+        renderAll();
+        setTimeout(() => {
+          state.currentStep = 2;
+          addLog('llm', 'LLM 推理中...');
+          renderAll();
+          setTimeout(() => {
+            state.currentStep = 3;
+            if (step.text) addMessage('assistant', step.text);
+            renderAll();
+            if (step.hasTools) {
+              setTimeout(() => {
+                state.currentStep = 4;
+                addLog('permission', `权限检查: ${step.tool}()`);
+                renderAll();
+                setTimeout(() => {
+                  state.currentStep = 5;
+                  addMessage('tool_use', `${step.tool}(${step.args || ''})`);
+                  addLog('tool', `执行: ${step.tool}(${step.args || ''})`);
+                  state.iteration++;
+                  state.contextTokens += 300;
+                  renderAll();
+                  scenarioStepIdx++;
+                  if (state.running) setTimeout(() => stepForward(), 500);
+                }, state.running ? 350 : 0);
+              }, state.running ? 300 : 0);
+            } else {
+              setTimeout(() => {
+                state.currentStep = 6;
+                renderAll();
+                setTimeout(() => {
+                  state.currentStep = 7;
+                  addLog('info', '无工具调用 → 任务完成');
+                  renderAll();
+                  scenarioStepIdx++;
+                  state.running = false;
+                }, state.running ? 300 : 0);
+              }, state.running ? 250 : 0);
+            }
+          }, state.running ? 400 : 0);
+        }, state.running ? 300 : 0);
+      } else if (step.type === 'tool_result') {
+        addMessage('tool_result', step.content);
+        state.contextTokens += step.content.length;
+        state.currentStep = 6;
+        addLog('tool', '工具返回结果');
+        renderAll();
+        scenarioStepIdx++;
+        if (state.running) setTimeout(() => stepForward(), 450);
+      } else if (step.type === 'permission_denied') {
+        state.currentStep = 4;
+        addMessage('error', step.content);
+        addLog('error', '权限拒绝: 危险操作被拦截');
+        renderAll();
+        scenarioStepIdx++;
+        if (state.running) setTimeout(() => stepForward(), 600);
+      }
+    }
+
+    function autoRun() {
+      if (state.running) { state.running = false; return; }
+      state.running = true;
+      stepForward();
+    }
+
+    function detectScenario() {
+      const input = state.userInput;
+      if (input.includes('删除') || input.includes('rm ')) return 'error';
+      if (input.includes('重构') || input.includes('OAuth')) return 'complex';
+      if (input.includes('修复') || input.includes('bug')) return 'multi-tool';
+      if (input.includes('读取') || input.includes('查看')) return 'tool';
+      return 'simple';
+    }
+
+    function addMessage(role, content) {
+      state.messages.push({ role, content, tokens: Math.floor(content.length * 1.3) });
+      state.contextTokens = state.messages.reduce((s, m) => s + m.tokens, 0) + 2000;
+    }
+
+    function addLog(type, text) {
+      const now = new Date();
+      const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0').slice(0, 2)}`;
+      state.logs.unshift({ type, text, time });
+      if (state.logs.length > 30) state.logs.pop();
+      renderLog();
+    }
+
+    function renderLog() {
+      document.getElementById('eventLog').innerHTML = state.logs.slice(0, 12).map(l =>
+        `<div class="log-entry"><span class="time">[${l.time}]</span> <span class="${l.type === 'error' ? 'error' : l.type === 'tool' ? 'ack' : l.type === 'llm' ? 'rebalance' : 'consume'}">${l.text}</span></div>`
+      ).join('');
+    }
+
+    function renderAll() {
+      renderLoopSteps();
+      renderMessages();
+      renderContextView();
+      renderIterCount();
+      updateInfo();
+      highlightArch();
+    }
+
+    function renderLoopSteps() {
+      document.querySelectorAll('.loop-step').forEach((el, idx) => {
+        el.classList.remove('active', 'completed');
+        if (idx === state.currentStep) el.classList.add('active');
+        else if (idx < state.currentStep) el.classList.add('completed');
+      });
+    }
+
+    function renderMessages() {
+      const container = document.getElementById('messageTrace');
+      let html = '<div class="section-title">消息流 (Messages)</div>';
+      if (state.messages.length === 0) {
+        html += '<div style="text-align:center;color:var(--text-muted);font-size:0.72rem;padding:40px 0;">点击 "自动运行" 或选择预设场景开始</div>';
+      }
+      state.messages.forEach(m => {
+        let cls = 'trace-harness';
+        let from = 'System';
+        if (m.role === 'user') { cls = 'trace-user'; from = '👤 User'; }
+        else if (m.role === 'assistant') { cls = 'trace-llm'; from = '🤖 Assistant'; }
+        else if (m.role === 'tool_use') { cls = 'trace-tool'; from = '🔧 Tool Call'; }
+        else if (m.role === 'tool_result') { cls = 'trace-harness'; from = '📋 Tool Result'; }
+        else if (m.role === 'error') { cls = 'trace-error'; from = '⚠️ Error'; }
+        html += `<div class="trace-entry ${cls}"><div class="from">${from}</div><div class="content">${escHtml(m.content)}</div></div>`;
+      });
+      container.innerHTML = html;
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function renderContextView() {
+      const container = document.getElementById('contextView');
+      const usedPct = Math.min(100, (state.contextTokens / state.maxTokens) * 100);
+      const strategy = state.contextStrategy;
+      let strategyNote = strategy === 'sliding' ? '滑动窗口: 保留最近 N 条' : strategy === 'summary' ? '摘要压缩: 旧消息自动压缩' : '完整历史: 保留所有消息';
+
+      const displayMsgs = strategy === 'sliding' ? state.messages.slice(-6) : state.messages;
+      let windowHtml = '';
+      displayMsgs.forEach((m, i) => {
+        const opacity = strategy === 'summary' && i < displayMsgs.length - 4 ? '0.4' : '1';
+        const icon = m.role === 'user' ? '👤' : m.role === 'assistant' ? '🤖' : m.role === 'tool_use' ? '🔧' : m.role === 'tool_result' ? '📋' : '⚠️';
+        windowHtml += `<div class="ctx-item" style="opacity:${opacity};">${icon} ${escHtml(m.content.substring(0, 55))}${m.content.length > 55 ? '...' : ''}</div>`;
+      });
+
+      container.innerHTML = `
+    <div class="section-title">上下文窗口 (Context Window)</div>
+    <div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;font-size:0.68rem;color:var(--text-secondary);margin-bottom:6px;">
+        <span>${strategyNote}</span>
+        <span style="font-family:monospace;">${state.contextTokens.toLocaleString()} / ${(state.maxTokens / 1000).toFixed(0)}K tokens</span>
+      </div>
+      <div class="context-bar-track">
+        <div class="context-bar-fill ${usedPct > 75 ? 'warn' : ''}" style="width:${usedPct}%;"></div>
+      </div>
+    </div>
+    <div class="ctx-item" style="border-color:var(--border-hover);color:var(--text-muted);">📄 System Prompt (~2000 tokens)</div>
+    ${strategy === 'summary' && state.messages.length > 4 ? '<div class="ctx-item" style="border-color:var(--accent-cyan);color:var(--accent-cyan);background:rgba(34,211,238,0.04);">📝 [摘要] 之前的对话已被压缩...</div>' : ''}
+    ${windowHtml}
+    ${state.messages.length === 0 ? '<div style="text-align:center;color:var(--text-muted);font-size:0.68rem;padding:20px 0;">等待消息...</div>' : ''}
+  `;
+    }
+
+    function renderIterCount() {
+      document.getElementById('iterCount').textContent = state.iteration;
+      document.getElementById('maxIterDisplay').textContent = state.maxIter;
+    }
+
+    function highlightArch() {
+      const indicator = document.getElementById('activeIndicator');
+      const positions = {
+        0: { cx: 250, cy: 27 },
+        1: { cx: 142, cy: 170 },
+        2: { cx: 250, cy: 240 },
+        3: { cx: 342, cy: 310 },
+        4: { cx: 250, cy: 118 },
+        5: { cx: 137, cy: 315 },
+        6: { cx: 250, cy: 240 },
+        7: { cx: 342, cy: 310 },
+      };
+      const pos = positions[state.currentStep] || { cx: -20, cy: -20 };
+      indicator.setAttribute('cx', pos.cx);
+      indicator.setAttribute('cy', pos.cy);
+      indicator.setAttribute('opacity', state.currentStep >= 0 ? '1' : '0');
+    }
+
+    function updateInfo() {
+      document.getElementById('infoHarness').textContent = `【Harness (运行时/编排器) 核心职责】
+
+Harness 是 Agent 系统的"工程外壳"
+LLM 只负责"思考"，Harness 负责"执行一切"
+
+┌─────────────────────────────────────────────────────┐
+│ 1. 输入预处理 (Input Processing)                     │
+│    • 接收 user message / 文件 / 图片                 │
+│    • 解析 slash commands, hooks 触发                 │
+│    • 模板展开、变量替换                              │
+├─────────────────────────────────────────────────────┤
+│ 2. 上下文组装 (Context Assembly)                     │
+│    • System prompt (角色 + 规则 + 工具 schema)       │
+│    • 消息历史 (压缩 / 截断 / 摘要)                   │
+│    • 动态注入: CLAUDE.md / memory / env info         │
+│    • Token budget 管理                              │
+├─────────────────────────────────────────────────────┤
+│ 3. LLM 调用 (Model Invocation)                      │
+│    • API 请求 (streaming / non-streaming)            │
+│    • 重试 (rate limit, timeout, 5xx)                │
+│    • Prompt caching / cost tracking                 │
+├─────────────────────────────────────────────────────┤
+│ 4. 输出解析 (Response Parsing)                       │
+│    • 提取 text_blocks + tool_use_blocks             │
+│    • JSON schema 校验工具参数                        │
+│    • 流式 chunk 拼接                                │
+├─────────────────────────────────────────────────────┤
+│ 5. 权限 & 安全 (Permission & Safety)                │
+│    • Sandbox: 文件系统 / 网络隔离                    │
+│    • Permission modes: ask / auto / allowlist        │
+│    • Pre/Post execution hooks                       │
+│    • 危险操作拦截 (rm -rf, git push --force)        │
+├─────────────────────────────────────────────────────┤
+│ 6. 工具执行 (Tool Execution)                         │
+│    • 内置工具: Read / Write / Edit / Bash / Grep     │
+│    • MCP 协议: 连接外部 tool servers                 │
+│    • 结果捕获 + 截断 (防 context 溢出)              │
+├─────────────────────────────────────────────────────┤
+│ 7. 循环控制 (Loop Control)                           │
+│    • 判断是否继续 (有 tool_use → 继续)              │
+│    • max_iterations 保护                            │
+│    • 错误恢复 / 超时中断                            │
+│    • 用户中断处理 (Ctrl+C / ESC)                    │
+└─────────────────────────────────────────────────────┘`;
+
+      document.getElementById('infoLoop').textContent = `【Agent Loop 运行机制】
+
+当前模式: ${state.agentType === 'react' ? 'ReAct (Reason + Act)' : state.agentType === 'plan-execute' ? 'Plan & Execute' : 'Multi-Agent'}
+
+核心循环伪代码:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  messages = [system_prompt, user_message]
+
+  for i in range(max_iterations):
+      response = llm.generate(messages)     # 推理
+
+      if response.has_tool_calls:
+          for call in response.tool_calls:
+              if permission.denied(call):   # 权限
+                  result = "Permission denied"
+              else:
+                  result = tool.execute(call) # 执行
+              messages.append(tool_result)   # 追加结果
+      else:
+          break  # 无工具调用 = 任务完成
+
+  return response.text_content
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+三种 Agent 架构对比:
+
+  ReAct (最常见):
+    思考 → 行动 → 观察 → 思考 → ...
+    每步都重新推理，灵活应变
+    Claude Code 默认模式
+
+  Plan & Execute:
+    [规划阶段] 生成完整步骤列表
+    [执行阶段] 逐步执行，可修正计划
+    适合确定性高的多步任务
+
+  Multi-Agent:
+    主 Agent 分发子任务
+    子 Agent 并行执行 (worktree 隔离)
+    适合大规模重构、跨模块任务
+
+终止条件:
+  ✓ LLM 输出纯文本 (无 tool_use)
+  ✗ 达到 max_iterations
+  ✗ 不可恢复的错误
+  ✗ 用户主动中断`;
+
+      document.getElementById('infoTools').textContent = `【Tool Use 完整机制】
+
+权限模式: ${state.permMode === 'ask' ? '每次询问 (最安全)' : state.permMode === 'auto' ? '自动允许 (最快)' : '白名单 (平衡)'}
+
+工具定义 (JSON Schema):
+  {
+    "name": "Edit",
+    "description": "对文件进行精确字符串替换",
+    "parameters": {
+      "file_path": { "type": "string", "required": true },
+      "old_string": { "type": "string", "required": true },
+      "new_string": { "type": "string", "required": true }
+    }
+  }
+
+调用时序:
+  ┌────────┐    ┌─────────┐    ┌──────┐    ┌──────┐
+  │  LLM   │───▶│ Harness │───▶│ Perm │───▶│ Tool │
+  │        │◀───│ (parse) │◀───│      │◀───│(exec)│
+  └────────┘    └─────────┘    └──────┘    └──────┘
+   tool_use       校验参数      检查权限     执行+返回
+
+权限分层:
+  ┌──────────┬────────────────────────────┐
+  │ 低风险    │ Read, Glob, Grep (只读)     │
+  │ 中风险    │ Write, Edit (文件修改)       │
+  │ 高风险    │ Bash, PowerShell (任意执行)  │
+  │ 外部调用  │ MCP, WebFetch, API         │
+  └──────────┴────────────────────────────┘
+
+MCP (Model Context Protocol):
+  • 标准化工具扩展协议
+  • Server 暴露 tools + resources + prompts
+  • Harness 作为 MCP Client
+  • 支持多 Server 并行连接
+  • 示例: git MCP, database MCP, Slack MCP`;
+
+      document.getElementById('infoContext').textContent = `【上下文管理策略】
+
+当前: ${state.contextStrategy === 'full' ? '完整历史' : state.contextStrategy === 'sliding' ? '滑动窗口' : '摘要压缩'}
+已用: ${state.contextTokens.toLocaleString()} / ${(state.maxTokens / 1000).toFixed(0)}K tokens
+
+上下文窗口结构:
+  ┌──────────────────────────────────────────┐
+  │ System Prompt (固定, ~2-5K tokens)        │
+  │  ├── 角色定义 + 行为规则                  │
+  │  ├── 工具 JSON Schema (所有可用工具)      │
+  │  ├── 环境信息 (OS, CWD, git state)       │
+  │  └── CLAUDE.md 项目指令                   │
+  ├──────────────────────────────────────────┤
+  │ Injected Context (动态, ~1-3K tokens)     │
+  │  ├── Memory 长期记忆                      │
+  │  ├── 活跃任务列表                         │
+  │  └── Plan 文件内容                        │
+  ├──────────────────────────────────────────┤
+  │ Conversation History (增长)               │
+  │  ├── User messages                       │
+  │  ├── Assistant messages (含 tool_use)    │
+  │  └── Tool results (可能很大)             │
+  └──────────────────────────────────────────┘
+
+三种压缩策略:
+
+  1. 完整历史 (Full History)
+     保留所有消息直到接近上限
+     ✓ 最准确，无信息丢失
+     ✗ 长对话会超限
+
+  2. 滑动窗口 (Sliding Window)
+     只保留最近 N 轮对话
+     ✓ Token 使用可控
+     ✗ 丢失早期上下文，可能重复操作
+
+  3. 摘要压缩 (Summarization) ← Claude Code 实际使用
+     旧消息由 LLM 生成摘要替代
+     ✓ 保留关键语义
+     ✗ 细节可能丢失
+
+Prompt Caching (性能关键):
+  • System prompt 被缓存 (5min TTL)
+  • 减少重复 token 处理开销
+  • Cache hit → 延迟和成本大幅降低`;
+
+      document.getElementById('infoPatterns').textContent = `【Agent 工程架构模式总览】
+
+  ┌───────────────────────────────────────────────┐
+  │              Interface Layer                   │
+  │   CLI / Desktop / IDE Extension / Web / API   │
+  ├───────────────────────────────────────────────┤
+  │              Harness Layer                     │
+  │   Loop / Permission / Context / Streaming     │
+  ├───────────────────────────────────────────────┤
+  │              Model Layer                       │
+  │   LLM API / Prompt Cache / Multi-model        │
+  ├───────────────────────────────────────────────┤
+  │              Tool Layer                        │
+  │   Built-in / MCP / Plugins / Sub-agents       │
+  ├───────────────────────────────────────────────┤
+  │              Environment Layer                 │
+  │   Filesystem / Git / Network / OS / Sandbox   │
+  └───────────────────────────────────────────────┘
+
+5 个关键架构决策:
+
+  1. 循环 vs 单次
+     │ 单次: ChatBot (一问一答)
+     │ 循环: Agent (多轮自主工具调用)
+     └→ 循环是 Agent 的核心区别特征
+
+  2. 同步 vs 并行
+     │ 同步: 等待每步完成 → 简单可调试
+     │ 并行: 多工具同时执行 → 快但复杂
+     └→ Claude Code 支持 parallel tool calls
+
+  3. 确定性 vs 自主性
+     │ Plan 模式: 先规划再执行 → 可审核
+     │ 自由模式: LLM 自行决策 → 灵活高效
+     └→ 两种都支持，plan 用于复杂任务
+
+  4. 安全模型
+     │ Principle of Least Privilege
+     │ 分层权限 (read < write < execute)
+     │ Human-in-the-loop (关键操作确认)
+     └→ 不可逆操作 (git push, rm) 必须确认
+
+  5. 可观测性
+     │ 消息级追踪 + Token 监控
+     │ 工具调用审计日志
+     │ 错误率 / 重试统计
+     └→ 每一步都可回溯、可 debug`;
+    }
+
+    function escHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Event bindings
+    document.getElementById('agentType').addEventListener('change', e => { state.agentType = e.target.value; updateInfo(); });
+    document.getElementById('permMode').addEventListener('change', e => { state.permMode = e.target.value; updateInfo(); });
+    document.getElementById('contextStrategy').addEventListener('change', e => { state.contextStrategy = e.target.value; renderContextView(); updateInfo(); });
+    document.getElementById('maxIter').addEventListener('change', e => { state.maxIter = +e.target.value; renderIterCount(); });
+    document.getElementById('userInput').addEventListener('change', e => { state.userInput = e.target.value; });
+
+    document.getElementById('runBtn').addEventListener('click', autoRun);
+    document.getElementById('stepBtn').addEventListener('click', () => { state.running = false; stepForward(); });
+    document.getElementById('injectBtn').addEventListener('click', () => {
+      state.userInput = '删除 /etc/passwd';
+      document.getElementById('userInput').value = state.userInput;
+      startScenario('error');
+    });
+    document.getElementById('resetBtn').addEventListener('click', init);
+
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        startScenario(this.dataset.preset);
+      });
+    });
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', function () {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        this.classList.add('active');
+        document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+      });
+    });
+
+    document.getElementById('copyBtn').addEventListener('click', function () {
+      const activeTab = document.querySelector('.tab-content.active .info-text');
+      navigator.clipboard.writeText(activeTab.textContent);
+      this.textContent = '已复制!';
+      this.classList.add('copied');
+      setTimeout(() => { this.textContent = '复制'; this.classList.remove('copied'); }, 1500);
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', e => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); stepForward(); }
+      if (e.key === 'r') init();
+    });
+
+    init();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

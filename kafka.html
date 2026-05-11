@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kafka 分区、消费与 ACK 机制演示</title>
+  <meta name="description" content="交互式演示 Kafka 分区分配策略、消费者组协调、ACK 确认机制及消息投递语义，帮助理解 Kafka 核心工作原理">
+  <meta name="keywords" content="Kafka, 分区, 消费者组, ACK, 消息队列, 交互式演示">
+  <meta property="og:title" content="Kafka 分区、消费与 ACK 机制演示">
+  <meta property="og:description" content="交互式演示 Kafka 分区分配策略、消费者组协调、ACK 确认机制及消息投递语义，帮助理解 Kafka 核心工作原理">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      position: relative;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at 50% 0%, rgba(77, 163, 255, 0.04) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .header {
+      text-align: center;
+      padding: 24px 16px 14px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      z-index: 1;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #fff 0%, #a8c8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header p {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .main {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .controls {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: end;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.2s;
+    }
+
+    .controls:hover {
+      border-color: var(--border-hover);
+    }
+
+    .ctrl-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .ctrl-group label {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .ctrl-group select,
+    .ctrl-group input[type="text"] {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      min-width: 80px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .ctrl-group select:focus,
+    .ctrl-group input:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 100%);
+      pointer-events: none;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .btn-produce {
+      background: linear-gradient(135deg, #28a745, #20c66b);
+      color: #fff;
+    }
+
+    .btn-burst {
+      background: linear-gradient(135deg, #e68a2e, #ff9f43);
+      color: #fff;
+    }
+
+    .btn-reset {
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-reset:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
+
+    .btn-consume {
+      background: linear-gradient(135deg, #2b7fff, #4da3ff);
+      color: #fff;
+    }
+
+    .btn-rebalance {
+      background: linear-gradient(135deg, #9055e8, #b07aff);
+      color: #fff;
+    }
+
+    .btn-fail {
+      background: linear-gradient(135deg, #e04050, #ff5c6c);
+      color: #fff;
+    }
+
+    .viz-area {
+      display: grid;
+      grid-template-columns: 200px 1fr 240px;
+      gap: 16px;
+      min-height: 400px;
+    }
+
+    @media (max-width: 1000px) {
+      .viz-area {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.2s;
+    }
+
+    .panel:hover {
+      border-color: var(--border-hover);
+    }
+
+    .panel-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-title::before {
+      content: '';
+      width: 3px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    .producer-node {
+      padding: 10px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+      font-size: 0.78rem;
+      border-left: 3px solid var(--accent-green);
+      transition: all 0.2s;
+    }
+
+    .producer-node.sending {
+      background: rgba(54, 217, 134, 0.08);
+      box-shadow: 0 0 12px var(--glow-green);
+    }
+
+    .producer-node .ack-badge {
+      display: inline-block;
+      font-size: 0.6rem;
+      padding: 2px 5px;
+      border-radius: 3px;
+      margin-left: 6px;
+      font-weight: 600;
+    }
+
+    .ack-badge.ack0 {
+      background: rgba(255, 92, 108, 0.15);
+      color: var(--accent-red);
+    }
+
+    .ack-badge.ack1 {
+      background: rgba(255, 159, 67, 0.2);
+      color: var(--accent-orange);
+    }
+
+    .ack-badge.ackall {
+      background: rgba(54, 217, 134, 0.15);
+      color: var(--accent-green);
+    }
+
+    .consumer-node {
+      padding: 10px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+      font-size: 0.78rem;
+      border-left: 3px solid var(--accent-blue);
+      transition: all 0.2s;
+    }
+
+    .consumer-node.idle {
+      opacity: 0.5;
+    }
+
+    .consumer-node .cg-tag {
+      font-size: 0.6rem;
+      background: var(--glow-blue);
+      color: var(--accent-blue);
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+    }
+
+    .consumer-node .detail {
+      font-size: 0.65rem;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .consumer-node .commit-mode {
+      font-size: 0.6rem;
+      padding: 2px 5px;
+      border-radius: 3px;
+      margin-left: 4px;
+    }
+
+    .commit-auto {
+      background: var(--glow-blue);
+      color: var(--accent-blue);
+    }
+
+    .commit-manual {
+      background: rgba(255, 159, 67, 0.12);
+      color: var(--accent-orange);
+    }
+
+    .topic-panel {
+      overflow-y: auto;
+    }
+
+    .topic-name {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .topic-meta {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      margin-bottom: 14px;
+    }
+
+    .partition {
+      margin-bottom: 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+    }
+
+    .partition-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .partition-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .partition-offset {
+      font-size: 0.63rem;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+    }
+
+    .partition-bar {
+      display: flex;
+      gap: 2px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+
+    .msg-cell {
+      min-width: 26px;
+      height: 26px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.58rem;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      flex-shrink: 0;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .msg-cell.consumed {
+      opacity: 0.35;
+    }
+
+    .msg-cell.pending-ack {
+      animation: pulse 0.8s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        box-shadow: none;
+      }
+
+      50% {
+        box-shadow: 0 0 6px currentColor;
+      }
+    }
+
+    .msg-cell .ack-icon {
+      position: absolute;
+      top: -6px;
+      right: -4px;
+      font-size: 0.5rem;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+    }
+
+    .msg-cell .ack-icon.ok {
+      background: var(--accent-green);
+      color: #fff;
+    }
+
+    .msg-cell .ack-icon.fail {
+      background: var(--accent-red);
+      color: #fff;
+    }
+
+    /* Replica visualization */
+    .replicas-row {
+      display: flex;
+      gap: 4px;
+      margin-top: 6px;
+      align-items: center;
+    }
+
+    .replica-bar {
+      height: 6px;
+      border-radius: 3px;
+      flex: 1;
+      position: relative;
+    }
+
+    .replica-bar .fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+
+    .replica-label {
+      font-size: 0.58rem;
+      color: var(--text-muted);
+      width: 50px;
+    }
+
+    /* ACK flow animation */
+    .ack-flow {
+      margin-top: 10px;
+      padding: 8px 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.68rem;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      min-height: 60px;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+
+    .ack-flow-entry {
+      padding: 2px 0;
+      animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .ack-flow-entry.success {
+      color: var(--accent-green);
+    }
+
+    .ack-flow-entry.warning {
+      color: var(--accent-orange);
+    }
+
+    .ack-flow-entry.error {
+      color: var(--accent-red);
+    }
+
+    .ack-flow-entry.info {
+      color: var(--accent-blue);
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-4px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Offset commit visualization */
+    .offset-section {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .offset-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.68rem;
+      margin-bottom: 4px;
+    }
+
+    .offset-row .label {
+      color: var(--text-secondary);
+      width: 100px;
+    }
+
+    .offset-row .value {
+      color: var(--accent-blue);
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      font-weight: 600;
+    }
+
+    .offset-row .committed {
+      color: var(--accent-green);
+    }
+
+    .offset-row .lag {
+      color: var(--accent-orange);
+    }
+
+    .cg-section {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .cg-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--accent-purple);
+      margin-bottom: 8px;
+    }
+
+    .cg-assignment {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .cg-assignment .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .event-log {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      max-height: 150px;
+      overflow-y: auto;
+      backdrop-filter: blur(8px);
+    }
+
+    .log-entry {
+      font-size: 0.68rem;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      padding: 2px 0;
+      color: var(--text-secondary);
+      animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .log-entry .time {
+      color: var(--text-muted);
+    }
+
+    .log-entry .produce {
+      color: var(--accent-green);
+    }
+
+    .log-entry .consume {
+      color: var(--accent-blue);
+    }
+
+    .log-entry .rebalance {
+      color: var(--accent-purple);
+    }
+
+    .log-entry .ack {
+      color: var(--accent-orange);
+    }
+
+    .log-entry .error {
+      color: var(--accent-red);
+    }
+
+    .log-entry .commit {
+      color: var(--accent-cyan);
+    }
+
+    .info-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      position: relative;
+      backdrop-filter: blur(8px);
+    }
+
+    .info-panel h3 {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .info-text {
+      font-size: 0.76rem;
+      line-height: 1.7;
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      padding: 6px 12px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      font-size: 0.72rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
+
+    .copy-btn.copied {
+      background: var(--accent-green);
+      color: #fff;
+      border-color: var(--accent-green);
+    }
+
+    .presets {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .preset-btn {
+      padding: 5px 10px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      font-size: 0.68rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .preset-btn:hover {
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+
+    .preset-btn.active {
+      background: var(--glow-blue);
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+
+    .key-legend {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .key-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.65rem;
+      color: var(--text-secondary);
+    }
+
+    .key-item .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+    }
+
+    /* Tabs for info panel */
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab {
+      padding: 8px 16px;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .tab:hover {
+      color: var(--text-primary);
+    }
+
+    .tab.active {
+      color: var(--accent-blue);
+      border-bottom-color: var(--accent-blue);
+      background: var(--glow-blue);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-hover);
+    }
+
+    /* Animations */
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .panel,
+    .controls,
+    .event-log,
+    .info-panel {
+      animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <h1>Kafka 分区、消费与 ACK 机制</h1>
+    <p>Producer ACK → Topic Partitions (Replicas) → Consumer Group → Offset Commit — 完整链路演示</p>
+  </div>
+  <div class="main">
+    <!-- Controls -->
+    <div class="controls">
+      <div class="ctrl-group">
+        <label>分区数</label>
+        <select id="partitionCount">
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+          <option value="4">4</option>
+          <option value="6">6</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>副本因子</label>
+        <select id="replicaFactor">
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3" selected>3</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>消费者数</label>
+        <select id="consumerCount">
+          <option value="1">1</option>
+          <option value="2" selected>2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>Producer ACK</label>
+        <select id="ackMode">
+          <option value="0">acks=0 (不等待)</option>
+          <option value="1" selected>acks=1 (Leader确认)</option>
+          <option value="all">acks=all (全部ISR确认)</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>Offset 提交</label>
+        <select id="commitMode">
+          <option value="auto" selected>自动提交</option>
+          <option value="manual-before">手动(处理前提交)</option>
+          <option value="manual-after">手动(处理后提交)</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>分区策略</label>
+        <select id="partitionStrategy">
+          <option value="round-robin">Round Robin</option>
+          <option value="key-hash">Key Hash</option>
+          <option value="random">Random</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>消息 Key</label>
+        <input type="text" id="msgKey" placeholder="留空=无Key" style="width:90px;">
+      </div>
+      <button class="btn btn-produce" id="produceBtn">发送消息</button>
+      <button class="btn btn-burst" id="burstBtn">批量 (5)</button>
+      <button class="btn btn-consume" id="consumeBtn">消费一轮</button>
+      <button class="btn btn-fail" id="failBtn" title="模拟消费者处理失败">模拟失败</button>
+      <button class="btn btn-rebalance" id="rebalanceBtn">Rebalance</button>
+      <button class="btn btn-reset" id="resetBtn">重置</button>
+    </div>
+    <div class="controls" style="padding:10px 20px;">
+      <div class="presets">
+        <span style="font-size:0.68rem;color:#484f58;">预设:</span>
+        <button class="preset-btn" data-preset="safe">安全模式 (acks=all)</button>
+        <button class="preset-btn" data-preset="fast">高吞吐 (acks=0)</button>
+        <button class="preset-btn" data-preset="atleast">至少一次</button>
+        <button class="preset-btn" data-preset="atmost">至多一次</button>
+        <button class="preset-btn" data-preset="exactly">精确一次(模拟)</button>
+      </div>
+    </div>
+
+    <!-- Visualization -->
+    <div class="viz-area">
+      <!-- Producers -->
+      <div class="panel">
+        <div class="panel-title">Producer</div>
+        <div class="producer-node" id="producer0">
+          Producer-1
+          <span class="ack-badge ack1" id="ackBadge">acks=1</span>
+          <div style="font-size:0.63rem;color:var(--text-secondary);margin-top:4px;">
+            已发送: <span id="sentCount">0</span> |
+            ACK: <span id="ackCount" style="color:#3fb950;">0</span> |
+            失败: <span id="failCount" style="color:#f85149;">0</span>
+          </div>
+        </div>
+        <div class="ack-flow" id="ackFlow"></div>
+        <div class="key-legend" id="keyLegend"></div>
+      </div>
+
+      <!-- Topic -->
+      <div class="panel topic-panel">
+        <div class="topic-name">Topic: orders</div>
+        <div class="topic-meta">
+          副本因子: <span id="rfDisplay">3</span> |
+          ISR: <span id="isrDisplay">3/3</span> |
+          分区策略: <span id="strategyDisplay">Round Robin</span>
+        </div>
+        <div id="partitionsContainer"></div>
+        <div class="offset-section">
+          <div class="panel-title" style="margin-bottom:8px;">Offset 状态 (Consumer Group)</div>
+          <div id="offsetDisplay"></div>
+        </div>
+      </div>
+
+      <!-- Consumers -->
+      <div class="panel">
+        <div class="panel-title">Consumer Group</div>
+        <div id="consumersList"></div>
+        <div class="cg-section">
+          <div class="cg-title">分区分配</div>
+          <div id="assignmentDisplay"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event log -->
+    <div class="event-log">
+      <div class="panel-title">事件日志</div>
+      <div id="eventLog"></div>
+    </div>
+
+    <!-- Info panel with tabs -->
+    <div class="info-panel">
+      <button class="copy-btn" id="copyBtn">复制</button>
+      <div class="tabs">
+        <div class="tab active" data-tab="ack">Producer ACK</div>
+        <div class="tab" data-tab="consume">消费语义</div>
+        <div class="tab" data-tab="offset">Offset 提交</div>
+        <div class="tab" data-tab="overview">整体概览</div>
+      </div>
+      <div class="tab-content active" id="tab-ack">
+        <div class="info-text" id="infoAck"></div>
+      </div>
+      <div class="tab-content" id="tab-consume">
+        <div class="info-text" id="infoConsume"></div>
+      </div>
+      <div class="tab-content" id="tab-offset">
+        <div class="info-text" id="infoOffset"></div>
+      </div>
+      <div class="tab-content" id="tab-overview">
+        <div class="info-text" id="infoOverview"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PARTITION_COLORS = ['#f97316', '#06b6d4', '#a855f7', '#ec4899', '#84cc16', '#eab308'];
+    const CONSUMER_COLORS = ['#58a6ff', '#3fb950', '#f97316', '#a855f7', '#f85149'];
+
+    const state = {
+      partitionCount: 3,
+      replicaFactor: 3,
+      consumerCount: 2,
+      ackMode: '1',
+      commitMode: 'auto',
+      partitionStrategy: 'round-robin',
+      assignStrategy: 'range',
+      partitions: [],
+      consumers: [],
+      assignments: {},
+      msgCounter: 0,
+      roundRobinIdx: 0,
+      producerSent: 0,
+      producerAcked: 0,
+      producerFailed: 0,
+      logs: [],
+      ackFlowEntries: [],
+      committedOffsets: {},
+    };
+
+    function init() {
+      state.partitions = [];
+      for (let i = 0; i < state.partitionCount; i++) {
+        state.partitions.push({
+          messages: [],
+          nextOffset: 0,
+          replicas: Array(state.replicaFactor).fill(0),
+          leader: 0,
+          isr: Array.from({ length: state.replicaFactor }, (_, i) => i),
+        });
+      }
+      state.consumers = [];
+      for (let i = 0; i < state.consumerCount; i++) {
+        state.consumers.push({ id: i, assignedPartitions: [], consumed: 0, lastFailed: false });
+      }
+      state.msgCounter = 0;
+      state.roundRobinIdx = 0;
+      state.producerSent = 0;
+      state.producerAcked = 0;
+      state.producerFailed = 0;
+      state.logs = [];
+      state.ackFlowEntries = [];
+      state.committedOffsets = {};
+      for (let i = 0; i < state.partitionCount; i++) state.committedOffsets[i] = 0;
+      rebalance(true);
+      renderAll();
+    }
+
+    function rebalance(silent) {
+      state.assignments = {};
+      state.consumers.forEach(c => c.assignedPartitions = []);
+      const numP = state.partitionCount;
+      const numC = state.consumerCount;
+      const perConsumer = Math.floor(numP / numC);
+      const remainder = numP % numC;
+      let idx = 0;
+      for (let c = 0; c < numC; c++) {
+        const count = perConsumer + (c < remainder ? 1 : 0);
+        for (let j = 0; j < count; j++) {
+          if (idx < numP) {
+            state.assignments[idx] = c;
+            state.consumers[c].assignedPartitions.push(idx);
+            idx++;
+          }
+        }
+      }
+      if (!silent) {
+        addLog('rebalance', `Rebalance: ${state.consumers.map((c, i) => `C${i}→[${c.assignedPartitions.map(p => 'P' + p).join(',') || '空闲'}]`).join(' ')}`);
+      }
+    }
+
+    function selectPartition(key) {
+      if (state.partitionStrategy === 'key-hash' && key) {
+        let hash = 0;
+        for (let i = 0; i < key.length; i++) { hash = ((hash << 5) - hash) + key.charCodeAt(i); hash |= 0; }
+        return Math.abs(hash) % state.partitionCount;
+      } else if (state.partitionStrategy === 'round-robin') {
+        const idx = state.roundRobinIdx % state.partitionCount;
+        state.roundRobinIdx++;
+        return idx;
+      }
+      return Math.floor(Math.random() * state.partitionCount);
+    }
+
+    function produce(key) {
+      const k = key || null;
+      const pIdx = selectPartition(k);
+      const partition = state.partitions[pIdx];
+      const offset = partition.nextOffset++;
+      const msg = { key: k, value: `msg-${state.msgCounter}`, offset, consumed: false, acked: false };
+      partition.messages.push(msg);
+      state.msgCounter++;
+      state.producerSent++;
+
+      simulateAck(pIdx, offset, msg);
+      highlightProducer();
+      renderAll();
+    }
+
+    function simulateAck(pIdx, offset, msg) {
+      const partition = state.partitions[pIdx];
+      const rf = state.replicaFactor;
+
+      if (state.ackMode === '0') {
+        state.producerAcked++;
+        msg.acked = true;
+        addAckFlow('success', `P${pIdx}[${offset}] → 发送即返回 (不等待确认)`);
+        addLog('ack', `acks=0: P${pIdx}[${offset}] 不等待确认，直接返回`);
+        partition.replicas[0] = offset + 1;
+        setTimeout(() => {
+          for (let r = 1; r < rf; r++) partition.replicas[r] = offset + 1;
+          renderAll();
+        }, 300);
+      } else if (state.ackMode === '1') {
+        partition.replicas[0] = offset + 1;
+        const leaderFail = Math.random() < 0.05;
+        if (leaderFail) {
+          state.producerFailed++;
+          msg.acked = false;
+          addAckFlow('error', `P${pIdx}[${offset}] → Leader 写入失败! Producer 将重试`);
+          addLog('error', `acks=1: P${pIdx}[${offset}] Leader写入失败`);
+        } else {
+          state.producerAcked++;
+          msg.acked = true;
+          addAckFlow('warning', `P${pIdx}[${offset}] → Leader 已确认 (Follower 异步复制中...)`);
+          addLog('ack', `acks=1: P${pIdx}[${offset}] Leader确认`);
+          setTimeout(() => {
+            for (let r = 1; r < rf; r++) partition.replicas[r] = offset + 1;
+            renderAll();
+          }, 500);
+        }
+      } else {
+        partition.replicas[0] = offset + 1;
+        addAckFlow('info', `P${pIdx}[${offset}] → 等待所有 ISR(${partition.isr.length}) 确认...`);
+        const isrFail = Math.random() < 0.08;
+        setTimeout(() => {
+          if (isrFail) {
+            state.producerFailed++;
+            msg.acked = false;
+            addAckFlow('error', `P${pIdx}[${offset}] → ISR 同步超时! 消息可能丢失`);
+            addLog('error', `acks=all: P${pIdx}[${offset}] ISR同步失败`);
+          } else {
+            for (let r = 0; r < rf; r++) partition.replicas[r] = offset + 1;
+            state.producerAcked++;
+            msg.acked = true;
+            addAckFlow('success', `P${pIdx}[${offset}] → 全部 ISR 确认完成 ✓`);
+            addLog('ack', `acks=all: P${pIdx}[${offset}] 全部ISR确认`);
+          }
+          renderAll();
+        }, 400);
+      }
+    }
+
+    function consumeRound(simulateFail) {
+      let totalConsumed = 0;
+      for (let c = 0; c < state.consumers.length; c++) {
+        const consumer = state.consumers[c];
+        consumer.lastFailed = false;
+        for (const pIdx of consumer.assignedPartitions) {
+          const partition = state.partitions[pIdx];
+          const startOffset = state.committedOffsets[pIdx] || 0;
+          const unconsumed = partition.messages.filter(m => m.offset >= startOffset && !m.consumed);
+          const batch = unconsumed.slice(0, 3);
+
+          if (batch.length === 0) continue;
+
+          if (state.commitMode === 'manual-before') {
+            const newOffset = batch[batch.length - 1].offset + 1;
+            state.committedOffsets[pIdx] = newOffset;
+            addLog('commit', `C${c} 提交 P${pIdx} offset=${newOffset} (处理前)`);
+          }
+
+          if (simulateFail && c === 0 && batch.length > 0) {
+            consumer.lastFailed = true;
+            addLog('error', `C${c} 处理 P${pIdx} 失败! 消息未被确认消费`);
+            addAckFlow('error', `Consumer-${c} 处理失败 → ${state.commitMode === 'manual-before' ? 'offset已提交,消息丢失!' : '将重试'}`);
+            if (state.commitMode === 'manual-before') {
+              batch.forEach(m => m.consumed = true);
+              totalConsumed += batch.length;
+            }
+            continue;
+          }
+
+          batch.forEach(m => {
+            m.consumed = true;
+            consumer.consumed++;
+            totalConsumed++;
+          });
+
+          if (state.commitMode === 'auto' || state.commitMode === 'manual-after') {
+            const newOffset = batch[batch.length - 1].offset + 1;
+            state.committedOffsets[pIdx] = newOffset;
+            if (state.commitMode === 'manual-after') {
+              addLog('commit', `C${c} 提交 P${pIdx} offset=${newOffset} (处理后)`);
+            }
+          }
+        }
+      }
+      if (totalConsumed > 0) {
+        addLog('consume', `消费了 ${totalConsumed} 条消息 (${state.commitMode})`);
+      } else if (!simulateFail) {
+        addLog('consume', `没有待消费的消息`);
+      }
+      renderAll();
+    }
+
+    function highlightProducer() {
+      const el = document.getElementById('producer0');
+      el.classList.add('sending');
+      setTimeout(() => el.classList.remove('sending'), 300);
+    }
+
+    function addLog(type, text) {
+      const now = new Date();
+      const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+      state.logs.unshift({ type, text, time });
+      if (state.logs.length > 60) state.logs.pop();
+      renderLog();
+    }
+
+    function addAckFlow(cls, text) {
+      state.ackFlowEntries.unshift({ cls, text });
+      if (state.ackFlowEntries.length > 8) state.ackFlowEntries.pop();
+      renderAckFlow();
+    }
+
+    function renderLog() {
+      document.getElementById('eventLog').innerHTML = state.logs.slice(0, 20).map(l =>
+        `<div class="log-entry"><span class="time">[${l.time}]</span> <span class="${l.type}">${l.text}</span></div>`
+      ).join('');
+    }
+
+    function renderAckFlow() {
+      document.getElementById('ackFlow').innerHTML = state.ackFlowEntries.map(e =>
+        `<div class="ack-flow-entry ${e.cls}">${e.text}</div>`
+      ).join('');
+    }
+
+    function renderAll() {
+      renderPartitions();
+      renderConsumers();
+      renderAssignments();
+      renderOffsets();
+      renderProducerStats();
+      renderKeyLegend();
+      updateInfo();
+    }
+
+    function renderPartitions() {
+      const container = document.getElementById('partitionsContainer');
+      container.innerHTML = '';
+      state.partitions.forEach((p, idx) => {
+        const div = document.createElement('div');
+        div.className = 'partition';
+        div.style.borderLeft = `3px solid ${PARTITION_COLORS[idx]}`;
+
+        const consumerIdx = state.assignments[idx];
+        const assignLabel = consumerIdx !== undefined ? `C${consumerIdx}` : '-';
+        const committed = state.committedOffsets[idx] || 0;
+        const lag = p.nextOffset - committed;
+
+        let replicaHtml = '';
+        if (state.replicaFactor > 1) {
+          replicaHtml = `<div class="replicas-row">`;
+          for (let r = 0; r < state.replicaFactor; r++) {
+            const pct = p.nextOffset > 0 ? (p.replicas[r] / p.nextOffset * 100) : 0;
+            const color = r === 0 ? '#3fb950' : 'var(--border)';
+            const fillColor = r === 0 ? '#3fb950' : '#58a6ff';
+            replicaHtml += `
+          <span class="replica-label">${r === 0 ? 'Leader' : `R${r}`}</span>
+          <div class="replica-bar" style="background:${color}33;">
+            <div class="fill" style="width:${pct}%;background:${fillColor};"></div>
+          </div>`;
+          }
+          replicaHtml += `</div>`;
+        }
+
+        div.innerHTML = `
+      <div class="partition-header">
+        <span class="partition-label" style="color:${PARTITION_COLORS[idx]}">P${idx}</span>
+        <span class="partition-offset">HW:${p.nextOffset} | committed:${committed} | lag:${lag} | →${assignLabel}</span>
+      </div>
+      <div class="partition-bar">
+        ${p.messages.slice(-18).map(m => {
+          const isBelowCommitted = m.offset < committed;
+          const bg = isBelowCommitted ? '#21262d' : PARTITION_COLORS[idx] + '22';
+          const border = isBelowCommitted ? 'var(--border)' : PARTITION_COLORS[idx];
+          const color = isBelowCommitted ? '#484f58' : PARTITION_COLORS[idx];
+          let ackIcon = '';
+          if (m.acked === true) ackIcon = '<span class="ack-icon ok">✓</span>';
+          else if (m.acked === false && state.ackMode !== '0') ackIcon = '<span class="ack-icon fail">✗</span>';
+          return `<div class="msg-cell ${isBelowCommitted ? 'consumed' : ''}" style="background:${bg};border:1px solid ${border};color:${color};" title="offset=${m.offset} key=${m.key || 'null'} acked=${m.acked}">${m.offset}${ackIcon}</div>`;
+        }).join('')}
+      </div>
+      ${replicaHtml}
+    `;
+        container.appendChild(div);
+      });
+    }
+
+    function renderConsumers() {
+      const container = document.getElementById('consumersList');
+      container.innerHTML = '';
+      state.consumers.forEach((c, idx) => {
+        const isIdle = c.assignedPartitions.length === 0;
+        const div = document.createElement('div');
+        div.className = `consumer-node ${isIdle ? 'idle' : ''}`;
+        div.style.borderLeftColor = CONSUMER_COLORS[idx % CONSUMER_COLORS.length];
+        const commitLabel = state.commitMode === 'auto' ? '自动提交' : state.commitMode === 'manual-before' ? '处理前提交' : '处理后提交';
+        const commitCls = state.commitMode === 'auto' ? 'commit-auto' : 'commit-manual';
+        div.innerHTML = `
+      Consumer-${idx} <span class="cg-tag">order-processors</span>
+      <span class="commit-mode ${commitCls}">${commitLabel}</span>
+      <div class="detail">
+        ${isIdle ? '⚠ 空闲' : '分区: ' + c.assignedPartitions.map(p => `<span style="color:${PARTITION_COLORS[p]}">P${p}</span>`).join(', ')}
+        | 已消费: ${c.consumed}
+        ${c.lastFailed ? ' | <span style="color:#f85149;">上次处理失败</span>' : ''}
+      </div>
+    `;
+        container.appendChild(div);
+      });
+    }
+
+    function renderAssignments() {
+      document.getElementById('assignmentDisplay').innerHTML = state.consumers.map((c, idx) => {
+        if (c.assignedPartitions.length === 0)
+          return `<div class="cg-assignment"><span class="dot" style="background:${CONSUMER_COLORS[idx]}"></span>C${idx}: <em style="color:#f85149;">空闲</em></div>`;
+        return `<div class="cg-assignment"><span class="dot" style="background:${CONSUMER_COLORS[idx]}"></span>C${idx} ← ${c.assignedPartitions.map(p => `<span style="color:${PARTITION_COLORS[p]};font-weight:600;">P${p}</span>`).join(', ')}</div>`;
+      }).join('');
+    }
+
+    function renderOffsets() {
+      const container = document.getElementById('offsetDisplay');
+      container.innerHTML = state.partitions.map((p, idx) => {
+        const committed = state.committedOffsets[idx] || 0;
+        const lag = p.nextOffset - committed;
+        return `<div class="offset-row">
+      <span class="label" style="color:${PARTITION_COLORS[idx]}">Partition-${idx}:</span>
+      <span class="value">HW=${p.nextOffset}</span>
+      <span class="committed">committed=${committed}</span>
+      <span class="lag">${lag > 0 ? `lag=${lag}` : 'caught up'}</span>
+    </div>`;
+      }).join('');
+    }
+
+    function renderProducerStats() {
+      document.getElementById('sentCount').textContent = state.producerSent;
+      document.getElementById('ackCount').textContent = state.producerAcked;
+      document.getElementById('failCount').textContent = state.producerFailed;
+      const badge = document.getElementById('ackBadge');
+      badge.textContent = state.ackMode === '0' ? 'acks=0' : state.ackMode === '1' ? 'acks=1' : 'acks=all';
+      badge.className = `ack-badge ${state.ackMode === '0' ? 'ack0' : state.ackMode === '1' ? 'ack1' : 'ackall'}`;
+      document.getElementById('rfDisplay').textContent = state.replicaFactor;
+      document.getElementById('isrDisplay').textContent = `${state.replicaFactor}/${state.replicaFactor}`;
+      document.getElementById('strategyDisplay').textContent =
+        state.partitionStrategy === 'round-robin' ? 'Round Robin' :
+          state.partitionStrategy === 'key-hash' ? 'Key Hash' : 'Random';
+    }
+
+    function renderKeyLegend() {
+      document.getElementById('keyLegend').innerHTML = state.partitions.map((_, i) =>
+        `<div class="key-item"><span class="swatch" style="background:${PARTITION_COLORS[i]}"></span>P${i}</div>`
+      ).join('');
+    }
+
+    function updateInfo() {
+      // ACK tab
+      const ackParts = [];
+      ackParts.push(`【Producer ACK 机制】\n`);
+      ackParts.push(`当前: acks=${state.ackMode}  副本因子=${state.replicaFactor}\n`);
+      ackParts.push(`┌────────────┬──────────────────────────────────────┐`);
+      ackParts.push(`│ acks=0     │ Producer 发送后立即返回，不等待任何确认   │`);
+      ackParts.push(`│            │ 最快，但可能丢消息 (网络丢包即丢失)       │`);
+      ackParts.push(`├────────────┼──────────────────────────────────────┤`);
+      ackParts.push(`│ acks=1     │ 等待 Leader 写入本地 log 后确认          │`);
+      ackParts.push(`│            │ Leader 宕机时未同步到 Follower 的消息丢失 │`);
+      ackParts.push(`├────────────┼──────────────────────────────────────┤`);
+      ackParts.push(`│ acks=all   │ 等待所有 ISR 副本都写入后才确认           │`);
+      ackParts.push(`│ (acks=-1)  │ 最安全，但延迟最高                       │`);
+      ackParts.push(`└────────────┴──────────────────────────────────────┘\n`);
+      ackParts.push(`配合 min.insync.replicas 使用:`);
+      ackParts.push(`  acks=all + min.insync.replicas=2 → 至少2个副本确认才算成功`);
+      ackParts.push(`  ISR 不足时 Producer 收到 NotEnoughReplicasException`);
+      document.getElementById('infoAck').textContent = ackParts.join('\n');
+
+      // Consume tab
+      const conParts = [];
+      conParts.push(`【消费语义 (Delivery Semantics)】\n`);
+      conParts.push(`┌──────────────┬─────────────────────────────────────┐`);
+      conParts.push(`│ At Most Once │ 消息最多消费一次，可能丢失              │`);
+      conParts.push(`│ (至多一次)    │ 实现: 先提交 offset，再处理消息         │`);
+      conParts.push(`│              │ 如果处理失败 → 消息丢失 (offset已提交)  │`);
+      conParts.push(`├──────────────┼─────────────────────────────────────┤`);
+      conParts.push(`│ At Least Once│ 消息至少消费一次，可能重复              │`);
+      conParts.push(`│ (至少一次)    │ 实现: 先处理消息，再提交 offset         │`);
+      conParts.push(`│              │ 如果提交前宕机 → 消息被重新消费         │`);
+      conParts.push(`├──────────────┼─────────────────────────────────────┤`);
+      conParts.push(`│ Exactly Once │ 消息精确消费一次                       │`);
+      conParts.push(`│ (精确一次)    │ 实现: Kafka事务 + 幂等Producer         │`);
+      conParts.push(`│              │ 或: 消费端做幂等去重 (业务层保证)       │`);
+      conParts.push(`└──────────────┴─────────────────────────────────────┘\n`);
+      conParts.push(`点击 "模拟失败" 按钮观察不同提交模式下的行为差异`);
+      document.getElementById('infoConsume').textContent = conParts.join('\n');
+
+      // Offset tab
+      const offParts = [];
+      offParts.push(`【Offset 提交机制】\n`);
+      offParts.push(`当前: ${state.commitMode === 'auto' ? '自动提交 (enable.auto.commit=true)' : state.commitMode === 'manual-before' ? '手动提交 (处理前)' : '手动提交 (处理后)'}\n`);
+      offParts.push(`Consumer 消费位置由 committed offset 决定:`);
+      offParts.push(`  • HW (High Watermark): 分区当前最新 offset`);
+      offParts.push(`  • Committed Offset: Consumer Group 已提交的位置`);
+      offParts.push(`  • Lag = HW - Committed: 消费积压量\n`);
+      offParts.push(`自动提交 (auto.commit.interval.ms=5000):`);
+      offParts.push(`  • 定时提交最新消费位置`);
+      offParts.push(`  • 简单但不精确 — 宕机时可能重复消费\n`);
+      offParts.push(`手动提交:`);
+      offParts.push(`  • commitSync(): 同步提交，阻塞等待`);
+      offParts.push(`  • commitAsync(): 异步提交，不阻塞`);
+      offParts.push(`  • 可精确控制提交时机\n`);
+      offParts.push(`Rebalance 时的影响:`);
+      offParts.push(`  • 新消费者从 committed offset 开始消费`);
+      offParts.push(`  • 未提交的进度会丢失 → 消息被重复消费`);
+      document.getElementById('infoOffset').textContent = offParts.join('\n');
+
+      // Overview tab
+      const ovParts = [];
+      const numP = state.partitionCount;
+      const numC = state.consumerCount;
+      ovParts.push(`【当前配置概览】\n`);
+      ovParts.push(`分区: ${numP} | 副本: ${state.replicaFactor} | 消费者: ${numC}`);
+      ovParts.push(`ACK: ${state.ackMode} | Offset提交: ${state.commitMode}\n`);
+      if (numC > numP) ovParts.push(`⚠ 消费者(${numC}) > 分区(${numP}): ${numC - numP}个空闲`);
+      else if (numC < numP) ovParts.push(`⚠ 消费者(${numC}) < 分区(${numP}): 消费能力不均`);
+      else ovParts.push(`✓ 消费者 = 分区: 最佳配比`);
+      ovParts.push('');
+      ovParts.push(`【完整消息生命周期】`);
+      ovParts.push(`1. Producer 选择分区 (${state.partitionStrategy})`);
+      ovParts.push(`2. 写入 Leader → 等待 ACK (acks=${state.ackMode})`);
+      if (state.replicaFactor > 1) ovParts.push(`3. Leader 同步到 ${state.replicaFactor - 1} 个 Follower`);
+      ovParts.push(`${state.replicaFactor > 1 ? '4' : '3'}. Consumer poll() 拉取消息`);
+      ovParts.push(`${state.replicaFactor > 1 ? '5' : '4'}. 处理消息 + 提交 offset (${state.commitMode})`);
+      ovParts.push('');
+      ovParts.push(`统计: 发送=${state.producerSent} ACK=${state.producerAcked} 失败=${state.producerFailed}`);
+      const totalConsumed = state.consumers.reduce((s, c) => s + c.consumed, 0);
+      const totalLag = state.partitions.reduce((s, p, i) => s + (p.nextOffset - (state.committedOffsets[i] || 0)), 0);
+      ovParts.push(`       已消费=${totalConsumed} 总积压=${totalLag}`);
+      document.getElementById('infoOverview').textContent = ovParts.join('\n');
+    }
+
+    // Event bindings
+    document.getElementById('partitionCount').addEventListener('change', e => { state.partitionCount = +e.target.value; init(); });
+    document.getElementById('replicaFactor').addEventListener('change', e => { state.replicaFactor = +e.target.value; init(); });
+    document.getElementById('consumerCount').addEventListener('change', e => { state.consumerCount = +e.target.value; init(); });
+    document.getElementById('ackMode').addEventListener('change', e => { state.ackMode = e.target.value; renderAll(); });
+    document.getElementById('commitMode').addEventListener('change', e => { state.commitMode = e.target.value; renderAll(); });
+    document.getElementById('partitionStrategy').addEventListener('change', e => { state.partitionStrategy = e.target.value; state.roundRobinIdx = 0; renderAll(); });
+
+    document.getElementById('produceBtn').addEventListener('click', () => {
+      produce(document.getElementById('msgKey').value.trim() || undefined);
+    });
+    document.getElementById('burstBtn').addEventListener('click', () => {
+      const key = document.getElementById('msgKey').value.trim();
+      for (let i = 0; i < 5; i++) setTimeout(() => produce(key || undefined), i * 100);
+    });
+    document.getElementById('consumeBtn').addEventListener('click', () => consumeRound(false));
+    document.getElementById('failBtn').addEventListener('click', () => consumeRound(true));
+    document.getElementById('rebalanceBtn').addEventListener('click', () => { rebalance(false); renderAll(); });
+    document.getElementById('resetBtn').addEventListener('click', init);
+
+    // Presets
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        const presets = {
+          safe: { p: 3, rf: 3, c: 3, ack: 'all', commit: 'manual-after', ps: 'key-hash', key: '' },
+          fast: { p: 4, rf: 1, c: 4, ack: '0', commit: 'auto', ps: 'round-robin', key: '' },
+          atleast: { p: 3, rf: 3, c: 2, ack: '1', commit: 'manual-after', ps: 'round-robin', key: '' },
+          atmost: { p: 3, rf: 2, c: 2, ack: '1', commit: 'manual-before', ps: 'round-robin', key: '' },
+          exactly: { p: 3, rf: 3, c: 3, ack: 'all', commit: 'manual-after', ps: 'key-hash', key: 'order-001' },
+        };
+        const preset = presets[this.dataset.preset];
+        state.partitionCount = preset.p;
+        state.replicaFactor = preset.rf;
+        state.consumerCount = preset.c;
+        state.ackMode = preset.ack;
+        state.commitMode = preset.commit;
+        state.partitionStrategy = preset.ps;
+        document.getElementById('partitionCount').value = preset.p;
+        document.getElementById('replicaFactor').value = preset.rf;
+        document.getElementById('consumerCount').value = preset.c;
+        document.getElementById('ackMode').value = preset.ack;
+        document.getElementById('commitMode').value = preset.commit;
+        document.getElementById('partitionStrategy').value = preset.ps;
+        document.getElementById('msgKey').value = preset.key;
+        init();
+      });
+    });
+
+    // Tabs
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', function () {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        this.classList.add('active');
+        document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+      });
+    });
+
+    // Copy
+    document.getElementById('copyBtn').addEventListener('click', function () {
+      const activeTab = document.querySelector('.tab-content.active .info-text');
+      navigator.clipboard.writeText(activeTab.textContent);
+      this.textContent = '已复制!';
+      this.classList.add('copied');
+      setTimeout(() => { this.textContent = '复制'; this.classList.remove('copied'); }, 1500);
+    });
+
+    // Keyboard
+    document.addEventListener('keydown', e => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.key === 'p') produce(document.getElementById('msgKey').value.trim() || undefined);
+      if (e.key === 'c') consumeRound(false);
+      if (e.key === 'f') consumeRound(true);
+      if (e.key === 'r') { rebalance(false); renderAll(); }
+    });
+
+    init();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

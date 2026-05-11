@@ -1,0 +1,1772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RAG 工作原理</title>
+  <meta name="description" content="交互式演示检索增强生成(RAG)的完整工作流程，包括文档分块、向量嵌入、相似度检索和 LLM 生成过程">
+  <meta name="keywords" content="RAG, 检索增强生成, 向量检索, LLM, 嵌入, 交互式演示">
+  <meta property="og:title" content="RAG 工作原理">
+  <meta property="og:description" content="交互式演示检索增强生成(RAG)的完整工作流程，包括文档分块、向量嵌入、相似度检索和 LLM 生成过程">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+      font-size: 14px;
+      line-height: 1.6
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(ellipse at 30% 0%, rgba(176, 122, 255, 0.05) 0%, transparent 50%), radial-gradient(ellipse at 70% 100%, rgba(77, 163, 255, 0.04) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0
+    }
+
+    code,
+    .mono {
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      grid-template-rows: 1fr 160px;
+      height: 100vh;
+      position: relative;
+      z-index: 1
+    }
+
+    /* Sidebar */
+    .sb {
+      grid-row: 1/3;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 18px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px
+    }
+
+    .sb-header {
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border)
+    }
+
+    .sb h2 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent-purple);
+      letter-spacing: 0.3px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px
+    }
+
+    .sb h2::before {
+      content: '';
+      width: 3px;
+      height: 16px;
+      background: var(--accent-purple);
+      border-radius: 2px
+    }
+
+    .sb h3 {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      font-weight: 600
+    }
+
+    .sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5
+    }
+
+    .preset-btn {
+      display: block;
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 13px;
+      text-align: left;
+      transition: all .2s;
+      margin-bottom: 6px;
+      position: relative;
+      overflow: hidden
+    }
+
+    .preset-btn::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: transparent;
+      border-radius: 0 2px 2px 0;
+      transition: background .2s
+    }
+
+    .preset-btn:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15)
+    }
+
+    .preset-btn.active {
+      border-color: var(--accent-purple);
+      background: linear-gradient(135deg, rgba(176, 122, 255, 0.08) 0%, rgba(176, 122, 255, 0.02) 100%);
+      box-shadow: 0 0 16px var(--glow-purple)
+    }
+
+    .preset-btn.active::before {
+      background: var(--accent-purple)
+    }
+
+    .preset-btn .pb-name {
+      font-weight: 600;
+      font-size: 13px
+    }
+
+    .preset-btn .pb-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 3px;
+      line-height: 1.4
+    }
+
+    .param-group {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px
+    }
+
+    .param-row {
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px
+    }
+
+    .param-row:last-child {
+      margin-bottom: 0
+    }
+
+    .param-row label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      min-width: 70px;
+      flex-shrink: 0
+    }
+
+    .param-row input[type=range] {
+      flex: 1;
+      accent-color: var(--accent-purple);
+      height: 4px
+    }
+
+    .param-row .pval {
+      font-size: 12px;
+      color: var(--accent-purple);
+      min-width: 36px;
+      text-align: right;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      font-weight: 600
+    }
+
+    .param-row select {
+      flex: 1;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-size: 12px;
+      transition: border-color .2s
+    }
+
+    .param-row select:focus {
+      outline: none;
+      border-color: var(--accent-purple);
+      box-shadow: 0 0 0 3px var(--glow-purple)
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 0;
+      cursor: pointer;
+      font-size: 13px;
+      transition: opacity .2s
+    }
+
+    .toggle-row:hover {
+      opacity: 0.85
+    }
+
+    .toggle-sw {
+      width: 34px;
+      height: 18px;
+      background: var(--border);
+      border-radius: 9px;
+      position: relative;
+      transition: all .2s;
+      flex-shrink: 0
+    }
+
+    .toggle-sw::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      background: var(--text-primary);
+      border-radius: 50%;
+      transition: all .2s;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2)
+    }
+
+    .toggle-row.on .toggle-sw {
+      background: var(--accent-green)
+    }
+
+    .toggle-row.on .toggle-sw::after {
+      left: 17px
+    }
+
+    .sb-actions {
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px solid var(--border)
+    }
+
+    .play-btn {
+      width: 100%;
+      padding: 11px;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all .2s;
+      background: linear-gradient(135deg, var(--accent-purple) 0%, #8b5cf6 100%);
+      color: #fff;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(176, 122, 255, 0.2)
+    }
+
+    .play-btn::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+      pointer-events: none
+    }
+
+    .play-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(176, 122, 255, 0.3)
+    }
+
+    .play-btn.stop {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      box-shadow: none
+    }
+
+    .play-btn.stop::after {
+      display: none
+    }
+
+    .reset-btn {
+      width: 100%;
+      padding: 8px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      margin-top: 6px;
+      transition: all .2s
+    }
+
+    .reset-btn:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary)
+    }
+
+    /* Main */
+    .main {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden
+    }
+
+    .main-hd {
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--bg-card) 0%, var(--bg-primary) 100%);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0
+    }
+
+    .main-hd h3 {
+      font-size: 15px;
+      font-weight: 700;
+      flex: 1;
+      color: var(--text-primary)
+    }
+
+    .tag {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-weight: 600;
+      letter-spacing: 0.2px
+    }
+
+    /* Pipeline */
+    .pipeline {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden
+    }
+
+    /* Phase bar */
+    .phase-bar {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--bg-card)
+    }
+
+    .phase-tab {
+      flex: 1;
+      padding: 10px 6px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      border-bottom: 3px solid transparent;
+      color: var(--text-muted);
+      transition: all .2s;
+      cursor: default
+    }
+
+    .phase-tab.done {
+      color: var(--accent-green);
+      border-bottom-color: var(--accent-green);
+      background: rgba(54, 217, 134, 0.03)
+    }
+
+    .phase-tab.active {
+      color: var(--accent-purple);
+      border-bottom-color: var(--accent-purple);
+      background: rgba(176, 122, 255, 0.06)
+    }
+
+    .phase-tab .ph-icon {
+      font-size: 18px;
+      display: block;
+      margin-bottom: 3px
+    }
+
+    /* Stage area */
+    .stage {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      gap: 18px
+    }
+
+    /* Cards within stage */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(8px);
+      transition: border-color .2s, box-shadow .2s
+    }
+
+    .card:hover {
+      border-color: var(--border-hover);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15)
+    }
+
+    .card-hd {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(176, 122, 255, 0.02)
+    }
+
+    .card-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      font-size: 13px
+    }
+
+    /* Document chunks */
+    .chunk {
+      padding: 10px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+      font-size: 12px;
+      transition: all .3s;
+      position: relative;
+      border-left: 3px solid transparent
+    }
+
+    .chunk.highlight {
+      border-color: var(--accent-purple);
+      border-left-color: var(--accent-purple);
+      background: rgba(176, 122, 255, 0.06);
+      box-shadow: 0 0 12px var(--glow-purple)
+    }
+
+    .chunk.selected {
+      border-color: var(--accent-green);
+      border-left-color: var(--accent-green);
+      background: rgba(54, 217, 134, 0.06);
+      box-shadow: 0 0 12px var(--glow-green)
+    }
+
+    .chunk.dimmed {
+      opacity: .3
+    }
+
+    .chunk .chunk-id {
+      color: var(--text-secondary);
+      font-size: 11px;
+      margin-bottom: 4px;
+      font-weight: 500
+    }
+
+    .chunk .chunk-text {
+      color: var(--text-primary);
+      line-height: 1.6
+    }
+
+    .chunk .chunk-meta {
+      display: flex;
+      gap: 10px;
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--text-secondary)
+    }
+
+    .chunk .score-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-top: 6px;
+      overflow: hidden
+    }
+
+    .chunk .score-bar .fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width .5s
+    }
+
+    /* Embedding viz */
+    .embed-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--bg-elevated);
+      font-size: 12px
+    }
+
+    .embed-row:last-child {
+      border: none
+    }
+
+    .embed-vec {
+      display: flex;
+      gap: 1px;
+      flex: 1
+    }
+
+    .embed-cell {
+      width: 7px;
+      height: 22px;
+      border-radius: 2px;
+      transition: all .3s
+    }
+
+    .embed-label {
+      min-width: 65px;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 500
+    }
+
+    .embed-sim {
+      min-width: 55px;
+      text-align: right;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      font-weight: 700;
+      font-size: 12px
+    }
+
+    /* Query box */
+    .query-box {
+      background: var(--bg-input);
+      border: 2px solid var(--accent-purple);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      margin-bottom: 14px;
+      box-shadow: 0 0 16px var(--glow-purple);
+      position: relative
+    }
+
+    .query-box::before {
+      content: '';
+      position: absolute;
+      top: -1px;
+      left: 20px;
+      right: 20px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent-purple), transparent);
+      border-radius: 1px
+    }
+
+    .query-box .qb-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 500
+    }
+
+    .query-box .qb-text {
+      font-size: 15px;
+      color: var(--accent-purple);
+      font-weight: 600;
+      line-height: 1.5
+    }
+
+    /* LLM response */
+    .llm-resp {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      line-height: 1.8;
+      font-size: 14px
+    }
+
+    .llm-resp .cursor {
+      display: inline-block;
+      width: 2px;
+      height: 16px;
+      background: var(--accent-purple);
+      animation: blink 1s infinite;
+      vertical-align: text-bottom;
+      margin-left: 2px
+    }
+
+    @keyframes blink {
+
+      0%,
+      50% {
+        opacity: 1
+      }
+
+      51%,
+      100% {
+        opacity: 0
+      }
+    }
+
+    .llm-resp .ref {
+      color: var(--accent-blue);
+      font-size: 12px;
+      background: rgba(77, 163, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      cursor: default;
+      font-weight: 500
+    }
+
+    .llm-resp .hallucination {
+      color: var(--accent-red);
+      background: rgba(255, 92, 108, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-decoration: line-through
+    }
+
+    /* Arrows */
+    .arrow-right {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 20px;
+      min-width: 30px;
+      flex-shrink: 0
+    }
+
+    /* Narration */
+    .narration {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-card);
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      min-height: 56px
+    }
+
+    .narration .step-num {
+      background: rgba(176, 122, 255, 0.15);
+      color: var(--accent-purple);
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      flex-shrink: 0;
+      font-family: 'JetBrains Mono', monospace
+    }
+
+    .narration .step-text {
+      font-size: 14px;
+      line-height: 1.6
+    }
+
+    .step-text .hl {
+      color: var(--accent-purple);
+      font-weight: 600
+    }
+
+    .step-text .good {
+      color: var(--accent-green);
+      font-weight: 600
+    }
+
+    .step-text .bad {
+      color: var(--accent-red);
+      font-weight: 600
+    }
+
+    .step-text code {
+      background: var(--bg-elevated);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--accent-orange)
+    }
+
+    /* Prompt */
+    .prompt-area {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden
+    }
+
+    .prompt-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px
+    }
+
+    .prompt-header h3 {
+      font-size: 13px;
+      color: var(--text-secondary);
+      font-weight: 600
+    }
+
+    .copy-btn {
+      padding: 6px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all .2s;
+      position: relative;
+      overflow: hidden
+    }
+
+    .copy-btn::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+      pointer-events: none
+    }
+
+    .copy-btn:hover {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2)
+    }
+
+    .copy-btn.copied {
+      background: var(--accent-green);
+      border-color: var(--accent-green);
+      color: #fff
+    }
+
+    .prompt-text {
+      flex: 1;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 12px;
+      color: var(--text-primary);
+      line-height: 1.7;
+      overflow-y: auto;
+      white-space: pre-wrap
+    }
+
+    /* 2D scatter for embedding */
+    .scatter-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      margin-bottom: 10px
+    }
+
+    .scatter-dot {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      transition: all .6s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: default;
+      z-index: 2;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2)
+    }
+
+    .scatter-dot.query {
+      width: 16px;
+      height: 16px;
+      border: 2px solid #fff;
+      z-index: 3;
+      box-shadow: 0 0 12px rgba(176, 122, 255, 0.4)
+    }
+
+    .scatter-dot .dot-tip {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      padding: 3px 8px;
+      border-radius: 5px;
+      font-size: 10px;
+      white-space: nowrap;
+      display: none;
+      pointer-events: none;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2)
+    }
+
+    .scatter-dot:hover .dot-tip {
+      display: block
+    }
+
+    .scatter-line {
+      position: absolute;
+      pointer-events: none;
+      z-index: 1
+    }
+
+    .scatter-axis {
+      position: absolute;
+      font-size: 10px;
+      color: var(--text-muted)
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-hover)
+    }
+
+    /* Animations */
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-12px) scale(0.98)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0) scale(1)
+      }
+    }
+
+    .chunk {
+      animation: slideIn 0.3s ease-out
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <div class="sb">
+      <div class="sb-header">
+        <h2>RAG 检索增强生成</h2>
+        <p class="sub">Retrieval-Augmented Generation 全流程可视化</p>
+      </div>
+
+      <div>
+        <h3>预设场景</h3>
+        <div id="presets"></div>
+      </div>
+
+      <div>
+        <h3>分块策略</h3>
+        <div class="param-group">
+          <div class="param-row">
+            <label>Chunk 大小</label>
+            <input type="range" min="100" max="500" step="50" value="200" id="chunkSize" oninput="updateParam()">
+            <span class="pval" id="chunkSizeVal">200</span>
+          </div>
+          <div class="param-row">
+            <label>重叠度</label>
+            <input type="range" min="0" max="100" step="10" value="50" id="overlap" oninput="updateParam()">
+            <span class="pval" id="overlapVal">50</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3>检索参数</h3>
+        <div class="param-group">
+          <div class="param-row">
+            <label>Top-K</label>
+            <input type="range" min="1" max="5" step="1" value="3" id="topK" oninput="updateParam()">
+            <span class="pval" id="topKVal">3</span>
+          </div>
+          <div class="param-row">
+            <label>相似度阈值</label>
+            <input type="range" min="0.3" max="0.9" step="0.05" value="0.5" id="threshold" oninput="updateParam()">
+            <span class="pval" id="thresholdVal">0.50</span>
+          </div>
+          <div class="param-row">
+            <label>检索方式</label>
+            <select id="searchMode" onchange="updateParam()">
+              <option value="dense">向量检索 (Dense)</option>
+              <option value="sparse">关键词检索 (Sparse/BM25)</option>
+              <option value="hybrid" selected>混合检索 (Hybrid)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3>高级选项</h3>
+        <div class="toggle-row" id="togRerank" onclick="togOpt('rerank')">
+          <div class="toggle-sw"></div><span>Rerank 重排序</span>
+        </div>
+        <div class="toggle-row" id="togHyde" onclick="togOpt('hyde')">
+          <div class="toggle-sw"></div><span>HyDE 假设文档</span>
+        </div>
+        <div class="toggle-row" id="togCite" onclick="togOpt('cite')">
+          <div class="toggle-sw"></div><span>引用溯源</span>
+        </div>
+      </div>
+
+      <div>
+        <h3>动画速度</h3>
+        <div class="param-row">
+          <input type="range" min="0.5" max="3" step="0.5" value="1" id="speedSlider"
+            oninput="state.speed=+this.value;document.getElementById('speedVal').textContent=this.value+'x'">
+          <span class="pval" id="speedVal">1x</span>
+        </div>
+      </div>
+
+      <div class="sb-actions">
+        <button class="play-btn" id="playBtn" onclick="togglePlay()">▶ 运行 RAG 流程</button>
+        <button class="reset-btn" onclick="resetSim()">重置</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="main-hd">
+        <h3 id="headerTitle">RAG Pipeline — 企业知识库问答</h3>
+        <span class="tag" id="headerTag"
+          style="background:color-mix(in srgb, var(--accent-purple) 12%, transparent);color:var(--accent-purple)">Hybrid
+          Search + Rerank</span>
+      </div>
+      <div class="phase-bar" id="phaseBar"></div>
+      <div class="pipeline">
+        <div class="stage" id="stage"></div>
+        <div class="narration" id="narration">
+          <span class="step-num">0</span>
+          <div class="step-text">选择预设场景并调整参数，然后点击「运行 RAG 流程」观看完整演示。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="prompt-area">
+      <div class="prompt-header">
+        <h3>生成的学习提示词</h3>
+        <button class="copy-btn" id="copyBtn" onclick="copyPrompt()">复制</button>
+      </div>
+      <div class="prompt-text" id="promptText"></div>
+    </div>
+  </div>
+
+  <script>
+    function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+    function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+
+    // ======================== KNOWLEDGE BASE ========================
+    const PRESETS = [
+      {
+        id: 'enterprise', name: '企业知识库问答', desc: '内部文档检索 + 精确回答',
+        query: '公司的年假制度是怎样的？入职不满一年有年假吗？',
+        docs: [
+          { title: '员工手册 - 休假制度', text: '公司实行带薪年假制度。员工入职满一年后，可享受5天年假；满三年享受10天；满十年享受15天。年假需提前一周申请，经直属上级批准后生效。未满一年的新员工可按入职月份比例折算年假天数，每满一个月折算0.5天。' },
+          { title: '员工手册 - 薪资福利', text: '公司提供五险一金、补充医疗保险、年度体检等福利。薪资结构包括基本工资、绩效奖金和年终奖。年终奖根据公司业绩和个人考核结果发放，一般为1-3个月工资。' },
+          { title: '员工手册 - 考勤管理', text: '工作时间为周一至周五，上午9:00至下午6:00，午休时间为12:00-13:00。迟到早退超过30分钟按旷工半天处理。每月允许3次弹性打卡（前后30分钟）。远程办公需提前申请。' },
+          { title: 'IT 运维手册', text: 'VPN 连接方式：下载 GlobalProtect 客户端，服务器地址 vpn.company.com，使用域账号登录。常见问题：连接超时请检查网络设置，密码错误请到 IT 自助平台重置。' },
+          { title: '新员工入职指南', text: '入职第一天请携带身份证原件、学历证书原件、离职证明。入职培训为期三天，包括公司文化、制度介绍、系统权限开通等。入职当月起即可享受公司福利，试用期为三个月。' },
+          { title: '员工手册 - 请假流程', text: '请假需在 OA 系统提交申请。病假需附医院证明；事假提前3天申请；年假提前7天申请。连续请假超过3天需部门总监审批。哺乳假、婚假、丧假等按国家规定执行。' },
+        ]
+      },
+      {
+        id: 'code', name: '代码文档问答', desc: 'API 文档检索 + 代码示例',
+        query: 'React useEffect 的 cleanup 函数什么时候执行？怎么避免内存泄漏？',
+        docs: [
+          { title: 'React Hooks - useEffect', text: 'useEffect 接收两个参数：副作用函数和依赖数组。副作用函数可以返回一个 cleanup 函数。cleanup 函数在组件卸载时执行，以及在下一次 effect 执行前执行。这个机制用于清理订阅、取消网络请求、清除定时器等。' },
+          { title: 'React Hooks - useEffect 依赖', text: '依赖数组决定了 effect 的执行时机。空数组 [] 表示只在挂载时执行一次；不传数组则每次渲染都执行；传入特定值则在这些值变化时执行。注意：对象和数组作为依赖时需要使用 useMemo 或比较引用。' },
+          { title: 'React Hooks - useState', text: 'useState 是最基础的 Hook，用于在函数组件中管理状态。接收初始值作为参数，返回状态值和更新函数的数组。更新函数可以接收新值或更新函数。状态更新是异步的，多次更新会被批量处理。' },
+          { title: 'React 性能优化', text: '常见的性能优化手段：React.memo 避免不必要的重渲染；useMemo 缓存计算结果；useCallback 缓存回调函数；使用 key 帮助 React 识别列表变化。避免在渲染阶段执行副作用。' },
+          { title: 'React Hooks - 内存泄漏', text: '常见的内存泄漏场景：1) 组件卸载后仍在 setState，解决方案是在 cleanup 中设置标志位或使用 AbortController；2) 未清除的定时器，需在 cleanup 中 clearInterval；3) 未取消的事件监听，需在 cleanup 中 removeEventListener。' },
+          { title: 'React Router 使用指南', text: 'React Router v6 使用 createBrowserRouter 创建路由。Routes 和 Route 组件定义路由结构。useNavigate 用于编程式导航，useParams 获取路由参数，useSearchParams 处理查询参数。' },
+        ]
+      },
+      {
+        id: 'medical', name: '医学知识问答', desc: '精确检索 + 谨慎回答（高风险领域）',
+        query: '服用阿司匹林期间可以喝酒吗？有什么风险？',
+        docs: [
+          { title: '阿司匹林药品说明书', text: '阿司匹林（Aspirin）为非甾体抗炎药。适应症包括：镇痛解热、抗炎、抗血小板聚集。不良反应：胃肠道反应（恶心、呕吐、胃痛）、出血倾向。禁忌：活动性消化性溃疡、严重肝肾功能不全。注意事项：服药期间应避免饮酒，酒精会增加胃肠道出血风险。' },
+          { title: '药物相互作用手册', text: '阿司匹林与酒精的相互作用：两者均对胃黏膜有刺激作用，合用会显著增加消化道出血风险。酒精还会增强阿司匹林的抗凝血作用，可能导致出血时间延长。长期饮酒者服用阿司匹林时肝毒性风险增加。建议服药前后至少间隔24小时避免饮酒。' },
+          { title: '布洛芬药品说明书', text: '布洛芬（Ibuprofen）为非甾体抗炎药。主要用于缓解轻至中度疼痛、退热。常见不良反应包括胃肠道不适、头晕。与阿司匹林合用可能降低阿司匹林的抗血小板作用。肾功能不全者慎用。' },
+          { title: '高血压用药指南', text: '常用降压药分类：ACE 抑制剂（如卡托普利）、ARB（如缬沙坦）、钙通道阻滞剂（如氨氯地平）、β受体阻滞剂（如美托洛尔）、利尿剂（如氢氯噻嗪）。用药原则：从低剂量开始，优先选择长效制剂。' },
+          { title: '消化道出血预防', text: '高危人群（老年人、有溃疡史、长期服用 NSAIDs）应考虑联用质子泵抑制剂（PPI）如奥美拉唑保护胃黏膜。避免空腹服用阿司匹林。出现黑便、呕血等症状应立即就医。' },
+          { title: '日常保健常识', text: '健康成年人每日饮水量建议2000ml左右。均衡饮食应包含蛋白质、碳水化合物、脂肪、维生素和矿物质。每周建议进行至少150分钟中等强度有氧运动。保证7-8小时充足睡眠。' },
+        ]
+      },
+    ];
+
+    // ======================== SIMULATED EMBEDDINGS ========================
+    function pseudoEmbed(text, seed) {
+      const dims = 24;
+      const vec = [];
+      let h = seed || 0;
+      for (let i = 0; i < text.length; i++) { h = ((h << 5) - h + text.charCodeAt(i)) | 0; }
+      for (let i = 0; i < dims; i++) {
+        h = ((h * 1103515245 + 12345) & 0x7fffffff);
+        vec.push((h % 200 - 100) / 100);
+      }
+      const mag = Math.sqrt(vec.reduce((s, v) => s + v * v, 0));
+      return vec.map(v => v / mag);
+    }
+
+    function cosineSim(a, b) {
+      let dot = 0, ma = 0, mb = 0;
+      for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; ma += a[i] * a[i]; mb += b[i] * b[i]; }
+      return dot / (Math.sqrt(ma) * Math.sqrt(mb));
+    }
+
+    // Bias similarity so relevant chunks score higher
+    function biasedSimilarity(queryIdx, chunkIdx, presetId) {
+      const relevanceMap = {
+        enterprise: { 0: [0, 5], 1: [0, 1], 2: [2, 4] },
+        code: { 0: [0, 4], 1: [0, 1], 2: [1, 3] },
+        medical: { 0: [0, 1], 1: [0, 4], 2: [1, 2] },
+      };
+      const relevant = relevanceMap[presetId]?.[0] || [0, 1];
+      const isRelevant = relevant.includes(chunkIdx);
+      const base = 0.3 + Math.random() * 0.25;
+      return isRelevant ? 0.75 + Math.random() * 0.2 : base;
+    }
+
+    // ======================== STATE ========================
+    const state = {
+      preset: 'enterprise',
+      chunkSize: 200, overlap: 50, topK: 3, threshold: 0.5,
+      searchMode: 'hybrid', rerank: false, hyde: false, cite: false,
+      speed: 1, playing: false, phase: -1, step: -1,
+    };
+
+    // ======================== PHASES ========================
+    const PHASES = [
+      { id: 'ingest', icon: '📄', label: '文档加载' },
+      { id: 'chunk', icon: '✂️', label: '文本分块' },
+      { id: 'embed', icon: '🧮', label: '向量化' },
+      { id: 'query', icon: '❓', label: '查询处理' },
+      { id: 'retrieve', icon: '🔍', label: '检索匹配' },
+      { id: 'rerank', icon: '📊', label: '重排序' },
+      { id: 'generate', icon: '🤖', label: 'LLM 生成' },
+    ];
+
+    function getActivePhases() {
+      const p = [...PHASES];
+      if (!state.rerank) return p.filter(x => x.id !== 'rerank');
+      return p;
+    }
+
+    // ======================== BUILD STEPS ========================
+    function buildSteps() {
+      const preset = PRESETS.find(p => p.id === state.preset);
+      const docs = preset.docs;
+      const query = preset.query;
+      const steps = [];
+
+      // Phase 0: Document Loading
+      steps.push({
+        phase: 'ingest',
+        narration: `加载 <span class="hl">${docs.length} 篇文档</span>到 RAG 系统。在实际场景中，这些文档可能来自 PDF、网页、数据库或 API。`,
+        render: () => renderIngest(docs)
+      });
+
+      // Phase 1: Chunking
+      steps.push({
+        phase: 'chunk',
+        narration: `将文档按 <code>chunk_size=${state.chunkSize}</code>、<code>overlap=${state.overlap}</code> 进行分块。重叠部分确保语义不在块边界处断裂。分块策略直接影响检索质量。`,
+        render: () => renderChunking(docs)
+      });
+
+      // Phase 2: Embedding
+      steps.push({
+        phase: 'embed',
+        narration: `使用 Embedding 模型（如 <code>text-embedding-3-small</code>）将每个文本块转换为<span class="hl">高维向量</span>。语义相近的文本在向量空间中距离更近。`,
+        render: () => renderEmbedding(docs)
+      });
+
+      // Phase 3: Query
+      if (state.hyde) {
+        steps.push({
+          phase: 'query',
+          narration: `<span class="hl">HyDE（假设文档嵌入）</span>：先让 LLM 生成一个假设性的答案文档，再将这个假设文档进行向量化。这样检索时用的是"答案风格"的向量，往往能匹配到更相关的文档。`,
+          render: () => renderQueryHyde(query)
+        });
+      } else {
+        steps.push({
+          phase: 'query',
+          narration: `将用户查询 <span class="hl">"${query.substring(0, 25)}..."</span> 转换为查询向量。${state.searchMode === 'hybrid' ? '混合检索模式下，同时进行向量检索和关键词(BM25)检索。' : state.searchMode === 'dense' ? '使用纯向量检索，基于语义相似度匹配。' : '使用关键词检索(BM25)，基于词频匹配。'}`,
+          render: () => renderQuery(query)
+        });
+      }
+
+      // Phase 4: Retrieval
+      steps.push({
+        phase: 'retrieve',
+        narration: `在向量数据库中进行<span class="hl">近似最近邻(ANN)搜索</span>，找到与查询最相似的 Top-${state.topK} 个文本块。${state.searchMode === 'hybrid' ? '混合检索通过 RRF（倒数排名融合）合并向量和关键词两路结果。' : ''}相似度低于阈值 ${state.threshold} 的结果将被过滤。`,
+        render: () => renderRetrieval(docs, query)
+      });
+
+      // Phase 5: Rerank (optional)
+      if (state.rerank) {
+        steps.push({
+          phase: 'rerank',
+          narration: `<span class="hl">Cross-Encoder 重排序</span>：将查询和每个候选块拼接后送入重排序模型（如 Cohere Rerank / bge-reranker），获得更精确的相关性分数。Cross-Encoder 比 Bi-Encoder 更准确但更慢，所以只对 Top-K 结果重排。`,
+          render: () => renderRerank(docs, query)
+        });
+      }
+
+      // Phase 6: Generation
+      steps.push({
+        phase: 'generate',
+        narration: `将检索到的文本块作为<span class="hl">上下文注入 Prompt</span>，连同用户问题一起发送给 LLM。模型基于提供的上下文生成回答，${state.cite ? '并标注每段回答的<span class="good">来源引用</span>。' : ''}这就是"检索增强"的核心——让 LLM 基于事实回答，而非凭记忆编造。`,
+        render: () => renderGeneration(docs, query)
+      });
+
+      return steps;
+    }
+
+    // ======================== RENDERERS ========================
+    function renderIngest(docs) {
+      let html = '<div style="display:flex;gap:16px;flex:1">';
+      html += '<div class="card" style="flex:1"><div class="card-hd">📁 原始文档</div><div class="card-body">';
+      docs.forEach((d, i) => {
+        html += `<div class="chunk highlight" style="border-color:var(--accent-blue);background:color-mix(in srgb, var(--accent-blue) 3%, transparent)">
+      <div class="chunk-id">📄 文档 ${i + 1}</div>
+      <div style="color:var(--accent-blue);font-weight:600;margin-bottom:4px">${esc(d.title)}</div>
+      <div class="chunk-text">${esc(d.text.substring(0, 80))}...</div>
+      <div class="chunk-meta"><span>${d.text.length} 字符</span></div>
+    </div>`;
+      });
+      html += '</div></div>';
+
+      html += '<div class="arrow-right">→</div>';
+      html += '<div class="card" style="flex:1"><div class="card-hd">⚙️ 文档预处理</div><div class="card-body">';
+      html += `<div style="line-height:2;font-size:12px">
+    <div>1. <span style="color:var(--accent-blue)">格式解析</span> — 提取纯文本内容</div>
+    <div>2. <span style="color:var(--accent-orange)">元数据提取</span> — 标题、来源、时间</div>
+    <div>3. <span style="color:var(--accent-green)">文本清洗</span> — 去除噪音、规范化</div>
+    <div>4. <span style="color:var(--accent-purple)">语言检测</span> — 确定分词策略</div>
+  </div>
+  <div style="margin-top:16px;padding:10px;background:var(--bg-primary);border-radius:6px;font-size:11px;color:var(--text-secondary)">
+    💡 文档质量直接决定 RAG 效果。<br>"Garbage in, garbage out" 在 RAG 中尤其明显。
+  </div>`;
+      html += '</div></div></div>';
+      return html;
+    }
+
+    function renderChunking(docs) {
+      let html = '<div style="display:flex;gap:16px;flex:1">';
+      html += '<div class="card" style="flex:1.2"><div class="card-hd">✂️ 分块结果</div><div class="card-body">';
+      const chunks = simulateChunks(docs);
+      chunks.forEach((c, i) => {
+        html += `<div class="chunk ${i < 3 ? 'highlight' : ''}">
+      <div class="chunk-id">Chunk #${i} · 来自「${esc(c.source)}」</div>
+      <div class="chunk-text">${esc(c.text)}</div>
+      <div class="chunk-meta"><span>${c.text.length} 字符</span>${c.hasOverlap ? '<span style="color:var(--accent-orange)">有重叠</span>' : ''}</div>
+    </div>`;
+      });
+      html += '</div></div>';
+
+      html += '<div class="arrow-right">→</div>';
+      html += `<div class="card" style="flex:0.8"><div class="card-hd">📐 分块策略对比</div><div class="card-body">
+    <div style="font-size:12px;line-height:2">
+      <div style="color:var(--accent-purple);font-weight:600;margin-bottom:4px">当前配置</div>
+      <div>Chunk Size: <code>${state.chunkSize}</code> 字符</div>
+      <div>Overlap: <code>${state.overlap}</code> 字符</div>
+      <div>生成块数: <code>${chunks.length}</code></div>
+    </div>
+    <div style="margin-top:12px;padding:10px;background:var(--bg-primary);border-radius:6px;font-size:11px;line-height:1.8">
+      <div style="color:var(--accent-green);font-weight:600;margin-bottom:4px">策略权衡</div>
+      <div><span style="color:var(--accent-orange)">块太大</span> → 噪音多，检索不精确</div>
+      <div><span style="color:var(--accent-orange)">块太小</span> → 丢失上下文，语义不完整</div>
+      <div><span style="color:var(--accent-orange)">无重叠</span> → 边界处信息可能断裂</div>
+      <div><span style="color:var(--accent-green)">推荐</span> → 200-500字符，20%重叠</div>
+    </div>
+    <div style="margin-top:12px;padding:10px;background:var(--bg-primary);border-radius:6px;font-size:11px;line-height:1.8">
+      <div style="color:var(--accent-blue);font-weight:600;margin-bottom:4px">高级分块方法</div>
+      <div>• 递归字符分割 (LangChain 默认)</div>
+      <div>• 按语义断句分割</div>
+      <div>• Markdown / HTML 结构分割</div>
+      <div>• 滑动窗口 + 句子边界</div>
+    </div>
+  </div></div></div>`;
+      return html;
+    }
+
+    function renderEmbedding(docs) {
+      const chunks = simulateChunks(docs);
+      let html = '<div style="display:flex;gap:16px;flex:1">';
+
+      // 2D scatter
+      html += '<div class="card" style="flex:1"><div class="card-hd">🗺️ 向量空间可视化 (t-SNE 降维)</div><div class="card-body">';
+      html += '<div class="scatter-wrap" id="scatterWrap">';
+      const positions = chunks.map((_, i) => {
+        const angle = (i / chunks.length) * Math.PI * 2 + (i % 3) * 0.3;
+        const r = 25 + (i % 4) * 12 + Math.sin(i * 1.7) * 8;
+        return { x: 50 + r * Math.cos(angle), y: 50 + r * Math.sin(angle) };
+      });
+      // Group by source — color by document
+      const colors = [cssVar('--accent-blue'), cssVar('--accent-orange'), cssVar('--accent-green'), cssVar('--accent-red'), cssVar('--accent-purple'), cssVar('--accent-cyan')];
+      chunks.forEach((c, i) => {
+        const col = colors[c.docIdx % colors.length];
+        html += `<div class="scatter-dot" style="left:${positions[i].x}%;top:${positions[i].y}%;background:${col}"><div class="dot-tip">${esc(c.text.substring(0, 30))}...</div></div>`;
+      });
+      html += '</div>';
+      html += '<div style="font-size:10px;color:var(--text-secondary);display:flex;flex-wrap:wrap;gap:8px">';
+      docs.forEach((d, i) => {
+        html += `<span><span style="color:${colors[i % colors.length]}">●</span> ${esc(d.title.substring(0, 15))}</span>`;
+      });
+      html += '</div></div></div>';
+
+      // Embedding vectors
+      html += '<div class="card" style="flex:1"><div class="card-hd">🧮 Embedding 向量</div><div class="card-body">';
+      chunks.slice(0, 6).forEach((c, i) => {
+        const vec = pseudoEmbed(c.text, i);
+        html += `<div class="embed-row"><div class="embed-label">Chunk #${i}</div><div class="embed-vec">`;
+        vec.forEach(v => {
+          const intensity = Math.round((v + 1) / 2 * 255);
+          const r = v > 0 ? intensity : 60;
+          const b = v < 0 ? 255 - intensity : 60;
+          html += `<div class="embed-cell" style="background:rgb(${r},60,${b})"></div>`;
+        });
+        html += `</div><div style="font-size:10px;color:var(--text-secondary)">[${vec.slice(0, 3).map(v => v.toFixed(2)).join(', ')}...]</div></div>`;
+      });
+      html += `<div style="margin-top:8px;font-size:11px;color:var(--text-secondary)">
+    实际维度: 1536 (text-embedding-3-small)<br>
+    这里展示 24 维简化版本，颜色代表值的正负
+  </div></div></div></div>`;
+      return html;
+    }
+
+    function renderQuery(query) {
+      let html = '<div style="display:flex;gap:16px;flex:1">';
+      html += `<div class="card" style="flex:1"><div class="card-hd">❓ 用户查询</div><div class="card-body">
+    <div class="query-box"><div class="qb-label">User Query</div><div class="qb-text">${esc(query)}</div></div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">↓ Embedding Model</div>
+    <div class="embed-row" style="border:1px solid var(--accent-purple);border-radius:6px;padding:8px">
+      <div class="embed-label" style="color:var(--accent-purple)">Query Vec</div>
+      <div class="embed-vec">`;
+      const qVec = pseudoEmbed(query, 99);
+      qVec.forEach(v => {
+        const intensity = Math.round((v + 1) / 2 * 255);
+        html += `<div class="embed-cell" style="background:rgb(${v > 0 ? intensity : 60},60,${v < 0 ? 255 - intensity : 60})"></div>`;
+      });
+      html += `</div></div></div></div>`;
+
+      html += '<div class="arrow-right">→</div>';
+      html += `<div class="card" style="flex:1"><div class="card-hd">🔍 检索策略: ${state.searchMode === 'hybrid' ? '混合检索' : state.searchMode === 'dense' ? '向量检索' : '关键词检索'}</div><div class="card-body">`;
+
+      if (state.searchMode === 'hybrid') {
+        html += `<div style="display:flex;gap:12px">
+      <div style="flex:1;padding:10px;background:var(--bg-primary);border-radius:6px;border:1px solid color-mix(in srgb, var(--accent-blue) 25%, transparent)">
+        <div style="color:var(--accent-blue);font-weight:600;font-size:12px;margin-bottom:6px">向量检索 (Dense)</div>
+        <div style="font-size:11px;color:var(--text-secondary);line-height:1.6">
+          基于语义相似度<br>
+          cosine_similarity(q, d)<br>
+          <span style="color:var(--accent-green)">✓ 理解同义词/语义</span><br>
+          <span style="color:var(--accent-red)">✗ 可能忽略关键词</span>
+        </div>
+      </div>
+      <div style="flex:1;padding:10px;background:var(--bg-primary);border-radius:6px;border:1px solid color-mix(in srgb, var(--accent-orange) 25%, transparent)">
+        <div style="color:var(--accent-orange);font-weight:600;font-size:12px;margin-bottom:6px">关键词检索 (BM25)</div>
+        <div style="font-size:11px;color:var(--text-secondary);line-height:1.6">
+          基于词频统计<br>
+          BM25(q_terms, d)<br>
+          <span style="color:var(--accent-green)">✓ 精确匹配关键词</span><br>
+          <span style="color:var(--accent-red)">✗ 不理解语义</span>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:10px;padding:8px;background:color-mix(in srgb, var(--accent-purple) 6%, transparent);border:1px solid color-mix(in srgb, var(--accent-purple) 19%, transparent);border-radius:6px;font-size:11px;text-align:center;color:var(--accent-purple)">
+      RRF (Reciprocal Rank Fusion) 融合两路结果<br>
+      score = Σ 1/(k + rank_i)
+    </div>`;
+      } else if (state.searchMode === 'dense') {
+        html += `<div style="padding:12px;font-size:12px;line-height:2">
+      <div style="color:var(--accent-blue);font-weight:600">向量检索 (ANN Search)</div>
+      <div>索引类型: HNSW / IVF-PQ</div>
+      <div>距离度量: Cosine Similarity</div>
+      <div>向量数据库: Pinecone / Milvus / Qdrant</div>
+      <div style="margin-top:8px;color:var(--text-secondary)">将查询向量与所有文档向量计算相似度，返回最近的 K 个</div>
+    </div>`;
+      } else {
+        html += `<div style="padding:12px;font-size:12px;line-height:2">
+      <div style="color:var(--accent-orange);font-weight:600">关键词检索 (BM25)</div>
+      <div>TF-IDF 变体，考虑词频和文档长度</div>
+      <div>搜索引擎: Elasticsearch / OpenSearch</div>
+      <div style="margin-top:8px;color:var(--text-secondary)">提取查询关键词，按 BM25 公式计算每个文档的匹配分数</div>
+    </div>`;
+      }
+      html += '</div></div></div>';
+      return html;
+    }
+
+    function renderQueryHyde(query) {
+      let html = '<div style="display:flex;gap:16px;flex:1">';
+      html += `<div class="card" style="flex:1"><div class="card-hd">❓ 用户查询</div><div class="card-body">
+    <div class="query-box"><div class="qb-label">User Query</div><div class="qb-text">${esc(query)}</div></div>
+    <div style="text-align:center;color:var(--text-secondary);font-size:12px;margin:8px 0">↓ LLM 生成假设答案</div>
+    <div style="padding:10px;background:color-mix(in srgb, var(--accent-orange) 6%, transparent);border:1px solid color-mix(in srgb, var(--accent-orange) 19%, transparent);border-radius:6px;font-size:12px;line-height:1.6">
+      <div style="color:var(--accent-orange);font-weight:600;margin-bottom:4px">🤔 HyDE 假设文档</div>
+      <div style="color:var(--text-primary)">"根据公司规定，入职不满一年的员工可以按比例折算年假天数，每满一个月折算0.5天年假..."</div>
+    </div>
+    <div style="text-align:center;color:var(--text-secondary);font-size:12px;margin:8px 0">↓ 对假设文档做 Embedding</div>
+    <div style="color:var(--accent-purple);font-size:11px;padding:8px;background:var(--bg-primary);border-radius:6px;text-align:center">
+      用假设答案的向量去检索 → 更容易匹配到真实答案文档
+    </div>
+  </div></div>`;
+      html += '<div class="arrow-right">→</div>';
+      html += `<div class="card" style="flex:1"><div class="card-hd">💡 HyDE 原理</div><div class="card-body">
+    <div style="font-size:12px;line-height:2">
+      <div style="color:var(--accent-purple);font-weight:600;margin-bottom:8px">为什么 HyDE 有效？</div>
+      <div>1. 用户查询通常是<span style="color:var(--accent-orange)">问句形式</span></div>
+      <div>2. 文档内容通常是<span style="color:var(--accent-green)">陈述句形式</span></div>
+      <div>3. 两者的向量分布<span style="color:var(--accent-red)">天然不同</span></div>
+      <div>4. HyDE 将问句转换为"伪陈述句"</div>
+      <div>5. 伪陈述句的向量与真实文档<span style="color:var(--accent-green)">更接近</span></div>
+    </div>
+    <div style="margin-top:12px;padding:8px;background:var(--bg-primary);border-radius:6px;font-size:11px;color:var(--text-secondary);line-height:1.6">
+      ⚠️ HyDE 的局限：<br>
+      • 增加一次 LLM 调用的延迟和成本<br>
+      • 如果假设答案方向错误，检索结果反而更差<br>
+      • 对事实性强的查询效果好，开放性问题效果差
+    </div>
+  </div></div></div>`;
+      return html;
+    }
+
+    function renderRetrieval(docs, query) {
+      const chunks = simulateChunks(docs);
+      const results = chunks.map((c, i) => ({
+        ...c, idx: i,
+        score: biasedSimilarity(0, c.docIdx, state.preset),
+      })).sort((a, b) => b.score - a.score);
+
+      let html = '<div style="display:flex;gap:16px;flex:1">';
+
+      // All chunks with scores
+      html += '<div class="card" style="flex:1"><div class="card-hd">🗄️ 向量数据库 (所有块)</div><div class="card-body">';
+      results.forEach((r, i) => {
+        const isTop = i < state.topK && r.score >= state.threshold;
+        const belowThreshold = r.score < state.threshold;
+        html += `<div class="chunk ${isTop ? 'selected' : belowThreshold ? 'dimmed' : ''}">
+      <div class="chunk-id">Chunk #${r.idx} · ${esc(r.source)}</div>
+      <div class="chunk-text">${esc(r.text.substring(0, 60))}...</div>
+      <div class="score-bar"><div class="fill" style="width:${r.score * 100}%;background:${isTop ? 'var(--accent-green)' : belowThreshold ? 'var(--text-muted)' : 'var(--accent-orange)'}"></div></div>
+      <div class="chunk-meta">
+        <span style="color:${isTop ? 'var(--accent-green)' : 'var(--text-secondary)'}">相似度: ${r.score.toFixed(3)}</span>
+        ${isTop ? '<span style="color:var(--accent-green)">✓ 命中</span>' : belowThreshold ? '<span style="color:var(--text-muted)">低于阈值</span>' : ''}
+      </div>
+    </div>`;
+      });
+      html += '</div></div>';
+
+      html += '<div class="arrow-right">→</div>';
+
+      // Top-K results
+      html += `<div class="card" style="flex:1"><div class="card-hd">🎯 Top-${state.topK} 检索结果</div><div class="card-body">`;
+      const topResults = results.filter(r => r.score >= state.threshold).slice(0, state.topK);
+      if (topResults.length === 0) {
+        html += '<div style="padding:20px;text-align:center;color:var(--accent-red)">没有结果超过相似度阈值 ' + state.threshold + '<br>请降低阈值或调整查询</div>';
+      }
+      topResults.forEach((r, rank) => {
+        html += `<div class="chunk selected">
+      <div class="chunk-id" style="color:var(--accent-green)">🏆 Rank #${rank + 1} · 相似度 ${r.score.toFixed(3)}</div>
+      <div style="color:var(--accent-blue);font-weight:600;margin-bottom:4px;font-size:11px">${esc(r.source)}</div>
+      <div class="chunk-text">${esc(r.text)}</div>
+    </div>`;
+      });
+      html += `<div style="margin-top:10px;padding:8px;background:var(--bg-primary);border-radius:6px;font-size:11px;color:var(--text-secondary)">
+    共扫描 ${chunks.length} 个块，${topResults.length} 个通过阈值过滤<br>
+    检索耗时: ~${(5 + Math.random() * 10).toFixed(0)}ms (HNSW 索引)
+  </div></div></div></div>`;
+      return html;
+    }
+
+    function renderRerank(docs, query) {
+      const chunks = simulateChunks(docs);
+      const results = chunks.map((c, i) => ({
+        ...c, idx: i,
+        score: biasedSimilarity(0, c.docIdx, state.preset),
+      })).sort((a, b) => b.score - a.score).filter(r => r.score >= state.threshold).slice(0, state.topK);
+
+      // Rerank shuffles order slightly and refines scores
+      const reranked = results.map((r, i) => ({
+        ...r,
+        origRank: i,
+        rerankScore: r.score + (i === 1 ? 0.08 : i === 0 ? -0.02 : -0.05),
+      })).sort((a, b) => b.rerankScore - a.rerankScore);
+
+      let html = '<div style="display:flex;gap:16px;flex:1">';
+      html += '<div class="card" style="flex:1"><div class="card-hd">📊 Bi-Encoder 初始排序</div><div class="card-body">';
+      results.forEach((r, i) => {
+        html += `<div class="chunk"><div class="chunk-id">Rank #${i + 1} · Score: ${r.score.toFixed(3)}</div>
+      <div class="chunk-text">${esc(r.text.substring(0, 60))}...</div></div>`;
+      });
+      html += `<div style="padding:8px;font-size:11px;color:var(--text-secondary);margin-top:8px">
+    Bi-Encoder: 查询和文档<b>分别</b>编码<br>速度快，但精度有限
+  </div></div></div>`;
+
+      html += '<div class="arrow-right">→<br><span style="font-size:10px;color:var(--accent-purple)">Rerank</span></div>';
+
+      html += '<div class="card" style="flex:1"><div class="card-hd">📊 Cross-Encoder 重排序</div><div class="card-body">';
+      reranked.forEach((r, i) => {
+        const moved = r.origRank !== i;
+        html += `<div class="chunk ${i === 0 ? 'selected' : ''}"><div class="chunk-id" style="color:${i === 0 ? 'var(--accent-green)' : 'var(--text-primary)'}">Rank #${i + 1} · Score: ${r.rerankScore.toFixed(3)} ${moved ? '<span style="color:var(--accent-orange)">↕ 排名变化</span>' : ''}</div>
+      <div class="chunk-text">${esc(r.text.substring(0, 60))}...</div></div>`;
+      });
+      html += `<div style="padding:8px;font-size:11px;color:var(--text-secondary);margin-top:8px">
+    Cross-Encoder: 查询和文档<b>拼接后一起</b>编码<br>
+    精度高（注意力交叉），但速度慢<br>
+    <span style="color:var(--accent-purple)">因此只对 Top-K 结果做 Rerank</span>
+  </div></div></div></div>`;
+      return html;
+    }
+
+    function renderGeneration(docs, query) {
+      const chunks = simulateChunks(docs);
+      const topChunks = chunks.map((c, i) => ({
+        ...c, idx: i,
+        score: biasedSimilarity(0, c.docIdx, state.preset),
+      })).sort((a, b) => b.score - a.score).filter(r => r.score >= state.threshold).slice(0, state.topK);
+
+      const answers = {
+        enterprise: `根据公司员工手册的规定，公司实行带薪年假制度：
+
+• 入职满 **1年**：5天年假
+• 入职满 **3年**：10天年假
+• 入职满 **10年**：15天年假
+
+关于您问的**入职不满一年**的情况：可以按入职月份**比例折算**年假天数，每满一个月折算 **0.5天**。
+
+年假需提前一周申请，经直属上级批准后生效。请假需在 OA 系统提交申请。`,
+        code: `useEffect 的 cleanup 函数在两个时机执行：
+
+1. **组件卸载时** — 清理所有副作用
+2. **下一次 effect 执行前** — 清理上一次的副作用
+
+避免内存泄漏的方法：
+
+• **取消网络请求**：使用 AbortController
+\`\`\`js
+useEffect(() => {
+  const controller = new AbortController();
+  fetch(url, { signal: controller.signal });
+  return () => controller.abort();
+}, [url]);
+\`\`\`
+
+• **清除定时器**：在 cleanup 中调用 clearInterval
+• **移除事件监听**：cleanup 中 removeEventListener`,
+        medical: `**服用阿司匹林期间应严格避免饮酒。**
+
+主要风险：
+
+1. **消化道出血风险显著增加** — 阿司匹林和酒精均对胃黏膜有刺激作用，合用时风险叠加
+2. **抗凝血作用增强** — 酒精会增强阿司匹林的抗凝效果，可能导致出血时间延长
+3. **肝毒性** — 长期饮酒者服用阿司匹林时肝损伤风险增加
+
+建议服药前后至少间隔 **24小时** 避免饮酒。
+
+⚠️ *以上信息仅供参考，具体用药请遵医嘱。*`,
+      };
+
+      let html = '<div style="display:flex;gap:16px;flex:1">';
+
+      // Prompt construction
+      html += '<div class="card" style="flex:1"><div class="card-hd">📝 构造 Prompt</div><div class="card-body">';
+      html += `<div style="font-size:11px;font-family:monospace;line-height:1.6">
+    <div style="color:var(--accent-green);margin-bottom:6px">System:</div>
+    <div style="color:var(--text-secondary);padding:6px;background:var(--bg-primary);border-radius:4px;margin-bottom:8px">你是一个知识库助手。请基于以下检索到的文档回答用户问题。如果文档中没有相关信息，请明确告知用户，不要编造答案。${state.cite ? '请在回答中标注信息来源。' : ''}</div>
+    <div style="color:var(--accent-blue);margin-bottom:6px">Context (检索结果):</div>`;
+      topChunks.forEach((c, i) => {
+        html += `<div style="padding:6px;background:color-mix(in srgb, var(--accent-blue) 3%, transparent);border:1px solid color-mix(in srgb, var(--accent-blue) 19%, transparent);border-radius:4px;margin-bottom:4px;color:var(--text-secondary)">
+      <span style="color:var(--accent-blue)">[Doc${i + 1}]</span> ${esc(c.text.substring(0, 80))}...</div>`;
+      });
+      html += `<div style="color:var(--accent-purple);margin:6px 0">User:</div>
+    <div style="padding:6px;background:color-mix(in srgb, var(--accent-purple) 3%, transparent);border:1px solid color-mix(in srgb, var(--accent-purple) 19%, transparent);border-radius:4px;color:var(--accent-purple)">${esc(query)}</div>
+  </div></div></div>`;
+
+      html += '<div class="arrow-right">→<br><span style="font-size:10px;color:var(--accent-purple)">LLM</span></div>';
+
+      // LLM Response
+      html += '<div class="card" style="flex:1.2"><div class="card-hd">🤖 LLM 生成回答</div><div class="card-body">';
+      const answer = answers[state.preset] || '基于检索到的文档，为您生成回答...';
+      html += `<div class="llm-resp">${formatAnswer(answer)}<span class="cursor"></span></div>`;
+
+      if (state.cite) {
+        html += `<div style="margin-top:10px;padding:8px;background:color-mix(in srgb, var(--accent-blue) 3%, transparent);border:1px solid color-mix(in srgb, var(--accent-blue) 19%, transparent);border-radius:6px;font-size:11px">
+      <div style="color:var(--accent-blue);font-weight:600;margin-bottom:4px">📌 引用溯源</div>`;
+        topChunks.forEach((c, i) => {
+          html += `<div style="padding:2px 0;color:var(--text-secondary)"><span class="ref">[Doc${i + 1}]</span> ${esc(c.source)}</div>`;
+        });
+        html += '</div>';
+      }
+
+      html += `<div style="margin-top:10px;padding:8px;background:var(--bg-primary);border-radius:6px;font-size:11px;color:var(--text-secondary);line-height:1.6">
+    <span style="color:var(--accent-green);font-weight:600">RAG vs 纯 LLM</span><br>
+    ✅ 回答基于真实文档，减少幻觉<br>
+    ✅ 知识可实时更新（更新文档即可）<br>
+    ✅ 可追溯来源，可审计<br>
+    ⚠️ 检索质量是瓶颈——检索不到就答不好
+  </div></div></div></div>`;
+      return html;
+    }
+
+    function formatAnswer(text) {
+      return esc(text)
+        .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--accent-purple)">$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\n/g, '<br>');
+    }
+
+    // ======================== HELPERS ========================
+    function simulateChunks(docs) {
+      const chunks = [];
+      docs.forEach((d, di) => {
+        const text = d.text;
+        const size = state.chunkSize;
+        const olap = state.overlap;
+        let pos = 0;
+        while (pos < text.length) {
+          const end = Math.min(pos + size, text.length);
+          chunks.push({
+            text: text.substring(pos, end),
+            source: d.title,
+            docIdx: di,
+            hasOverlap: pos > 0,
+          });
+          pos += size - olap;
+          if (pos >= text.length) break;
+        }
+      });
+      return chunks;
+    }
+
+    function updateParam() {
+      state.chunkSize = +document.getElementById('chunkSize').value;
+      state.overlap = +document.getElementById('overlap').value;
+      state.topK = +document.getElementById('topK').value;
+      state.threshold = +document.getElementById('threshold').value;
+      state.searchMode = document.getElementById('searchMode').value;
+      document.getElementById('chunkSizeVal').textContent = state.chunkSize;
+      document.getElementById('overlapVal').textContent = state.overlap;
+      document.getElementById('topKVal').textContent = state.topK;
+      document.getElementById('thresholdVal').textContent = state.threshold.toFixed(2);
+      updateHeader();
+      updatePrompt();
+    }
+
+    function togOpt(key) {
+      state[key] = !state[key];
+      document.getElementById('tog' + key.charAt(0).toUpperCase() + key.slice(1)).classList.toggle('on', state[key]);
+      updateHeader();
+      updatePrompt();
+    }
+
+    function updateHeader() {
+      const preset = PRESETS.find(p => p.id === state.preset);
+      document.getElementById('headerTitle').textContent = `RAG Pipeline — ${preset.name}`;
+      const parts = [];
+      if (state.searchMode === 'hybrid') parts.push('Hybrid');
+      else if (state.searchMode === 'dense') parts.push('Dense');
+      else parts.push('BM25');
+      if (state.rerank) parts.push('Rerank');
+      if (state.hyde) parts.push('HyDE');
+      if (state.cite) parts.push('Citation');
+      document.getElementById('headerTag').textContent = parts.join(' + ');
+    }
+
+    // ======================== ANIMATION ========================
+    let playTimer = null;
+
+    function togglePlay() {
+      if (state.playing) { stopPlay(); return; }
+      state.playing = true;
+      state.phase = -1; state.step = -1;
+      document.getElementById('playBtn').textContent = '■ 停止';
+      document.getElementById('playBtn').className = 'play-btn stop';
+      advanceStep();
+    }
+
+    function stopPlay() {
+      state.playing = false;
+      clearTimeout(playTimer);
+      document.getElementById('playBtn').textContent = '▶ 运行 RAG 流程';
+      document.getElementById('playBtn').className = 'play-btn';
+    }
+
+    function advanceStep() {
+      if (!state.playing) return;
+      const steps = buildSteps();
+      state.step++;
+      if (state.step >= steps.length) { stopPlay(); return; }
+
+      const s = steps[state.step];
+      const phases = getActivePhases();
+      const phaseIdx = phases.findIndex(p => p.id === s.phase);
+
+      // Update phase bar
+      renderPhaseBar(phases, phaseIdx);
+
+      // Update stage
+      document.getElementById('stage').innerHTML = s.render();
+
+      // Update narration
+      document.getElementById('narration').innerHTML =
+        `<span class="step-num">${state.step + 1}/${steps.length}</span><div class="step-text">${s.narration}</div>`;
+
+      updatePrompt();
+
+      const delay = (2000 + s.narration.length * 4) / state.speed;
+      playTimer = setTimeout(advanceStep, delay);
+    }
+
+    function renderPhaseBar(phases, activeIdx) {
+      const bar = document.getElementById('phaseBar');
+      bar.innerHTML = phases.map((p, i) => `
+    <div class="phase-tab ${i < activeIdx ? 'done' : i === activeIdx ? 'active' : ''}">
+      <span class="ph-icon">${p.icon}</span>${p.label}
+    </div>`).join('');
+    }
+
+    function resetSim() {
+      stopPlay();
+      state.step = -1;
+      document.getElementById('stage').innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:14px">点击「运行 RAG 流程」开始演示</div>';
+      document.getElementById('narration').innerHTML = '<span class="step-num">0</span><div class="step-text">选择预设场景并调整参数，然后点击「运行 RAG 流程」观看完整演示。</div>';
+      renderPhaseBar(getActivePhases(), -1);
+      updatePrompt();
+    }
+
+    // ======================== PRESETS ========================
+    function renderPresets() {
+      document.getElementById('presets').innerHTML = PRESETS.map(p => `
+    <button class="preset-btn ${state.preset === p.id ? 'active' : ''}" onclick="selectPreset('${p.id}')">
+      <div class="pb-name">${p.name}</div>
+      <div class="pb-desc">${p.desc}</div>
+    </button>`).join('');
+    }
+
+    function selectPreset(id) {
+      if (state.playing) stopPlay();
+      state.preset = id;
+      state.step = -1;
+      renderPresets();
+      updateHeader();
+      resetSim();
+      updatePrompt();
+    }
+
+    // ======================== PROMPT ========================
+    function updatePrompt() {
+      const preset = PRESETS.find(p => p.id === state.preset);
+      const parts = [`我正在学习 RAG（检索增强生成）的工作原理。`];
+      parts.push(`\n\n当前场景：${preset.name}（${preset.desc}）。`);
+      parts.push(`查询示例："${preset.query}"`);
+
+      parts.push(`\n\n当前 RAG 配置：`);
+      parts.push(`- 分块：chunk_size=${state.chunkSize}, overlap=${state.overlap}`);
+      parts.push(`- 检索：${state.searchMode === 'hybrid' ? '混合检索(向量+BM25)' : state.searchMode === 'dense' ? '纯向量检索' : '纯关键词检索(BM25)'}, Top-K=${state.topK}, 阈值=${state.threshold}`);
+      if (state.rerank) parts.push(`- 启用了 Cross-Encoder Rerank 重排序`);
+      if (state.hyde) parts.push(`- 启用了 HyDE（假设文档嵌入）`);
+      if (state.cite) parts.push(`- 启用了引用溯源`);
+
+      parts.push(`\n\n请详细解释：`);
+      parts.push(`1. 这套 RAG 配置的优缺点，以及针对「${preset.name}」场景的优化建议。`);
+      parts.push(`2. 分块参数（chunk_size=${state.chunkSize}, overlap=${state.overlap}）对检索质量的具体影响，最优值如何确定。`);
+      parts.push(`3. ${state.searchMode === 'hybrid' ? '混合检索中 RRF 融合的具体算法和调参技巧' : '如何判断何时该用混合检索替代当前的单路检索'}。`);
+      if (state.rerank) parts.push(`4. Rerank 模型的选型（Cohere vs BGE-Reranker vs Cross-Encoder）和性能/精度权衡。`);
+      if (state.hyde) parts.push(`4. HyDE 在什么场景下有效，什么场景下反而会降低检索质量。`);
+      parts.push(`\n\n请给出可以直接使用的 Python 代码示例（使用 LangChain 或 LlamaIndex）。`);
+
+      document.getElementById('promptText').textContent = parts.join('');
+    }
+
+    function copyPrompt() {
+      navigator.clipboard.writeText(document.getElementById('promptText').textContent).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = '已复制!'; btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('copied'); }, 1500);
+      });
+    }
+
+    // ======================== INIT ========================
+    renderPresets();
+    renderPhaseBar(getActivePhases(), -1);
+    updateHeader();
+    updatePrompt();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

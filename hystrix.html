@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hystrix 熔断降级</title>
+  <meta name="description" content="交互式模拟 Hystrix 熔断器工作原理，包括熔断状态转换、降级策略、滑动窗口统计等核心机制">
+  <meta name="keywords" content="Hystrix, 熔断器, 降级, Circuit Breaker, 微服务, 容错, Java">
+  <meta property="og:title" content="Hystrix 熔断降级">
+  <meta property="og:description" content="交互式模拟 Hystrix 熔断器工作原理，包括熔断状态转换、降级策略、滑动窗口统计等核心机制">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      /* Legacy aliases used by JS inline styles */
+      --grn: #36d986;
+      --red: #ff5c6c;
+      --ylw: #ff9f43;
+      --pur: #b07aff;
+      --cyn: #22d3ee;
+      --tx: #e8edf5;
+      --tx2: #7d8da0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .L {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      grid-template-rows: 1fr auto;
+      height: 100vh;
+    }
+
+    .C {
+      grid-row: 1/3;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 20px 16px;
+    }
+
+    .C::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .C::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .C::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .P {
+      grid-column: 2;
+      overflow-y: auto;
+      padding: 20px 24px;
+    }
+
+    .P::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .P::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .P::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .B {
+      grid-column: 2;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    h1 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+      background: linear-gradient(135deg, #fff 0%, #a8c8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .sub {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      margin-bottom: 18px;
+      font-weight: 400;
+    }
+
+    .sec {
+      margin-bottom: 16px;
+    }
+
+    .sec-t {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sec-t::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    label {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      font-weight: 500;
+    }
+
+    select {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 0.75rem;
+      margin-bottom: 10px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    input[type=range] {
+      width: 100%;
+      -webkit-appearance: none;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      margin-bottom: 10px;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--accent-blue);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 6px var(--glow-blue);
+    }
+
+    .rv {
+      font-size: 0.68rem;
+      color: var(--accent-blue);
+      font-weight: 600;
+      float: right;
+    }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-g {
+      background: linear-gradient(135deg, #1a9f4a, #238636);
+      color: #fff;
+    }
+
+    .btn-r {
+      background: linear-gradient(135deg, #cc3344, #e84057);
+      color: #fff;
+    }
+
+    .btn-y {
+      background: linear-gradient(135deg, #c67600, #e88a00);
+      color: #fff;
+    }
+
+    .btn-a {
+      background: linear-gradient(135deg, #1a6ff0, #1f6feb);
+      color: #fff;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .pbtn {
+      padding: 5px 12px;
+      font-size: 0.68rem;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+    }
+
+    .pbtn.on {
+      background: linear-gradient(135deg, #1a6ff0, #1f6feb);
+      border-color: var(--accent-blue);
+      color: #fff;
+      box-shadow: 0 0 12px var(--glow-blue);
+    }
+
+    .sep {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 14px 0;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .card h3 {
+      font-size: 0.78rem;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+      font-weight: 700;
+    }
+
+    .card p {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      line-height: 1.8;
+    }
+
+    .card code {
+      background: var(--bg-input);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-size: 0.68rem;
+      color: var(--accent-cyan);
+    }
+
+    .ptx {
+      flex: 1;
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .log {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-size: 0.68rem;
+      max-height: 150px;
+      overflow-y: auto;
+      line-height: 1.7;
+    }
+
+    .log::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .log::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .log::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    canvas {
+      display: block;
+      border-radius: var(--radius);
+    }
+
+    /* stats row */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .st {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px;
+      text-align: center;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .st:hover {
+      border-color: var(--border-hover);
+    }
+
+    .st .n {
+      font-size: 1.15rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+    }
+
+    .st .l {
+      font-size: 0.62rem;
+      color: var(--text-secondary);
+      margin-top: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    /* state light */
+    .light {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 4px currentColor;
+      }
+
+      50% {
+        box-shadow: 0 0 14px currentColor;
+      }
+    }
+
+    .light-pulse {
+      animation: pulse 1s infinite;
+    }
+
+    /* Light mode overrides */
+    [data-theme="light"] {
+      --grn: #059669;
+      --red: #dc2626;
+      --ylw: #d97706;
+      --pur: #7c3aed;
+      --cyn: #0891b2;
+      --tx: #111827;
+      --tx2: #4b5563;
+    }
+
+    [data-theme="light"] .stats .st {
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    [data-theme="light"] .log {
+      background: #f0f3f8;
+      border-color: #d4dae5;
+    }
+
+    [data-theme="light"] canvas {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+    }
+
+    [data-theme="light"] h1 {
+      background: linear-gradient(135deg, #1f2937 0%, #2563eb 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    [data-theme="light"] .btn:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    [data-theme="light"] .B {
+      background: #ffffff;
+      border-top-color: #e5e7eb;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="L">
+    <div class="C">
+      <h1>Hystrix 熔断降级</h1>
+      <div class="sub">Circuit Breaker 交互演示</div>
+
+      <div class="sec">
+        <div class="sec-t">场景预设</div>
+        <div class="btn-row">
+          <button class="btn pbtn on" onclick="preset('default')">默认</button>
+          <button class="btn pbtn" onclick="preset('sensitive')">高敏感</button>
+          <button class="btn pbtn" onclick="preset('tolerant')">高容忍</button>
+          <button class="btn pbtn" onclick="preset('fast')">快恢复</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">熔断参数</div>
+        <label>失败率阈值 <span class="rv" id="threshV">50%</span></label>
+        <input type="range" id="thresh" min="10" max="90" step="5" value="50" oninput="onP()">
+        <label>最小请求数 (窗口内) <span class="rv" id="minReqV">10</span></label>
+        <input type="range" id="minReq" min="3" max="30" value="10" oninput="onP()">
+        <label>熔断恢复窗口 <span class="rv" id="sleepV">5s</span></label>
+        <input type="range" id="sleep" min="2" max="15" value="5" oninput="onP()">
+        <label>请求超时时间 <span class="rv" id="toV">1000ms</span></label>
+        <input type="range" id="to" min="200" max="3000" step="100" value="1000" oninput="onP()">
+        <label>滑动窗口大小 <span class="rv" id="winV">20</span></label>
+        <input type="range" id="win" min="5" max="50" value="20" oninput="onP()">
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">隔离策略</div>
+        <select id="isolation" onchange="onP()">
+          <option value="thread">线程池隔离 (THREAD)</option>
+          <option value="semaphore">信号量隔离 (SEMAPHORE)</option>
+        </select>
+      </div>
+
+      <div class="sep"></div>
+
+      <div class="sec">
+        <div class="sec-t">发送请求</div>
+        <div class="btn-row">
+          <button class="btn btn-g" onclick="send('success')">✓ 成功请求</button>
+          <button class="btn btn-r" onclick="send('fail')">✗ 失败请求</button>
+          <button class="btn btn-y" onclick="send('timeout')">⏱ 超时请求</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn" onclick="burst('success',5)">批量成功 ×5</button>
+          <button class="btn" onclick="burst('fail',5)">批量失败 ×5</button>
+          <button class="btn" onclick="burst('mix',10)">混合 ×10</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-a" onclick="autoSim()">▶ 自动演示完整流程</button>
+          <button class="btn" onclick="resetAll()">重置</button>
+        </div>
+      </div>
+
+      <div class="sep"></div>
+      <div class="card">
+        <h3>状态机规则</h3>
+        <p><code>CLOSED</code> 正常放行，统计失败率<br>
+          失败率 ≥ 阈值 且 请求数 ≥ 最小值 → <code>OPEN</code><br>
+          <code>OPEN</code> 所有请求直接走 fallback<br>
+          等待恢复窗口 → <code>HALF_OPEN</code><br>
+          <code>HALF_OPEN</code> 放行一个试探请求<br>
+          成功 → <code>CLOSED</code> / 失败 → <code>OPEN</code>
+        </p>
+      </div>
+    </div>
+
+    <div class="P">
+      <!-- Stats -->
+      <div class="stats">
+        <div class="st" id="stState">
+          <div class="n" style="color:var(--grn)"><span class="light light-pulse"
+              style="color:var(--grn);background:var(--grn)"></span>CLOSED</div>
+          <div class="l">熔断器状态</div>
+        </div>
+        <div class="st">
+          <div class="n" style="color:var(--tx)" id="stTotal">0</div>
+          <div class="l">窗口内请求</div>
+        </div>
+        <div class="st">
+          <div class="n" style="color:var(--red)" id="stFail">0</div>
+          <div class="l">失败 / 超时</div>
+        </div>
+        <div class="st">
+          <div class="n" style="color:var(--ylw)" id="stRate">0%</div>
+          <div class="l">失败率</div>
+        </div>
+        <div class="st">
+          <div class="n" style="color:var(--pur)" id="stFb">0</div>
+          <div class="l">Fallback 次数</div>
+        </div>
+      </div>
+
+      <!-- Main Canvas: state machine + gauges + sliding window -->
+      <canvas id="cv" width="880" height="360"></canvas>
+
+      <!-- Log -->
+      <div class="log" id="log" style="margin-top:10px"></div>
+    </div>
+
+    <div class="B">
+      <div class="ptx" id="ptx">发送请求观察熔断器状态变化，或点击「自动演示」查看完整生命周期。</div>
+      <button class="btn btn-a" onclick="copyP()">复制</button>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════ THEME-AWARE COLORS ═══════════════
+    function isLightMode() { return document.documentElement.getAttribute('data-theme') === 'light'; }
+    function themeColors() {
+      if (isLightMode()) return {
+        title: '#1f2937', subtitle: '#6b7280', bgFill: '#e8ecf2', bgStroke: '#c8d0dc',
+        emptyCell: '#d4dae520', axisLabel: '#6b7280', placeholder: '#9ca3af80',
+        circleInactive: '#f0f3f8', logDefault: '#1f2937'
+      };
+      return {
+        title: '#e2e4ed', subtitle: '#8b90a5', bgFill: '#1a1d2780', bgStroke: '#2e334860',
+        emptyCell: '#2e334820', axisLabel: '#8b90a5', placeholder: '#8b90a540',
+        circleInactive: '#1a1d27', logDefault: '#e2e4ed'
+      };
+    }
+
+    // ═══════════════ CONFIG ═══════════════
+    const CFG = { thresh: 50, minReq: 10, sleep: 5, timeout: 1000, winSize: 20, isolation: 'thread' };
+
+    function onP() {
+      CFG.thresh = +document.getElementById('thresh').value;
+      CFG.minReq = +document.getElementById('minReq').value;
+      CFG.sleep = +document.getElementById('sleep').value;
+      CFG.timeout = +document.getElementById('to').value;
+      CFG.winSize = +document.getElementById('win').value;
+      CFG.isolation = document.getElementById('isolation').value;
+      document.getElementById('threshV').textContent = CFG.thresh + '%';
+      document.getElementById('minReqV').textContent = CFG.minReq;
+      document.getElementById('sleepV').textContent = CFG.sleep + 's';
+      document.getElementById('toV').textContent = CFG.timeout + 'ms';
+      document.getElementById('winV').textContent = CFG.winSize;
+      document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+      updatePrompt();
+    }
+
+    function preset(n) {
+      document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+      event.target.classList.add('on');
+      const p = { default: [50, 10, 5, 1000, 20], sensitive: [30, 5, 3, 500, 10], tolerant: [80, 20, 10, 2000, 30], fast: [50, 10, 2, 1000, 15] }[n];
+      CFG.thresh = p[0]; CFG.minReq = p[1]; CFG.sleep = p[2]; CFG.timeout = p[3]; CFG.winSize = p[4];
+      document.getElementById('thresh').value = p[0]; document.getElementById('minReq').value = p[1];
+      document.getElementById('sleep').value = p[2]; document.getElementById('to').value = p[3]; document.getElementById('win').value = p[4];
+      document.getElementById('threshV').textContent = p[0] + '%'; document.getElementById('minReqV').textContent = p[1];
+      document.getElementById('sleepV').textContent = p[2] + 's'; document.getElementById('toV').textContent = p[3] + 'ms'; document.getElementById('winV').textContent = p[4];
+      resetAll();
+    }
+
+    // ═══════════════ CIRCUIT BREAKER ═══════════════
+    const CB = {
+      state: 'CLOSED', // CLOSED, OPEN, HALF_OPEN
+      window: [],      // sliding window: [{type, ts}]
+      fallbacks: 0,
+      openedAt: 0,
+      totalReqs: 0,
+      history: [],     // for chart [{ts, state, failRate, total}]
+      countdown: 0,
+    };
+
+    let countdownTimer = null;
+
+    function getWindowStats() {
+      const w = CB.window.slice(-CFG.winSize);
+      const total = w.length;
+      const fails = w.filter(r => r.type === 'fail' || r.type === 'timeout').length;
+      const rate = total > 0 ? (fails / total * 100) : 0;
+      return { total, fails, rate };
+    }
+
+    function send(type) {
+      CB.totalReqs++;
+      const now = Date.now();
+
+      if (CB.state === 'OPEN') {
+        CB.fallbacks++;
+        addLog('red', `请求 #${CB.totalReqs} → 熔断器 OPEN → 直接降级 fallback()`, 'fallback');
+        record(now, type, true);
+        render();
+        return;
+      }
+
+      if (CB.state === 'HALF_OPEN') {
+        // Only one probe request allowed
+        if (type === 'success') {
+          addLog('grn', `请求 #${CB.totalReqs} [试探] → 成功! 熔断器恢复 → CLOSED`, 'probe-ok');
+          CB.window.push({ type, ts: now });
+          transition('CLOSED');
+          CB.window = []; // reset window on recovery
+        } else {
+          addLog('red', `请求 #${CB.totalReqs} [试探] → 失败! 重新熔断 → OPEN`, 'probe-fail');
+          CB.window.push({ type, ts: now });
+          transition('OPEN');
+        }
+        record(now, type, false);
+        render();
+        return;
+      }
+
+      // CLOSED: normal processing
+      CB.window.push({ type, ts: now });
+      if (CB.window.length > CFG.winSize) CB.window = CB.window.slice(-CFG.winSize);
+
+      const stats = getWindowStats();
+      if (type === 'success') {
+        addLog('grn', `请求 #${CB.totalReqs} → 成功 (窗口: ${stats.fails}/${stats.total}, 失败率 ${stats.rate.toFixed(0)}%)`, 'success');
+      } else if (type === 'fail') {
+        addLog('red', `请求 #${CB.totalReqs} → 失败 (窗口: ${stats.fails}/${stats.total}, 失败率 ${stats.rate.toFixed(0)}%)`, 'fail');
+      } else {
+        addLog('ylw', `请求 #${CB.totalReqs} → 超时 >${CFG.timeout}ms (窗口: ${stats.fails}/${stats.total}, 失败率 ${stats.rate.toFixed(0)}%)`, 'timeout');
+      }
+
+      // Check if should open
+      if (stats.total >= CFG.minReq && stats.rate >= CFG.thresh) {
+        addLog('red', `★ 失败率 ${stats.rate.toFixed(0)}% ≥ ${CFG.thresh}% 且请求数 ${stats.total} ≥ ${CFG.minReq} → 触发熔断! CLOSED → OPEN`, 'trip');
+        transition('OPEN');
+      }
+
+      record(now, type, false);
+      render();
+    }
+
+    function transition(newState) {
+      const old = CB.state;
+      CB.state = newState;
+      if (newState === 'OPEN') {
+        CB.openedAt = Date.now();
+        startCountdown();
+      }
+      if (newState === 'CLOSED') {
+        stopCountdown();
+      }
+    }
+
+    function startCountdown() {
+      stopCountdown();
+      CB.countdown = CFG.sleep;
+      countdownTimer = setInterval(() => {
+        CB.countdown--;
+        if (CB.countdown <= 0) {
+          stopCountdown();
+          CB.state = 'HALF_OPEN';
+          addLog('ylw', `★ 恢复窗口 ${CFG.sleep}s 到期 → OPEN → HALF_OPEN (允许一个试探请求)`, 'half-open');
+          render();
+        }
+        render();
+      }, 1000);
+    }
+
+    function stopCountdown() {
+      if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    }
+
+    function record(ts, type, wasFallback) {
+      const stats = getWindowStats();
+      CB.history.push({ ts, state: CB.state, failRate: stats.rate, total: stats.total, type, fallback: wasFallback });
+    }
+
+    function burst(type, count) {
+      let i = 0;
+      function next() {
+        if (i >= count) return;
+        if (type === 'mix') {
+          send(Math.random() < 0.6 ? 'fail' : 'success');
+        } else {
+          send(type);
+        }
+        i++;
+        setTimeout(next, 120);
+      }
+      next();
+    }
+
+    function autoSim() {
+      resetAll();
+      const steps = [];
+      // Phase 1: normal traffic
+      for (let i = 0; i < 6; i++) steps.push('success');
+      // Phase 2: failures start
+      for (let i = 0; i < 8; i++) steps.push(Math.random() < 0.8 ? 'fail' : 'timeout');
+      // Phase 3: will be open, send some to show fallback
+      for (let i = 0; i < 4; i++) steps.push('fail');
+      // Phase 4: wait for half-open, then send success to recover
+      // Phase 5: normal traffic again
+
+      let i = 0;
+      let phase3Done = false;
+      function next() {
+        if (i < steps.length) {
+          send(steps[i]);
+          i++;
+          setTimeout(next, 200);
+        } else if (CB.state === 'OPEN' && !phase3Done) {
+          phase3Done = true;
+          // Send more to show fallback
+          let fb = 0;
+          function fbLoop() {
+            if (fb >= 3 || CB.state !== 'OPEN') {
+              addLog('pur', `⏳ 等待恢复窗口 ${CFG.sleep}s...`, 'wait');
+              // Wait for half-open
+              const waitForHalf = setInterval(() => {
+                if (CB.state === 'HALF_OPEN') {
+                  clearInterval(waitForHalf);
+                  setTimeout(() => {
+                    send('success'); // probe success
+                    setTimeout(() => {
+                      // Recovery traffic
+                      let r = 0;
+                      function recLoop() {
+                        if (r >= 5) return;
+                        send('success');
+                        r++;
+                        setTimeout(recLoop, 200);
+                      }
+                      recLoop();
+                    }, 300);
+                  }, 500);
+                }
+              }, 500);
+              return;
+            }
+            send('fail');
+            fb++;
+            setTimeout(fbLoop, 200);
+          }
+          fbLoop();
+        }
+      }
+      next();
+    }
+
+    function resetAll() {
+      stopCountdown();
+      CB.state = 'CLOSED'; CB.window = []; CB.fallbacks = 0; CB.openedAt = 0;
+      CB.totalReqs = 0; CB.history = []; CB.countdown = 0;
+      document.getElementById('log').innerHTML = '';
+      render();
+    }
+
+    // ═══════════════ RENDERING ═══════════════
+    function render() {
+      renderStats();
+      drawCanvas();
+      updatePrompt();
+    }
+
+    function renderStats() {
+      const stats = getWindowStats();
+      // State
+      const stEl = document.getElementById('stState');
+      const colors = { CLOSED: 'var(--grn)', OPEN: 'var(--red)', HALF_OPEN: 'var(--ylw)' };
+      const labels = { CLOSED: 'CLOSED', OPEN: 'OPEN', HALF_OPEN: 'HALF_OPEN' };
+      const col = colors[CB.state];
+      let extra = '';
+      if (CB.state === 'OPEN' && CB.countdown > 0) extra = ` (${CB.countdown}s)`;
+      stEl.innerHTML = `<div class="n" style="color:${col}"><span class="light light-pulse" style="color:${col};background:${col}"></span>${labels[CB.state]}${extra}</div><div class="l">熔断器状态</div>`;
+
+      document.getElementById('stTotal').textContent = stats.total;
+      document.getElementById('stFail').textContent = stats.fails;
+      document.getElementById('stRate').textContent = stats.rate.toFixed(0) + '%';
+      document.getElementById('stRate').style.color = stats.rate >= CFG.thresh ? 'var(--red)' : 'var(--ylw)';
+      document.getElementById('stFb').textContent = CB.fallbacks;
+    }
+
+    function drawCanvas() {
+      const cv = document.getElementById('cv');
+      const ctx = cv.getContext('2d');
+      const W = cv.width, H = cv.height;
+      ctx.clearRect(0, 0, W, H);
+
+      drawStateMachine(ctx, 20, 10, 340, 200);
+      drawGauge(ctx, 390, 10, 160, 160);
+      drawSlidingWindow(ctx, 570, 10, W - 590, 160);
+      drawIsolation(ctx, 390, 185, W - 410, 30);
+      drawTimeline(ctx, 20, 228, W - 40, H - 240);
+    }
+
+    function drawStateMachine(ctx, x, y, w, h) {
+      // Three states as circles with arrows
+      const states = [
+        { key: 'CLOSED', label: 'CLOSED', sub: '正常放行', cx: x + 80, cy: y + 60, color: '#4ecdc4' },
+        { key: 'OPEN', label: 'OPEN', sub: '全部降级', cx: x + w - 80, cy: y + 60, color: '#ff5f6d' },
+        { key: 'HALF_OPEN', label: 'HALF_OPEN', sub: '试探放行', cx: x + w / 2, cy: y + h - 30, color: '#ffd93d' },
+      ];
+
+      // Arrows
+      const arrows = [
+        { from: 0, to: 1, label: `失败率≥${CFG.thresh}%`, color: '#ff5f6d60' },
+        { from: 1, to: 2, label: `等待${CFG.sleep}s`, color: '#ffd93d60' },
+        { from: 2, to: 0, label: '试探成功', color: '#4ecdc460' },
+        { from: 2, to: 1, label: '试探失败', color: '#ff5f6d60' },
+      ];
+
+      arrows.forEach(a => {
+        const f = states[a.from], t = states[a.to];
+        ctx.beginPath();
+        ctx.strokeStyle = a.color;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        const midX = (f.cx + t.cx) / 2, midY = (f.cy + t.cy) / 2;
+        // Curved arrow
+        const dx = t.cx - f.cx, dy = t.cy - f.cy;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        const nx = -dy / len * 20, ny = dx / len * 20;
+        const cpx = midX + (a.from === 2 && a.to === 1 ? -nx : nx);
+        const cpy = midY + (a.from === 2 && a.to === 1 ? -ny : ny);
+        ctx.moveTo(f.cx, f.cy);
+        ctx.quadraticCurveTo(cpx, cpy, t.cx, t.cy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Label
+        ctx.font = '9px -apple-system,sans-serif';
+        ctx.fillStyle = a.color.replace('60', 'cc');
+        ctx.textAlign = 'center';
+        ctx.fillText(a.label, cpx, cpy - 4);
+      });
+
+      // State circles
+      states.forEach(s => {
+        const active = CB.state === s.key;
+        const r = active ? 34 : 28;
+        // Glow
+        if (active) {
+          ctx.beginPath();
+          ctx.arc(s.cx, s.cy, r + 8, 0, Math.PI * 2);
+          const grad = ctx.createRadialGradient(s.cx, s.cy, r, s.cx, s.cy, r + 8);
+          grad.addColorStop(0, s.color + '30');
+          grad.addColorStop(1, 'transparent');
+          ctx.fillStyle = grad;
+          ctx.fill();
+        }
+        ctx.beginPath();
+        ctx.arc(s.cx, s.cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = active ? s.color + '25' : themeColors().circleInactive;
+        ctx.fill();
+        ctx.strokeStyle = active ? s.color : s.color + '30';
+        ctx.lineWidth = active ? 2.5 : 1;
+        ctx.stroke();
+        ctx.font = `${active ? 'bold ' : ''}${active ? 11 : 10}px -apple-system,sans-serif`;
+        ctx.fillStyle = active ? s.color : s.color + '60';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(s.label, s.cx, s.cy - 5);
+        ctx.font = '9px -apple-system,sans-serif';
+        ctx.fillText(s.sub, s.cx, s.cy + 9);
+        ctx.textBaseline = 'alphabetic';
+      });
+
+      // Title
+      ctx.font = 'bold 11px -apple-system,sans-serif';
+      ctx.fillStyle = themeColors().title;
+      ctx.textAlign = 'left';
+      ctx.fillText('状态机', x, y + 6);
+    }
+
+    function drawGauge(ctx, x, y, w, h) {
+      const stats = getWindowStats();
+      const rate = stats.rate / 100;
+      const cx = x + w / 2, cy = y + h / 2 + 10;
+      const r = 52;
+
+      ctx.font = 'bold 11px -apple-system,sans-serif';
+      ctx.fillStyle = themeColors().title;
+      ctx.textAlign = 'left';
+      ctx.fillText('失败率', x, y + 6);
+
+      // Background arc
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, Math.PI * 0.8, Math.PI * 2.2);
+      ctx.strokeStyle = isLightMode() ? '#d4dae5' : '#2e3348';
+      ctx.lineWidth = 10;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+
+      // Value arc
+      if (rate > 0) {
+        const angle = Math.PI * 0.8 + rate * Math.PI * 1.4;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, Math.PI * 0.8, Math.min(angle, Math.PI * 2.2));
+        ctx.strokeStyle = rate >= CFG.thresh / 100 ? '#ff5f6d' : rate > 0.3 ? '#ffd93d' : '#4ecdc4';
+        ctx.lineWidth = 10;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+
+      // Threshold marker
+      const thAngle = Math.PI * 0.8 + (CFG.thresh / 100) * Math.PI * 1.4;
+      const mx = cx + (r + 10) * Math.cos(thAngle);
+      const my = cy + (r + 10) * Math.sin(thAngle);
+      ctx.beginPath();
+      ctx.arc(mx, my, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff5f6d';
+      ctx.fill();
+      ctx.font = '8px SF Mono,monospace';
+      ctx.fillStyle = '#ff5f6d80';
+      ctx.textAlign = 'center';
+      ctx.fillText(CFG.thresh + '%', mx, my - 6);
+
+      // Center text
+      ctx.font = 'bold 22px SF Mono,monospace';
+      ctx.fillStyle = rate >= CFG.thresh / 100 ? '#ff5f6d' : themeColors().title;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(stats.rate.toFixed(0) + '%', cx, cy - 4);
+      ctx.font = '9px -apple-system,sans-serif';
+      ctx.fillStyle = themeColors().subtitle;
+      ctx.fillText(`${stats.fails}/${stats.total}`, cx, cy + 16);
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    function drawSlidingWindow(ctx, x, y, w, h) {
+      const tc = themeColors();
+      ctx.font = 'bold 11px -apple-system,sans-serif';
+      ctx.fillStyle = tc.title;
+      ctx.textAlign = 'left';
+      ctx.fillText(`滑动窗口 (size=${CFG.winSize})`, x, y + 6);
+
+      const win = CB.window.slice(-CFG.winSize);
+      const cellW = Math.min(14, (w - 4) / CFG.winSize);
+      const cellH = 80;
+      const sy = y + 20;
+
+      // Background
+      ctx.fillStyle = tc.bgFill;
+      ctx.fillRect(x, sy, CFG.winSize * cellW + 4, cellH + 4);
+      ctx.strokeStyle = tc.bgStroke;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, sy, CFG.winSize * cellW + 4, cellH + 4);
+
+      for (let i = 0; i < CFG.winSize; i++) {
+        const cx = x + 2 + i * cellW;
+        if (i < win.length) {
+          const r = win[i];
+          const col = r.type === 'success' ? '#4ecdc4' : r.type === 'fail' ? '#ff5f6d' : '#ffd93d';
+          ctx.fillStyle = col;
+          ctx.fillRect(cx, sy + 2, cellW - 1, cellH);
+        } else {
+          ctx.fillStyle = tc.emptyCell;
+          ctx.fillRect(cx, sy + 2, cellW - 1, cellH);
+        }
+      }
+
+      // Legend
+      const ly = sy + cellH + 14;
+      [['#4ecdc4', '成功'], ['#ff5f6d', '失败'], ['#ffd93d', '超时']].forEach(([c, l], i) => {
+        const lx = x + i * 60;
+        ctx.fillStyle = c;
+        ctx.fillRect(lx, ly, 8, 8);
+        ctx.font = '9px -apple-system,sans-serif';
+        ctx.fillStyle = tc.subtitle;
+        ctx.textAlign = 'left';
+        ctx.fillText(l, lx + 12, ly + 8);
+      });
+
+      // Min request line
+      if (CFG.minReq <= CFG.winSize) {
+        const lx = x + 2 + CFG.minReq * cellW;
+        ctx.beginPath();
+        ctx.strokeStyle = '#ff5f6d40';
+        ctx.setLineDash([3, 2]);
+        ctx.moveTo(lx, sy); ctx.lineTo(lx, sy + cellH + 4);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = '8px SF Mono,monospace';
+        ctx.fillStyle = '#ff5f6d60';
+        ctx.textAlign = 'center';
+        ctx.fillText(`min=${CFG.minReq}`, lx, sy - 3);
+      }
+    }
+
+    function drawIsolation(ctx, x, y, w, h) {
+      const isThread = CFG.isolation === 'thread';
+      ctx.font = 'bold 10px -apple-system,sans-serif';
+      ctx.fillStyle = themeColors().title;
+      ctx.textAlign = 'left';
+      ctx.fillText('隔离策略: ' + (isThread ? '线程池隔离' : '信号量隔离'), x, y + 6);
+
+      const bx = x + 160;
+      if (isThread) {
+        // Thread pool boxes
+        for (let i = 0; i < 6; i++) {
+          ctx.fillStyle = i < 4 ? '#6c7aff30' : '#6c7aff10';
+          ctx.strokeStyle = '#6c7aff40';
+          ctx.lineWidth = 1;
+          ctx.fillRect(bx + i * 28, y - 4, 24, 20);
+          ctx.strokeRect(bx + i * 28, y - 4, 24, 20);
+          ctx.font = '8px SF Mono,monospace';
+          ctx.fillStyle = '#6c7aff';
+          ctx.textAlign = 'center';
+          ctx.fillText('T' + (i + 1), bx + i * 28 + 12, y + 10);
+        }
+        ctx.font = '9px -apple-system,sans-serif';
+        ctx.fillStyle = themeColors().subtitle;
+        ctx.textAlign = 'left';
+        ctx.fillText('每个服务独立线程池，互不影响', bx + 180, y + 10);
+      } else {
+        // Semaphore counter
+        ctx.fillStyle = '#b44dff20';
+        ctx.strokeStyle = '#b44dff40';
+        ctx.lineWidth = 1;
+        ctx.fillRect(bx, y - 4, 80, 20);
+        ctx.strokeRect(bx, y - 4, 80, 20);
+        ctx.font = '10px SF Mono,monospace';
+        ctx.fillStyle = '#b44dff';
+        ctx.textAlign = 'center';
+        ctx.fillText('permits: 10', bx + 40, y + 10);
+        ctx.font = '9px -apple-system,sans-serif';
+        ctx.fillStyle = themeColors().subtitle;
+        ctx.textAlign = 'left';
+        ctx.fillText('调用线程直接执行，仅限并发数', bx + 90, y + 10);
+      }
+    }
+
+    function drawTimeline(ctx, x, y, w, h) {
+      const tc = themeColors();
+      ctx.font = 'bold 11px -apple-system,sans-serif';
+      ctx.fillStyle = tc.title;
+      ctx.textAlign = 'left';
+      ctx.fillText('请求时间线', x, y + 6);
+
+      const hist = CB.history;
+      if (!hist.length) {
+        ctx.font = '11px -apple-system,sans-serif';
+        ctx.fillStyle = tc.placeholder;
+        ctx.textAlign = 'center';
+        ctx.fillText('发送请求后这里会显示实时时间线', x + w / 2, y + h / 2 + 6);
+        return;
+      }
+
+      const chartL = x + 30, chartT = y + 18, chartW = w - 40, chartH = h - 24;
+      const xScale = chartW / Math.max(hist.length - 1, 1);
+
+      // Threshold line
+      const thY = chartT + chartH - (CFG.thresh / 100) * chartH;
+      ctx.beginPath();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = '#ff5f6d30';
+      ctx.moveTo(chartL, thY); ctx.lineTo(chartL + chartW, thY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = '8px SF Mono,monospace';
+      ctx.fillStyle = '#ff5f6d50';
+      ctx.textAlign = 'right';
+      ctx.fillText(`阈值${CFG.thresh}%`, chartL - 3, thY + 3);
+
+      // Fail rate line
+      ctx.beginPath();
+      ctx.strokeStyle = '#ffd93d';
+      ctx.lineWidth = 2;
+      hist.forEach((h, i) => {
+        const hx = chartL + i * xScale;
+        const hy = chartT + chartH - (h.failRate / 100) * chartH;
+        if (i === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+      });
+      ctx.stroke();
+
+      // Request dots
+      hist.forEach((h, i) => {
+        const hx = chartL + i * xScale;
+        const hy = chartT + chartH + 8;
+        const colors = { success: '#4ecdc4', fail: '#ff5f6d', timeout: '#ffd93d' };
+        ctx.fillStyle = h.fallback ? '#b44dff' : (colors[h.type] || '#8b90a5');
+        ctx.fillRect(hx - 1.5, hy, 3, 6);
+      });
+
+      // State bands at bottom
+      let lastState = hist[0].state;
+      let bandStart = 0;
+      const stateColors = { CLOSED: '#4ecdc415', OPEN: '#ff5f6d15', HALF_OPEN: '#ffd93d15' };
+      for (let i = 1; i <= hist.length; i++) {
+        const cur = i < hist.length ? hist[i].state : null;
+        if (cur !== lastState || i === hist.length) {
+          const sx = chartL + bandStart * xScale;
+          const ex = chartL + (i - 1) * xScale;
+          ctx.fillStyle = stateColors[lastState] || 'transparent';
+          ctx.fillRect(sx, chartT, ex - sx + 2, chartH);
+          if (i < hist.length) { lastState = cur; bandStart = i; }
+        }
+      }
+
+      // Y axis labels
+      ctx.font = '8px SF Mono,monospace';
+      ctx.fillStyle = tc.axisLabel;
+      ctx.textAlign = 'right';
+      ctx.fillText('100%', chartL - 3, chartT + 4);
+      ctx.fillText('0%', chartL - 3, chartT + chartH + 4);
+
+      // Legend
+      ctx.textAlign = 'left';
+      const lx = chartL + chartW - 200;
+      const ly = chartT - 2;
+      [['#ffd93d', '失败率'], ['#4ecdc4', '成功'], ['#ff5f6d', '失败'], ['#b44dff', '降级']].forEach(([c, l], i) => {
+        ctx.fillStyle = c;
+        ctx.fillRect(lx + i * 50, ly, 6, 6);
+        ctx.fillStyle = tc.axisLabel;
+        ctx.font = '8px -apple-system,sans-serif';
+        ctx.fillText(l, lx + i * 50 + 9, ly + 6);
+      });
+    }
+
+    function addLog(type, msg, tag) {
+      const log = document.getElementById('log');
+      const t = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+      const colors = { grn: '#4ecdc4', red: '#ff5f6d', ylw: '#ffd93d', pur: '#b44dff', cyn: '#00d2ff' };
+      log.innerHTML += `<div><span style="color:var(--text-secondary)">[${t}]</span> <span style="color:${colors[type] || 'var(--text-primary)'}">${msg}</span></div>`;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function updatePrompt() {
+      const stats = getWindowStats();
+      const parts = [`Hystrix 熔断器: ${CB.state}`];
+      parts.push(`失败率阈值=${CFG.thresh}%, 最小请求=${CFG.minReq}, 恢复窗口=${CFG.sleep}s`);
+      parts.push(`窗口: ${stats.fails}/${stats.total} (${stats.rate.toFixed(0)}%)`);
+      if (CB.fallbacks > 0) parts.push(`降级 ${CB.fallbacks} 次`);
+      parts.push(`隔离: ${CFG.isolation === 'thread' ? '线程池' : '信号量'}`);
+      document.getElementById('ptx').textContent = parts.join(' · ');
+    }
+
+    function copyP() {
+      navigator.clipboard.writeText(document.getElementById('ptx').textContent).then(() => {
+        const b = event.target; b.textContent = '已复制!'; setTimeout(() => b.textContent = '复制', 1500);
+      });
+    }
+
+    // Re-render canvas on theme toggle
+    new MutationObserver(() => render()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    // Init
+    render();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

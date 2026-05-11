@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Code 工作原理</title>
+  <meta name="description" content="交互式演示 Claude Code 工作原理，包括 Agentic Loop、工具调用、上下文管理与权限控制">
+  <meta name="keywords" content="Claude Code, AI编程, Agentic Loop, 工具调用, MCP, 上下文管理">
+  <meta property="og:title" content="Claude Code 工作原理">
+  <meta property="og:description" content="交互式演示 Claude Code 工作原理，包括 Agentic Loop、工具调用、上下文管理与权限控制">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      /* Legacy aliases for JS inline styles */
+      --bg: #080b12;
+      --sf: #0f1319;
+      --card: #161c26;
+      --bd: #1e2a3a;
+      --ac: #4da3ff;
+      --bl: #4da3ff;
+      --gn: #36d986;
+      --yl: #ff9f43;
+      --rd: #ff5c6c;
+      --pp: #b07aff;
+      --cy: #22d3ee;
+      --pk: #f472b6;
+      --og: #ff9f43;
+      --tx: #e8edf5;
+      --t2: #7d8da0;
+      --t3: #4a5568;
+      --r: 8px;
+      --mo: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 14px;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    header {
+      position: relative;
+      z-index: 1;
+      padding: 12px 24px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+
+    header h1 span {
+      color: var(--accent-blue);
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      padding: 10px 16px;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .tab:hover {
+      color: var(--text-primary);
+      background: rgba(77, 163, 255, 0.04);
+    }
+
+    .tab.on {
+      color: var(--accent-blue);
+      border-bottom-color: var(--accent-blue);
+      background: rgba(77, 163, 255, 0.06);
+      font-weight: 600;
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      z-index: 1;
+    }
+
+    .L {
+      width: 280px;
+      min-width: 280px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .R {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .cw {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .sec {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .sec:hover {
+      border-color: var(--border-hover);
+    }
+
+    .st {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .st::before {
+      content: '';
+      width: 3px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 0;
+    }
+
+    .row label {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .row select {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: var(--radius-sm);
+      padding: 5px 10px;
+      font-size: 12px;
+      width: 130px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .row select:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    .bs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .b {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 8px 6px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.2s;
+      flex: 1;
+      text-align: center;
+      min-width: 58px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .b::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .b:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .b.p {
+      background: linear-gradient(135deg, #1a6ff0, #1f6feb);
+      color: #fff;
+      font-weight: 600;
+      border-color: transparent;
+    }
+
+    .b.p:hover {
+      box-shadow: 0 4px 16px rgba(77, 163, 255, 0.3);
+    }
+
+    .b.r {
+      color: var(--accent-red);
+      border-color: rgba(255, 92, 108, 0.25);
+    }
+
+    .b.r:hover {
+      border-color: var(--accent-red);
+      background: rgba(255, 92, 108, 0.08);
+    }
+
+    .inf {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      font-size: 13px;
+      line-height: 1.8;
+      color: var(--text-secondary);
+    }
+
+    .inf b {
+      color: var(--text-primary);
+    }
+
+    .inf .h {
+      color: var(--accent-blue);
+      font-weight: 600;
+    }
+
+    .inf .g {
+      color: var(--accent-green);
+    }
+
+    .inf .r {
+      color: var(--accent-red);
+    }
+
+    .inf .bl {
+      color: var(--accent-blue);
+    }
+
+    .inf .pp {
+      color: var(--accent-purple);
+    }
+
+    .inf .y {
+      color: var(--accent-orange);
+    }
+
+    .pb {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 12px 20px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .pb .pt {
+      flex: 1;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      color: var(--text-secondary);
+      line-height: 1.7;
+      max-height: 56px;
+      overflow-y: auto;
+    }
+
+    .cb {
+      background: linear-gradient(135deg, #1a6ff0, #1f6feb);
+      border: none;
+      color: #fff;
+      padding: 7px 16px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cb::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .cb:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(77, 163, 255, 0.3);
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1><span>Claude Code</span> 工作原理</h1>
+    <div class="tabs" id="tabs"></div>
+  </header>
+  <div class="main">
+    <div class="L" id="lp"></div>
+    <div class="R">
+      <div class="cw"><canvas id="cv"></canvas></div>
+      <div class="pb">
+        <div class="pt" id="pt"></div><button class="cb"
+          onclick="navigator.clipboard.writeText(document.getElementById('pt').textContent).then(()=>{event.target.textContent='已复制!';setTimeout(()=>event.target.textContent='复制',1200)})">复制</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    const cv = document.getElementById('cv'), cx = cv.getContext('2d');
+    const REF_W = 1143, REF_H = 686;
+    let W = REF_W, H = REF_H, dpr, S = 1, W_real, H_real;
+    function rsz() {
+      const r = cv.parentElement.getBoundingClientRect();
+      dpr = devicePixelRatio || 1;
+      W_real = r.width; H_real = r.height;
+      cv.width = W_real * dpr; cv.height = H_real * dpr;
+      cv.style.width = W_real + 'px'; cv.style.height = H_real + 'px';
+      S = Math.min(W_real / REF_W, H_real / REF_H);
+      const offsetX = (W_real - REF_W * S) / 2;
+      const offsetY = (H_real - REF_H * S) / 2;
+      cx.setTransform(dpr * S, 0, 0, dpr * S, dpr * offsetX, dpr * offsetY);
+      W = REF_W; H = REF_H;
+    }
+    addEventListener('resize', () => { rsz(); M[aT].draw() });
+    function cssVar(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim() || '' }
+    const F = () => getComputedStyle(document.body).fontFamily;
+    function clr() { cx.save(); cx.setTransform(1, 0, 0, 1, 0, 0); cx.clearRect(0, 0, cv.width, cv.height); cx.restore() }
+    function fitText(str, maxW) { if (cx.measureText(str).width <= maxW) return str; let s = str; while (s.length > 1 && cx.measureText(s + '…').width > maxW) s = s.slice(0, -1); return s + '…' }
+    function t(x, y, s, sz, c, a = 'center', bl = 'middle') { cx.fillStyle = c; cx.font = `${sz}px ${F()}`; cx.textAlign = a; cx.textBaseline = bl; cx.fillText(s, x, y) }
+    function tb(x, y, s, sz, c, a = 'center', bl = 'middle') { cx.font = `bold ${sz}px ${F()}`; cx.fillStyle = c; cx.textAlign = a; cx.textBaseline = bl; cx.fillText(s, x, y) }
+    function tm(x, y, s, sz, c, a = 'center') { cx.fillStyle = c; cx.font = `${sz}px var(--mo)`; cx.textAlign = a; cx.textBaseline = 'middle'; cx.fillText(s, x, y) }
+    function rr(x, y, w, h, r) { cx.beginPath(); cx.moveTo(x + r, y); cx.lineTo(x + w - r, y); cx.quadraticCurveTo(x + w, y, x + w, y + r); cx.lineTo(x + w, y + h - r); cx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); cx.lineTo(x + r, y + h); cx.quadraticCurveTo(x, y + h, x, y + h - r); cx.lineTo(x, y + r); cx.quadraticCurveTo(x, y, x + r, y); cx.closePath() }
+    function bx(x, y, w, h, f, s, r = 5) { cx.fillStyle = f; cx.strokeStyle = s; cx.lineWidth = 1.2; rr(x, y, w, h, r); cx.fill(); cx.stroke() }
+    function ar(x1, y1, x2, y2, c, w = 1.2) { cx.strokeStyle = c; cx.lineWidth = w; cx.beginPath(); cx.moveTo(x1, y1); cx.lineTo(x2, y2); cx.stroke(); const a = Math.atan2(y2 - y1, x2 - x1), l = 5; cx.fillStyle = c; cx.beginPath(); cx.moveTo(x2, y2); cx.lineTo(x2 - l * Math.cos(a - .35), y2 - l * Math.sin(a - .35)); cx.lineTo(x2 - l * Math.cos(a + .35), y2 - l * Math.sin(a + .35)); cx.closePath(); cx.fill() }
+    function circ(x, y, r, f, s) { cx.fillStyle = f; cx.strokeStyle = s; cx.lineWidth = 1.2; cx.beginPath(); cx.arc(x, y, r, 0, Math.PI * 2); cx.fill(); cx.stroke() }
+    function dl(x1, y1, x2, y2, c) { cx.strokeStyle = c; cx.lineWidth = 1; cx.setLineDash([4, 4]); cx.beginPath(); cx.moveTo(x1, y1); cx.lineTo(x2, y2); cx.stroke(); cx.setLineDash([]) }
+    function pct(x, y, w, h, p, c) { bx(x, y, w, h, cssVar('--bg-elevated') + '40', cssVar('--border'), 3); cx.fillStyle = c; rr(x, y, Math.max(2, w * Math.min(1, p)), h, 3); cx.fill() }
+    const PC = ['#6ca4f7', '#5de4a7', '#fba86f', '#b794f6', '#f9a8d4', '#67e8f9', '#f5d76e', '#f76c6c'];
+
+    const TABS = [{ id: 'loop', l: 'Agentic Loop' }, { id: 'tools', l: '工具系统' }, { id: 'ctx', l: '上下文管理' }, { id: 'perm', l: '权限模型' }, { id: 'mcp', l: 'MCP 集成' }, { id: 'flow', l: '执行流程' }];
+    let aT = 'loop';
+    document.getElementById('tabs').innerHTML = TABS.map(x => `<button class="tab${x.id === aT ? ' on' : ''}" onclick="sw('${x.id}')">${x.l}</button>`).join('');
+    function sw(id) { aT = id; document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.textContent === TABS.find(y => y.id === id).l)); M[id].init(); rsz(); M[id].draw() }
+
+    // ===================== 1. AGENTIC LOOP =====================
+    const loop = (() => {
+      let step = 0, maxStep = 7, tid = null, playing = false;
+      const steps = [
+        { phase: 'user_input', label: '用户输入', info: '用户在终端输入自然语言指令（如"修复这个 bug"、"添加单元测试"）。Claude Code 将用户输入组装为 API 请求的一部分。' },
+        { phase: 'build_context', label: '构建上下文', info: '系统收集上下文：System Prompt + CLAUDE.md 项目指令 + 对话历史 + 可用工具定义 + Memory 文件。这些组成发送给 Claude API 的完整消息。' },
+        { phase: 'api_call', label: '调用 Claude API', info: '将组装好的 messages 数组发送到 Anthropic API。模型使用 Extended Thinking（扩展思考）来规划行动策略，决定是直接回复还是调用工具。' },
+        { phase: 'thinking', label: '模型思考', info: 'Claude 在 thinking block 中进行推理：分析用户意图、制定计划、选择合适的工具。思考过程对用户部分可见（streaming 显示）。' },
+        { phase: 'tool_call', label: '工具调用', info: '模型输出 tool_use block，指定要调用的工具和参数。例如：Read(file_path="/src/app.ts") 或 Bash(command="npm test")。可能一次调用多个工具（并行）。' },
+        { phase: 'execution', label: '执行 & 观察', info: 'Claude Code 本地执行工具调用：读文件、运行命令、编辑代码等。执行结果作为 tool_result 返回给模型。如果需要权限确认，会暂停等待用户批准。' },
+        { phase: 'loop_check', label: '循环判断', info: '模型检查工具结果：任务是否完成？需要更多信息？如果未完成，回到"思考"步骤继续调用工具。这就是 Agentic Loop — 自主循环直到任务完成。' },
+        { phase: 'response', label: '输出响应', info: '任务完成后，模型生成最终的文本回复给用户，总结所做的修改。然后等待用户的下一条指令，开始新的循环。' }
+      ];
+      function init() { step = 0; playing = false; if (tid) clearInterval(tid); tid = null; renderL(); draw(); uP() }
+      function renderL() {
+        document.getElementById('lp').innerHTML = `
+    <div class="sec"><div class="st">Agentic Loop（智能体循环）</div>
+      <div class="inf">Claude Code 的核心是一个<span class="h">自主循环</span>：<br><br>
+      用户输入 → 构建上下文 → API 调用 → <span class="bl">思考</span> → <span class="g">工具调用</span> → 执行 → <span class="y">循环判断</span> → 回复<br><br>
+      与普通 ChatBot 的区别：<br>
+      - 不是<b>一问一答</b>，而是<b>自主多轮执行</b><br>
+      - 模型可以<span class="h">主动决定</span>下一步做什么<br>
+      - 直到任务完成才停止循环</div>
+    </div>
+    <div class="sec"><div class="st">步骤控制</div>
+      <div class="bs">
+        <button class="b" onclick="loop.prev()">◀</button>
+        <button class="b p" onclick="loop.toggle()">${playing ? '⏸' : '▶'} 播放</button>
+        <button class="b" onclick="loop.next()">▶</button>
+        <button class="b r" onclick="loop.init()">↺</button>
+      </div>
+      <div style="text-align:center;margin-top:6px;font-size:11px;color:var(--t3)">步骤 ${step + 1}/${maxStep + 1}: <span style="color:var(--ac)">${steps[step].label}</span></div>
+    </div>
+    <div class="sec"><div class="st">当前步骤</div>
+      <div class="inf">${steps[step].info}</div>
+    </div>`}
+      function next() { if (step < maxStep) step++; else step = 0; renderL(); draw(); uP() }
+      function prev() { if (step > 0) step--; renderL(); draw(); uP() }
+      function toggle() { if (playing) { clearInterval(tid); tid = null; playing = false } else { playing = true; tid = setInterval(() => { next(); if (step === 0 && !playing) clearInterval(tid) }, 1500) } renderL() }
+      function draw() {
+        clr();
+        const cxC = W / 2, cyC = H * 0.45, rx = Math.min(W * 0.34, 200), ry = Math.min(H * 0.3, 140);
+        // Loop ellipse
+        cx.strokeStyle = cssVar('--border'); cx.lineWidth = 2; cx.beginPath(); cx.ellipse(cxC, cyC, rx, ry, 0, 0, Math.PI * 2); cx.stroke();
+        // Nodes on ellipse
+        const nodes = steps.map((s, i) => {
+          const angle = -Math.PI / 2 + i * (Math.PI * 2 / (maxStep + 1));
+          return { ...s, x: cxC + rx * Math.cos(angle), y: cyC + ry * Math.sin(angle), angle, idx: i };
+        });
+        // Arrows between nodes
+        nodes.forEach((n, i) => {
+          const next = nodes[(i + 1) % (maxStep + 1)];
+          const active = i === step;
+          const c = active ? '#d4a574' : cssVar('--border');
+          // Direction arrow on the arc
+          const midAngle = (n.angle + next.angle) / 2;
+          if (next.angle < n.angle) { }// wrap
+          const mx = cxC + rx * 0.85 * Math.cos(midAngle), my = cyC + ry * 0.85 * Math.sin(midAngle);
+          if (active) { ar(n.x + (next.x - n.x) * 0.3, n.y + (next.y - n.y) * 0.3, n.x + (next.x - n.x) * 0.7, n.y + (next.y - n.y) * 0.7, c, 2) }
+        });
+        // Node circles
+        const colors = ['#d4a574', '#b794f6', '#6ca4f7', '#67e8f9', '#5de4a7', '#fba86f', '#f5d76e', '#f76c6c'];
+        nodes.forEach((n, i) => {
+          const active = i === step;
+          const c = colors[i];
+          circ(n.x, n.y, active ? 26 : 20, active ? c + '30' : c + '10', active ? c : c + '40');
+          if (active) { cx.strokeStyle = c + '40'; cx.lineWidth = 2; cx.beginPath(); cx.arc(n.x, n.y, 32, 0, Math.PI * 2); cx.stroke() }
+          tb(n.x, n.y - 4, String(i + 1), active ? 13 : 10, active ? c : c + '80');
+          t(n.x, n.y + 10, n.label, active ? 9 : 8, active ? cssVar('--text-primary') : cssVar('--text-muted'));
+        });
+        // Center label
+        tb(cxC, cyC - 8, 'Agentic', 16, '#d4a57440');
+        tb(cxC, cyC + 10, 'Loop', 16, '#d4a57440');
+        // Detail box at bottom
+        const dY = H - 80;
+        bx(30, dY, W - 60, 60, cssVar('--bg-card'), cssVar('--border'));
+        const s = steps[step];
+        tb(W / 2, dY + 16, `${step + 1}. ${s.label}`, 12, colors[step]);
+        // Wrap text for info
+        cx.font = `10px ${F()}`;
+        const maxTW = W - 90;
+        const line1 = fitText(s.info, maxTW);
+        t(W / 2, dY + 36, line1, 10, cssVar('--text-secondary'));
+        if (line1.length < s.info.length) { const line2 = fitText(s.info.slice(line1.replace('…', '').length), maxTW); t(W / 2, dY + 50, line2, 10, cssVar('--text-secondary')) }
+      }
+      function uP() { document.getElementById('pt').textContent = `请详细解释 Claude Code 的 Agentic Loop 工作原理。当前步骤"${steps[step].label}"。请说明：1) 完整的循环流程（用户输入→上下文构建→API调用→思考→工具调用→执行→循环判断→回复）；2) 与传统 ChatBot 单轮对话的本质区别；3) 模型如何自主决定何时停止循环；4) Extended Thinking 在规划中的作用；5) 工具并行调用的时机和策略。` }
+      return { init, draw, next, prev, toggle }
+    })();
+
+    // ===================== 2. TOOL SYSTEM =====================
+    const tools = (() => {
+      let selected = 0;
+      const TOOLS = [
+        { name: 'Read', icon: '📖', cat: '文件', color: '#6ca4f7', desc: '读取文件内容（支持行范围、PDF、图片、Notebook）', example: 'Read(file_path="/src/app.ts", offset=10, limit=50)', detail: '按行号读取，支持 offset/limit 分段读取大文件。可读取图片（多模态）、PDF（分页）、.ipynb Notebook。' },
+        { name: 'Edit', icon: '✏️', cat: '文件', color: '#5de4a7', desc: '精确字符串替换（old_string → new_string）', example: 'Edit(file_path="/src/app.ts", old_string="foo", new_string="bar")', detail: '基于精确文本匹配的替换。old_string 必须在文件中唯一。支持 replace_all 全局替换。比 Write 更安全，只发送 diff。' },
+        { name: 'Write', icon: '📝', cat: '文件', color: '#fba86f', desc: '创建新文件或完全重写（覆盖整个文件）', example: 'Write(file_path="/src/new.ts", content="...")', detail: '完整写入文件内容。仅用于新建文件或全量重写。编辑已有文件优先用 Edit（减少 token 消耗）。' },
+        { name: 'Bash', icon: '⚡', cat: '执行', color: '#f5d76e', desc: '执行 Shell 命令（npm, git, build, test...）', example: 'Bash(command="npm test -- --grep auth")', detail: '在用户 Shell 环境中执行命令。支持超时(120s默认)、后台运行、工作目录持久。不用于可以由专用工具完成的操作。' },
+        { name: 'Grep', icon: '🔍', cat: '搜索', color: '#67e8f9', desc: '基于 ripgrep 的正则内容搜索', example: 'Grep(pattern="async function", glob="*.ts")', detail: '底层用 ripgrep，支持正则、文件类型过滤、上下文行数、输出模式(内容/文件名/计数)。比 Bash grep 更快更安全。' },
+        { name: 'Glob', icon: '📁', cat: '搜索', color: '#b794f6', desc: '按模式查找文件路径', example: 'Glob(pattern="src/**/*.test.ts")', detail: '快速文件模式匹配。结果按修改时间排序。用于定位文件，不读取内容。' },
+        { name: 'Agent', icon: '🤖', cat: '高级', color: '#f9a8d4', desc: '启动子代理执行独立任务', example: 'Agent(prompt="...", subagent_type="Explore")', detail: '启动独立的子代理（有自己的上下文窗口）。支持多种类型：Explore(搜索)、Plan(规划)、code-reviewer(代码审查)。可并行启动多个子代理。' },
+        { name: 'WebSearch', icon: '🌐', cat: '高级', color: '#fba86f', desc: '搜索互联网获取最新信息', example: 'WebSearch(query="React 19 new features")', detail: '搜索网页获取最新信息。用于超出训练数据的时效性信息。返回摘要和链接。' }
+      ];
+      function init() { selected = 0; renderL(); draw(); uP() }
+      function renderL() {
+        document.getElementById('lp').innerHTML = `
+    <div class="sec"><div class="st">Claude Code 工具箱</div>
+      <div class="inf">Claude Code 通过 <span class="h">Tool Use</span> 协议与本地环境交互。<br>模型输出结构化的工具调用 → 本地执行 → 结果返回模型。<br><br>
+      工具分类：<br>
+      <span class="bl">文件操作</span>: Read / Edit / Write<br>
+      <span class="y">命令执行</span>: Bash<br>
+      <span class="g">搜索定位</span>: Grep / Glob<br>
+      <span class="pp">高级能力</span>: Agent / WebSearch / MCP</div>
+    </div>
+    <div class="sec"><div class="st">选择工具查看详情</div>
+      <div class="bs">${TOOLS.map((tl, i) => `<button class="b${i === selected ? ' p' : ''}" style="${i === selected ? '' : `color:${tl.color};border-color:${tl.color}30`}" onclick="tools.sel(${i})">${tl.icon} ${tl.name}</button>`).join('')}</div>
+    </div>
+    <div class="sec"><div class="st">${TOOLS[selected].name} 详情</div>
+      <div class="inf">
+        <b>${TOOLS[selected].desc}</b><br><br>
+        <span class="h">示例调用：</span><br>
+        <code style="color:var(--gn);font-size:9px">${TOOLS[selected].example}</code><br><br>
+        ${TOOLS[selected].detail}
+      </div>
+    </div>`}
+      function sel(i) { selected = i; renderL(); draw(); uP() }
+      function draw() {
+        clr();
+        const tl = TOOLS[selected];
+        // Title
+        tb(W / 2, 20, 'Tool Use Protocol', 12, '#4a4a5e');
+        // Flow: Model → Tool Call → Local Exec → Result → Model
+        const flowY = 55, boxW = 120, boxH = 44, gap = 30;
+        const totalW = 3 * boxW + 2 * gap;
+        const startX = (W - totalW) / 2;
+        // Model box
+        bx(startX, flowY, boxW, boxH, '#d4a57415', '#d4a574');
+        tb(startX + boxW / 2, flowY + 14, 'Claude Model', 10, '#d4a574');
+        t(startX + boxW / 2, flowY + 30, '输出 tool_use', 8, '#8b8b9e');
+        // Tool call box
+        const tcX = startX + boxW + gap;
+        bx(tcX, flowY, boxW, boxH, tl.color + '15', tl.color);
+        tb(tcX + boxW / 2, flowY + 14, `${tl.icon} ${tl.name}`, 10, tl.color);
+        t(tcX + boxW / 2, flowY + 30, tl.cat, 8, '#8b8b9e');
+        // Result box
+        const rsX = tcX + boxW + gap;
+        bx(rsX, flowY, boxW, boxH, '#5de4a715', '#5de4a7');
+        tb(rsX + boxW / 2, flowY + 14, 'tool_result', 10, '#5de4a7');
+        t(rsX + boxW / 2, flowY + 30, '返回模型', 8, '#8b8b9e');
+        // Arrows
+        ar(startX + boxW + 2, flowY + boxH / 2, tcX - 2, flowY + boxH / 2, '#d4a57450');
+        ar(tcX + boxW + 2, flowY + boxH / 2, rsX - 2, flowY + boxH / 2, '#5de4a750');
+        // Return arrow (bottom)
+        cx.strokeStyle = '#d4a57420'; cx.lineWidth = 1; cx.setLineDash([4, 4]);
+        cx.beginPath(); cx.moveTo(rsX + boxW / 2, flowY + boxH); cx.lineTo(rsX + boxW / 2, flowY + boxH + 15); cx.lineTo(startX + boxW / 2, flowY + boxH + 15); cx.lineTo(startX + boxW / 2, flowY + boxH); cx.stroke(); cx.setLineDash([]);
+        t(W / 2, flowY + boxH + 22, '循环', 8, '#d4a57440');
+
+        // Detailed view of selected tool
+        const detY = flowY + boxH + 50;
+        bx(30, detY, W - 60, H - detY - 20, '#0a0a0f', '#ffffff08');
+        tb(50, detY + 16, `${tl.icon} ${tl.name}`, 13, tl.color, 'left');
+        t(50, detY + 34, tl.desc, 10, '#8b8b9e', 'left');
+        // Example
+        cx.font = `9px var(--mo)`;
+        tm(50, detY + 56, fitText(tl.example, W - 110), 9, '#5de4a7', 'left');
+        // Parameters visualization
+        const paramY = detY + 80;
+        t(50, paramY, '调用流程:', 9, '#4a4a5e', 'left');
+        const flowSteps = getToolFlow(tl.name);
+        flowSteps.forEach((fs, i) => {
+          const fx = 80 + i * 150, fy = paramY + 20;
+          bx(fx - 5, fy - 10, 130, 28, fs.color + '12', fs.color + '40', 4);
+          t(fx + 60, fy + 4, fs.label, 9, fs.color);
+          if (i < flowSteps.length - 1) ar(fx + 127, fy + 4, fx + 147, fy + 4, '#ffffff15');
+        });
+        // Permission check note
+        const noteY = paramY + 55;
+        bx(45, noteY, W - 100, 24, '#f5d76e08', '#f5d76e20', 4);
+        cx.font = `9px ${F()}`; t(W / 2, noteY + 12, fitText('⚠ 工具调用前会检查权限设置（settings.json allowlist），未授权操作需要用户确认', W - 120), 9, '#f5d76e');
+      }
+      function getToolFlow(name) {
+        const flows = {
+          Read: [{ label: '解析路径', color: '#6ca4f7' }, { label: '读取文件', color: '#5de4a7' }, { label: '格式化(行号)', color: '#fba86f' }, { label: '返回内容', color: '#d4a574' }],
+          Edit: [{ label: '读取原文件', color: '#6ca4f7' }, { label: '查找 old_string', color: '#f5d76e' }, { label: '替换为 new', color: '#5de4a7' }, { label: '写回文件', color: '#fba86f' }],
+          Write: [{ label: '检查路径', color: '#6ca4f7' }, { label: '写入内容', color: '#5de4a7' }, { label: '确认成功', color: '#fba86f' }],
+          Bash: [{ label: '权限检查', color: '#f5d76e' }, { label: 'Shell 执行', color: '#fba86f' }, { label: '捕获输出', color: '#5de4a7' }, { label: '返回结果', color: '#d4a574' }],
+          Grep: [{ label: '构建 rg 命令', color: '#6ca4f7' }, { label: 'ripgrep 执行', color: '#67e8f9' }, { label: '格式化结果', color: '#5de4a7' }, { label: '返回匹配', color: '#d4a574' }],
+          Glob: [{ label: '解析 pattern', color: '#b794f6' }, { label: '文件系统遍历', color: '#6ca4f7' }, { label: '按时间排序', color: '#5de4a7' }, { label: '返回路径列表', color: '#d4a574' }],
+          Agent: [{ label: '创建子上下文', color: '#f9a8d4' }, { label: '启动子代理', color: '#b794f6' }, { label: '独立执行', color: '#5de4a7' }, { label: '汇总返回', color: '#d4a574' }],
+          WebSearch: [{ label: '构建查询', color: '#fba86f' }, { label: '搜索引擎', color: '#6ca4f7' }, { label: '摘要提取', color: '#5de4a7' }, { label: '返回结果', color: '#d4a574' }]
+        };
+        return flows[name] || flows.Read;
+      }
+      function uP() { const tl = TOOLS[selected]; document.getElementById('pt').textContent = `请解释 Claude Code 的 ${tl.name} 工具的工作原理。该工具用于${tl.desc}。请说明：1) 工具的参数设计和使用场景；2) 底层执行机制；3) 与其他类似工具的选择策略（如何决定用 Edit vs Write，Grep vs Bash grep）；4) 权限检查和安全控制；5) 工具调用失败时的重试和错误处理策略。` }
+      return { init, draw, sel }
+    })();
+
+    // ===================== 3. CONTEXT WINDOW =====================
+    const ctxM = (() => {
+      let segments = [], totalTokens = 200000, used = 0;
+      function init() {
+        segments = [
+          { name: 'System Prompt', tokens: 4000, color: '#d4a574', desc: '工具定义、行为指令、环境信息' },
+          { name: 'CLAUDE.md', tokens: 2000, color: '#b794f6', desc: '项目级/用户级自定义指令' },
+          { name: 'Memory Files', tokens: 800, color: '#f9a8d4', desc: '持久化的用户偏好和项目上下文' },
+          { name: '对话历史', tokens: 35000, color: '#6ca4f7', desc: '之前的 user/assistant 消息' },
+          { name: '工具结果', tokens: 15000, color: '#5de4a7', desc: 'Read/Grep/Bash 等工具返回的内容' },
+          { name: '当前请求', tokens: 500, color: '#f5d76e', desc: '用户最新输入的消息' },
+          { name: '（可用空间）', tokens: 142700, color: '#ffffff10', desc: '模型输出 + 思考 + 工具调用' }
+        ];
+        used = segments.reduce((a, s) => a + (s.name !== '（可用空间）' ? s.tokens : 0), 0);
+        renderL(); draw(); uP();
+      }
+      function renderL() {
+        document.getElementById('lp').innerHTML = `
+    <div class="sec"><div class="st">上下文窗口 (Context Window)</div>
+      <div class="inf">
+        Claude Code 使用 <span class="h">200K tokens</span> 的上下文窗口。<br><br>
+        每次 API 调用，窗口内容包括：<br>
+        1. <span class="h">System Prompt</span> — 工具定义 + 行为规则<br>
+        2. <span class="pp">CLAUDE.md</span> — 项目/用户自定义指令<br>
+        3. <span class="bl">对话历史</span> — 之前的交互记录<br>
+        4. <span class="g">工具结果</span> — 各种工具的返回值<br><br>
+        当上下文接近上限时，系统自动<span class="y">压缩</span>早期消息。
+      </div>
+    </div>
+    <div class="sec"><div class="st">Token 使用</div>
+      <div class="inf">
+        已用: <b>${(used / 1000).toFixed(1)}K</b> / ${totalTokens / 1000}K tokens<br>
+        使用率: <span class="h">${((used / totalTokens) * 100).toFixed(1)}%</span>
+      </div>
+      <div style="height:6px"></div>
+      ${segments.filter(s => s.name !== '（可用空间）').map(s => `<div class="row"><label style="color:${s.color}">${s.name}</label><span class="rv">${(s.tokens / 1000).toFixed(1)}K</span></div>`).join('')}
+    </div>
+    <div class="sec"><div class="st">压缩策略</div>
+      <div class="inf">
+        当上下文超过阈值时：<br>
+        1. <span class="y">自动压缩</span>早期对话历史（保留关键信息摘要）<br>
+        2. 工具结果中的<b>大文件内容</b>被截断<br>
+        3. 保留<span class="h">最近的交互</span>完整不压缩<br>
+        4. System Prompt 和 CLAUDE.md <b>始终完整保留</b>
+      </div>
+    </div>`}
+      function draw() {
+        clr();
+        tb(W / 2, 18, 'Context Window — 200K Tokens', 12, '#4a4a5e');
+        // Stacked bar chart
+        const barX = 40, barY = 40, barW = W - 80, barH = 40;
+        let accX = barX;
+        segments.forEach(s => {
+          const w = Math.max(2, (s.tokens / totalTokens) * barW);
+          bx(accX, barY, w, barH, s.color + '25', s.color + '60', 0);
+          if (w > 40) { cx.font = `8px ${F()}`; t(accX + w / 2, barY + barH / 2, fitText(s.name, w - 6), 8, s.color) }
+          accX += w;
+        });
+        // Legend below bar
+        let lx = barX, ly = barY + barH + 16;
+        segments.forEach(s => {
+          if (s.name === '（可用空间）') return;
+          cx.fillStyle = s.color; cx.fillRect(lx, ly, 8, 8);
+          t(lx + 12, ly + 4, `${s.name} (${(s.tokens / 1000).toFixed(1)}K)`, 8, s.color, 'left');
+          lx += 150; if (lx > W - 100) { lx = barX; ly += 16 }
+        });
+        // Detailed view - API message structure
+        const msgY = ly + 30;
+        tb(barX, msgY, 'API 消息结构 (messages array)', 11, '#8b8b9e', 'left');
+        const msgs = [
+          { role: 'system', content: 'System Prompt + 工具定义 + CLAUDE.md + Memory', color: '#d4a574' },
+          { role: 'user', content: '[对话历史] 用户消息 #1', color: '#6ca4f7' },
+          { role: 'assistant', content: '[对话历史] Claude 回复 + tool_use', color: '#5de4a7' },
+          { role: 'user', content: '[对话历史] tool_result (工具执行结果)', color: '#fba86f' },
+          { role: 'assistant', content: '[对话历史] Claude 回复 #2', color: '#5de4a7' },
+          { role: '...', content: '(更多对话轮次...)', color: '#4a4a5e' },
+          { role: 'user', content: '当前用户输入（最新消息）', color: '#f5d76e' },
+        ];
+        msgs.forEach((m, i) => {
+          const my = msgY + 18 + i * 30;
+          const isCompressed = i >= 1 && i <= 2;
+          bx(barX, my, W - 80, 26, m.color + '08', m.color + '25', 4);
+          tm(barX + 8, my + 13, m.role, 9, m.color, 'left');
+          t(barX + 70, my + 13, m.content, 9, '#8b8b9e', 'left');
+          if (isCompressed) {
+            t(W - 60, my + 13, '可压缩', 7, '#f5d76e');
+          }
+        });
+        // Compression indicator
+        const compY = msgY + 18 + msgs.length * 30 + 10;
+        if (compY < H - 10) {
+          bx(barX, compY, W - 80, 24, '#f5d76e08', '#f5d76e20', 4);
+          cx.font = `9px ${F()}`; t(W / 2, compY + 12, fitText('💡 上下文接近上限时，系统自动压缩历史消息 → 保留摘要 + 最近完整对话', W - 100), 9, '#f5d76e');
+        }
+      }
+      function uP() { document.getElementById('pt').textContent = `请解释 Claude Code 的上下文窗口管理机制。200K tokens 窗口中各部分占用：System Prompt ~4K, CLAUDE.md ~2K, 对话历史 ~35K, 工具结果 ~15K。请说明：1) messages 数组的完整结构（system/user/assistant/tool_result 的排列）；2) Prompt Caching（缓存）如何减少重复计算；3) 上下文压缩的触发条件和策略；4) CLAUDE.md 的加载优先级（项目级 > 用户级）；5) 大文件读取时如何控制 token 消耗。` }
+      return { init, draw }
+    })();
+
+    // ===================== 4. PERMISSION MODEL =====================
+    const perm = (() => {
+      let mode = 'normal', requests = [];
+      const MODES = [
+        { id: 'normal', name: '标准模式', desc: '每次工具调用前确认', color: '#6ca4f7' },
+        { id: 'yolo', name: 'YOLO 模式', desc: '允许所有操作无确认', color: '#f76c6c' },
+        { id: 'plan', name: 'Plan 模式', desc: '规划但不执行', color: '#b794f6' }
+      ];
+      const EXAMPLES = [
+        { tool: 'Read', path: '/src/app.ts', risk: 'low', auto: true, reason: '只读操作，默认允许' },
+        { tool: 'Grep', path: 'pattern: "TODO"', risk: 'low', auto: true, reason: '只读搜索，默认允许' },
+        { tool: 'Edit', path: '/src/app.ts', risk: 'medium', auto: false, reason: '修改文件需要确认' },
+        { tool: 'Bash', path: 'npm test', risk: 'medium', auto: false, reason: '执行命令需要确认' },
+        { tool: 'Bash', path: 'rm -rf /tmp/old', risk: 'high', auto: false, reason: '危险操作！需要确认' },
+        { tool: 'Write', path: '/new-file.ts', risk: 'low', auto: false, reason: '创建新文件需要确认' },
+      ];
+      function init() { mode = 'normal'; requests = []; renderL(); draw(); uP() }
+      function renderL() {
+        document.getElementById('lp').innerHTML = `
+    <div class="sec"><div class="st">权限模型</div>
+      <div class="inf">
+        Claude Code 使用<span class="h">分层权限系统</span>：<br><br>
+        1. <span class="g">自动允许</span> — 只读操作(Read/Grep/Glob)<br>
+        2. <span class="y">需要确认</span> — 写操作(Edit/Write/Bash)<br>
+        3. <span class="r">始终拒绝</span> — 可配置的黑名单<br><br>
+        通过 <code>settings.json</code> 配置 <b>allowlist</b>：<br>
+        把常用命令(npm test, git status等)加入白名单后可自动执行。
+      </div>
+    </div>
+    <div class="sec"><div class="st">权限模式</div>
+      <div class="bs">${MODES.map(m => `<button class="b${mode === m.id ? ' p' : ''}" style="${mode === m.id ? '' : `color:${m.color}`}" onclick="perm.setMode('${m.id}')">${m.name}</button>`).join('')}</div>
+      <div class="inf" style="margin-top:6px">${MODES.find(m => m.id === mode).desc}</div>
+    </div>
+    <div class="sec"><div class="st">模拟工具调用</div>
+      <div class="bs">
+        ${EXAMPLES.map((e, i) => `<button class="b" style="color:${e.risk === 'high' ? 'var(--rd)' : e.risk === 'medium' ? 'var(--yl)' : 'var(--gn)'}" onclick="perm.simulate(${i})">${e.tool}(${e.path.slice(0, 12)}…)</button>`).join('')}
+      </div>
+    </div>
+    <div class="sec"><div class="st">settings.json 配置</div>
+      <div class="inf" style="font-family:var(--mo);font-size:9px;line-height:1.8">
+        {<br>
+        &nbsp;&nbsp;"permissions": {<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;"allow": [<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"Read(*)",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"Grep(*)",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"Bash(npm test*)",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"Bash(git status)"<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;]<br>
+        &nbsp;&nbsp;}<br>
+        }
+      </div>
+    </div>`}
+      function setMode(m) { mode = m; requests = []; renderL(); draw(); uP() }
+      function simulate(i) {
+        const e = EXAMPLES[i];
+        let result;
+        if (mode === 'yolo') { result = { ...e, decision: 'AUTO ALLOW', decColor: '#5de4a7' } }
+        else if (mode === 'plan') { result = { ...e, decision: 'BLOCKED (Plan Mode)', decColor: '#b794f6' } }
+        else { result = { ...e, decision: e.auto ? 'AUTO ALLOW' : '⏸ WAITING FOR USER', decColor: e.auto ? '#5de4a7' : '#f5d76e' } }
+        requests.push(result); if (requests.length > 6) requests.shift();
+        draw(); uP();
+      }
+      function draw() {
+        clr();
+        tb(W / 2, 18, `权限模式: ${MODES.find(m => m.id === mode).name}`, 12, MODES.find(m => m.id === mode).color);
+        // Permission flow diagram
+        const flowY = 40, fh = 35;
+        const steps = [
+          { label: '模型输出\ntool_use', color: '#d4a574', x: 60 },
+          { label: '匹配\nallowlist', color: '#6ca4f7', x: 190 },
+          { label: '权限\n决策', color: '#f5d76e', x: 320 },
+          { label: '执行\n/拒绝', color: '#5de4a7', x: 450 }
+        ];
+        steps.forEach((s, i) => {
+          bx(s.x - 45, flowY, 90, fh, s.color + '12', s.color + '40');
+          s.label.split('\n').forEach((l, li) => t(s.x, flowY + 10 + li * 14, l, 9, s.color));
+          if (i < steps.length - 1) ar(s.x + 47, flowY + fh / 2, steps[i + 1].x - 47, flowY + fh / 2, '#ffffff15');
+        });
+        // Decision branches
+        const brY = flowY + fh + 15;
+        bx(275, brY, 90, 22, '#5de4a712', '#5de4a740', 3); t(320, brY + 11, '✓ 在白名单中', 8, '#5de4a7');
+        bx(275, brY + 28, 90, 22, '#f5d76e12', '#f5d76e40', 3); t(320, brY + 39, '? 需用户确认', 8, '#f5d76e');
+        bx(275, brY + 56, 90, 22, '#f76c6c12', '#f76c6c40', 3); t(320, brY + 67, '✗ 在黑名单中', 8, '#f76c6c');
+
+        // Request log
+        const logY = brY + 100;
+        t(30, logY, '模拟请求日志:', 9, '#4a4a5e', 'left');
+        requests.forEach((r, i) => {
+          const ry = logY + 16 + i * 28;
+          const riskC = r.risk === 'high' ? '#f76c6c' : r.risk === 'medium' ? '#f5d76e' : '#5de4a7';
+          bx(30, ry, W - 60, 24, r.decColor + '08', r.decColor + '25', 4);
+          tb(45, ry + 12, r.tool, 9, riskC, 'left');
+          t(100, ry + 12, r.path, 8, '#8b8b9e', 'left');
+          tb(W - 100, ry + 12, r.decision, 8, r.decColor, 'right');
+        });
+      }
+      function uP() { document.getElementById('pt').textContent = `请解释 Claude Code 的权限模型。当前模式: ${MODES.find(m => m.id === mode).name}。请说明：1) 三层权限架构（自动允许/需确认/拒绝）的设计原理；2) settings.json 中 allowlist 的配置语法和匹配规则；3) 项目级(.claude/settings.json)和用户级(~/.claude/settings.json)配置的优先级；4) 危险操作（rm, git push --force 等）的特殊处理；5) YOLO 模式的安全考量和使用场景。` }
+      return { init, draw, setMode, simulate }
+    })();
+
+    // ===================== 5. MCP INTEGRATION =====================
+    const mcp = (() => {
+      function init() { renderL(); draw(); uP() }
+      function renderL() {
+        document.getElementById('lp').innerHTML = `
+    <div class="sec"><div class="st">MCP (Model Context Protocol)</div>
+      <div class="inf">
+        <span class="h">MCP</span> 是 Anthropic 设计的<b>开放协议</b>，让 Claude Code 能连接外部工具和数据源。<br><br>
+        类似于 USB 接口：<br>
+        - <span class="g">MCP Server</span>: 提供工具/资源的服务端<br>
+        - <span class="bl">MCP Client</span>: Claude Code 内置的客户端<br>
+        - <span class="y">Protocol</span>: JSON-RPC 2.0 通信<br><br>
+        通过 MCP，Claude Code 可以访问：<br>
+        数据库、API、文档系统、监控、CI/CD 等
+      </div>
+    </div>
+    <div class="sec"><div class="st">MCP Server 类型</div>
+      <div class="inf">
+        <span class="h">内置 Server</span>:<br>
+        - 文件系统操作（已集成为原生工具）<br><br>
+        <span class="bl">配置的 Server</span> (settings.json):<br>
+        - <b>Context7</b>: 第三方库文档查询<br>
+        - <b>GitNexus</b>: 代码知识图谱<br>
+        - <b>Ponf</b>: 配置中心读取<br>
+        - <b>自定义</b>: 任何实现 MCP 协议的服务<br><br>
+        <span class="g">传输方式</span>: stdio / SSE / HTTP
+      </div>
+    </div>
+    <div class="sec"><div class="st">配置示例</div>
+      <div class="inf" style="font-family:var(--mo);font-size:9px;line-height:1.7">
+        // .claude/settings.json<br>
+        "mcpServers": {<br>
+        &nbsp;&nbsp;"context7": {<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;"type": "stdio",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;"command": "npx",<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;"args": ["@context7/mcp"]<br>
+        &nbsp;&nbsp;}<br>
+        }
+      </div>
+    </div>`}
+      function draw() {
+        clr();
+        // Central Claude Code
+        const ccX = W / 2, ccY = H * 0.4;
+        circ(ccX, ccY, 50, '#d4a57415', '#d4a574');
+        tb(ccX, ccY - 8, 'Claude', 12, '#d4a574');
+        tb(ccX, ccY + 8, 'Code', 12, '#d4a574');
+        t(ccX, ccY + 24, 'MCP Client', 8, '#8b8b9e');
+
+        // MCP Servers around
+        const servers = [
+          { name: 'Context7', desc: '库文档', color: '#6ca4f7', angle: -60 },
+          { name: 'GitNexus', desc: '代码图谱', color: '#5de4a7', angle: -20 },
+          { name: 'Database', desc: 'SQL 查询', color: '#fba86f', angle: 20 },
+          { name: 'Ponf', desc: '配置中心', color: '#b794f6', angle: 60 },
+          { name: 'CI/CD', desc: '构建部署', color: '#f5d76e', angle: 120 },
+          { name: 'Slack', desc: '消息通知', color: '#f76c6c', angle: 160 },
+          { name: 'Jira', desc: '任务管理', color: '#67e8f9', angle: 200 },
+          { name: 'Custom', desc: '自定义服务', color: '#f9a8d4', angle: 240 },
+        ];
+        const orbitR = Math.min(W * 0.32, 180);
+        servers.forEach(s => {
+          const rad = s.angle * Math.PI / 180;
+          const sx = ccX + orbitR * Math.cos(rad), sy = ccY + orbitR * Math.sin(rad);
+          // Connection line
+          dl(ccX, ccY, sx, sy, s.color + '25');
+          // Server node
+          bx(sx - 45, sy - 18, 90, 36, s.color + '12', s.color + '40');
+          tb(sx, sy - 4, s.name, 9, s.color);
+          t(sx, sy + 10, s.desc, 8, '#8b8b9e');
+        });
+        // Protocol label
+        bx(ccX - 55, ccY + 60, 110, 22, '#f5d76e08', '#f5d76e30', 4);
+        t(ccX, ccY + 71, 'JSON-RPC 2.0 (stdio/SSE)', 8, '#f5d76e');
+
+        // Flow at bottom
+        const fy = H - 60;
+        tb(40, fy, '调用流程:', 9, '#4a4a5e', 'left');
+        const flow = ['模型决定调用MCP工具', 'Claude Code 发送 JSON-RPC', 'MCP Server 执行', '返回 tool_result'];
+        flow.forEach((f, i) => {
+          const fx = 40 + i * 155;
+          bx(fx, fy + 8, 145, 22, '#ffffff06', '#ffffff10', 3);
+          t(fx + 72, fy + 19, f, 8, '#8b8b9e');
+          if (i < flow.length - 1) ar(fx + 147, fy + 19, fx + 153, fy + 19, '#ffffff15');
+        });
+      }
+      function uP() { document.getElementById('pt').textContent = `请解释 Claude Code 的 MCP (Model Context Protocol) 集成机制。请说明：1) MCP 协议的设计目标和架构（Client/Server/Transport）；2) 工具发现（tools/list）和调用（tools/call）流程；3) 资源（Resources）和 Prompt 模板的作用；4) 在 settings.json 中配置 MCP Server 的方式（stdio/SSE）；5) 与原生工具(Read/Edit/Bash)的关系和优先级；6) 如何开发自定义 MCP Server。` }
+      return { init, draw }
+    })();
+
+    // ===================== 6. EXECUTION FLOW =====================
+    const flow = (() => {
+      let step = 0, scenario = 'bugfix';
+      const SCENARIOS = {
+        bugfix: {
+          name: '修复 Bug', steps: [
+            { actor: 'user', action: '用户输入："修复登录页的表单验证 bug"', color: '#f5d76e' },
+            { actor: 'claude', action: '[思考] 需要先定位 bug → 搜索相关文件', color: '#d4a574' },
+            { actor: 'tool', action: 'Grep(pattern="login.*valid", glob="**/*.ts")', color: '#67e8f9' },
+            { actor: 'result', action: '找到 src/pages/Login.tsx:42 和 src/utils/validate.ts', color: '#5de4a7' },
+            { actor: 'claude', action: '[思考] 读取这两个文件了解现有逻辑', color: '#d4a574' },
+            { actor: 'tool', action: 'Read(file_path="src/pages/Login.tsx") + Read(file_path="src/utils/validate.ts") [并行]', color: '#67e8f9' },
+            { actor: 'result', action: '获取到文件内容，发现 validate() 函数缺少 email 格式校验', color: '#5de4a7' },
+            { actor: 'claude', action: '[思考] 需要修复 validate.ts 并运行测试验证', color: '#d4a574' },
+            { actor: 'tool', action: 'Edit(file_path="src/utils/validate.ts", old_string=..., new_string=...)', color: '#6ca4f7' },
+            { actor: 'result', action: '文件已修改', color: '#5de4a7' },
+            { actor: 'tool', action: 'Bash(command="npm test -- --grep validate")', color: '#fba86f' },
+            { actor: 'result', action: '✓ 所有测试通过', color: '#5de4a7' },
+            { actor: 'claude', action: '[回复] 已修复：在 validate.ts 中添加了 email 格式校验...', color: '#d4a574' },
+          ]
+        },
+        feature: {
+          name: '添加功能', steps: [
+            { actor: 'user', action: '用户输入："给 User 模型添加 avatar 字段"', color: '#f5d76e' },
+            { actor: 'claude', action: '[思考] 需要修改 model → migration → API → 前端', color: '#d4a574' },
+            { actor: 'tool', action: 'Glob(pattern="**/models/User*") + Grep(pattern="User", glob="**/migration*")', color: '#67e8f9' },
+            { actor: 'result', action: '找到 model、migration、controller 文件', color: '#5de4a7' },
+            { actor: 'claude', action: '[思考] 制定计划：1.Model 2.Migration 3.API 4.类型', color: '#d4a574' },
+            { actor: 'tool', action: 'Edit(model) → Write(migration) → Edit(controller) → Edit(types) [顺序执行]', color: '#6ca4f7' },
+            { actor: 'result', action: '4 个文件已修改/创建', color: '#5de4a7' },
+            { actor: 'tool', action: 'Bash(command="npm run migrate && npm test")', color: '#fba86f' },
+            { actor: 'result', action: 'Migration 成功，测试通过', color: '#5de4a7' },
+            { actor: 'claude', action: '[回复] 已完成：添加了 avatar 字段到 User 模型...', color: '#d4a574' },
+          ]
+        }
+      };
+      function init() { step = 0; scenario = 'bugfix'; renderL(); draw(); uP() }
+      function renderL() {
+        const sc = SCENARIOS[scenario];
+        document.getElementById('lp').innerHTML = `
+    <div class="sec"><div class="st">真实执行场景</div>
+      <div class="bs">
+        ${Object.entries(SCENARIOS).map(([k, v]) => `<button class="b${scenario === k ? ' p' : ''}" onclick="flow.setScene('${k}')">${v.name}</button>`).join('')}
+      </div>
+    </div>
+    <div class="sec"><div class="st">执行步骤 (${step + 1}/${sc.steps.length})</div>
+      <div class="bs">
+        <button class="b" onclick="flow.prev()">◀</button>
+        <button class="b p" onclick="flow.playAll()">▶ 全部</button>
+        <button class="b" onclick="flow.next()">▶</button>
+        <button class="b r" onclick="flow.reset()">↺</button>
+      </div>
+    </div>
+    <div class="sec"><div class="st">当前步骤</div>
+      <div class="inf">${sc.steps[step] ? `<b style="color:${sc.steps[step].color}">[${sc.steps[step].actor}]</b><br>${sc.steps[step].action}` : ''}</div>
+    </div>
+    <div class="sec"><div class="st">关键特征</div>
+      <div class="inf">
+        <span class="h">自主规划</span> — 模型自己决定要做什么<br>
+        <span class="bl">工具链接</span> — 上一步结果驱动下一步<br>
+        <span class="g">并行调用</span> — 无依赖的工具同时执行<br>
+        <span class="y">循环直到完成</span> — 不是单次调用<br>
+        <span class="pp">验证结果</span> — 修改后运行测试确认
+      </div>
+    </div>`}
+      function setScene(s) { scenario = s; step = 0; renderL(); draw(); uP() }
+      function next() { const sc = SCENARIOS[scenario]; if (step < sc.steps.length - 1) step++; renderL(); draw(); uP() }
+      function prev() { if (step > 0) step--; renderL(); draw(); uP() }
+      function reset() { step = 0; renderL(); draw(); uP() }
+      function playAll() { step = 0; const iv = setInterval(() => { const sc = SCENARIOS[scenario]; if (step < sc.steps.length - 1) { step++; renderL(); draw(); uP() } else clearInterval(iv) }, 800) }
+      function draw() {
+        clr();
+        const sc = SCENARIOS[scenario];
+        tb(W / 2, 16, `场景: ${sc.name}`, 12, '#d4a574');
+        // Timeline
+        const tlX = 60, tlY = 35, lineH = H - 50;
+        // Vertical line
+        cx.strokeStyle = '#ffffff08'; cx.lineWidth = 2; cx.beginPath(); cx.moveTo(tlX, tlY); cx.lineTo(tlX, tlY + lineH); cx.stroke();
+        // Actor columns
+        const cols = { user: tlX + 50, claude: tlX + 170, tool: tlX + 320, result: tlX + 450 };
+        Object.entries(cols).forEach(([k, x]) => {
+          const labels = { user: 'User', claude: 'Claude (思考)', tool: 'Tool Call', result: 'Result' };
+          const colors = { user: '#f5d76e', claude: '#d4a574', tool: '#67e8f9', result: '#5de4a7' };
+          t(x, tlY - 4, labels[k], 9, colors[k]);
+        });
+        // Steps
+        const stepH = Math.min(38, lineH / (sc.steps.length + 1));
+        const visible = sc.steps.slice(0, step + 1);
+        visible.forEach((s, i) => {
+          const sy = tlY + 12 + i * stepH;
+          const x = cols[s.actor];
+          const active = i === step;
+          // Node on timeline
+          cx.fillStyle = s.color; cx.beginPath(); cx.arc(tlX, sy + stepH / 2, active ? 5 : 3, 0, Math.PI * 2); cx.fill();
+          // Box
+          const bw = Math.min(180, W - x - 30);
+          bx(x - 5, sy, bw, stepH - 4, active ? s.color + '18' : s.color + '08', active ? s.color + '60' : s.color + '20', 4);
+          // Text (truncate)
+          cx.font = `${active ? 9 : 8}px ${F()}`;
+          const text = fitText(s.action, bw - 14);
+          t(x + bw / 2 - 5, sy + (stepH - 4) / 2, text, active ? 9 : 8, active ? '#e8e8ed' : '#8b8b9e');
+          // Connection line to timeline
+          dl(tlX + 6, sy + stepH / 2, x - 7, sy + stepH / 2, s.color + '20');
+        });
+        // Progress bar
+        const progY = H - 12;
+        pct(30, progY, W - 60, 6, (step + 1) / sc.steps.length, '#d4a57460');
+      }
+      function uP() { const sc = SCENARIOS[scenario]; document.getElementById('pt').textContent = `请解释 Claude Code 执行"${sc.name}"任务的完整流程。当前进行到第 ${step + 1}/${sc.steps.length} 步。请说明：1) 模型如何从用户输入推导出行动计划（不需要用户分步指示）；2) 工具链的编排逻辑（为什么按这个顺序调用工具）；3) 并行调用 vs 顺序调用的决策依据；4) 每步工具结果如何影响下一步决策（动态规划）；5) 任务完成的判断标准和验证方式。` }
+      return { init, draw, next, prev, reset, playAll, setScene }
+    })();
+
+    // ==================== REGISTRY ====================
+    const M = { loop, tools, ctx: ctxM, perm, mcp, flow };
+    rsz(); sw('loop');
+    // Re-draw canvas on theme change
+    new MutationObserver(() => { rsz(); M[aT].draw() }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

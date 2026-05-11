@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RabbitMQ 消息顺序性</title>
+  <meta name="description" content="交互式演示 RabbitMQ 消息顺序性保证机制，包括单队列顺序、多消费者竞争与顺序性策略">
+  <meta name="keywords" content="RabbitMQ, 消息顺序, 消息队列, FIFO, 顺序消费">
+  <meta property="og:title" content="RabbitMQ 消息顺序性">
+  <meta property="og:description" content="交互式演示 RabbitMQ 消息顺序性保证机制，包括单队列顺序、多消费者竞争与顺序性策略">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    header {
+      position: relative;
+      z-index: 1;
+      padding: 14px 24px;
+      background: linear-gradient(180deg, rgba(77, 163, 255, 0.04) 0%, transparent 100%);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 0%, #a8c8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    header h1 span {
+      background: linear-gradient(135deg, var(--accent-orange) 0%, var(--accent-pink) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    header .tag {
+      font-size: 0.68rem;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Left sidebar */
+    .controls {
+      width: 320px;
+      min-width: 320px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .sec-title {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sec-title::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .preset-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 11px 14px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.75rem;
+      text-align: left;
+      transition: all 0.2s;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .preset-btn::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: transparent;
+      border-radius: 0 2px 2px 0;
+      transition: background 0.3s;
+    }
+
+    .preset-btn:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-elevated);
+    }
+
+    .preset-btn.active {
+      border-color: var(--accent-blue);
+      background: linear-gradient(135deg, rgba(77, 163, 255, 0.08), rgba(77, 163, 255, 0.02));
+      box-shadow: 0 0 20px var(--glow-blue), inset 0 1px 0 rgba(77, 163, 255, 0.1);
+    }
+
+    .preset-btn.active::before {
+      background: var(--accent-blue);
+    }
+
+    .preset-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+      width: 24px;
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    .preset-info {
+      flex: 1;
+    }
+
+    .preset-name {
+      font-weight: 600;
+      display: block;
+      margin-bottom: 3px;
+      font-size: 0.78rem;
+      color: var(--text-primary);
+    }
+
+    .preset-desc {
+      color: var(--text-muted);
+      font-size: 0.65rem;
+      line-height: 1.4;
+    }
+
+    .preset-badge {
+      font-size: 0.6rem;
+      padding: 2px 7px;
+      border-radius: 8px;
+      font-weight: 600;
+      margin-left: 6px;
+      vertical-align: middle;
+      letter-spacing: 0.2px;
+    }
+
+    .badge-ok {
+      background: rgba(54, 217, 134, 0.12);
+      color: var(--accent-green);
+    }
+
+    .badge-warn {
+      background: rgba(255, 159, 67, 0.12);
+      color: var(--accent-orange);
+    }
+
+    .badge-bad {
+      background: rgba(255, 92, 108, 0.12);
+      color: var(--accent-red);
+    }
+
+    /* Param controls */
+    .param-group {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+    }
+
+    .param-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 0;
+    }
+
+    .param-row label {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .param-row select,
+    .param-row input[type=range] {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: var(--radius-sm);
+      padding: 5px 8px;
+      font-size: 0.72rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .param-row select {
+      width: 90px;
+    }
+
+    .param-row select:focus,
+    .param-row input[type=range]:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    .param-row input[type=range] {
+      width: 100px;
+      accent-color: var(--accent-blue);
+    }
+
+    .param-val {
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.72rem;
+      color: var(--accent-blue);
+      min-width: 28px;
+      text-align: right;
+      font-weight: 600;
+    }
+
+    /* Transport controls */
+    .transport {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .transport button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+      flex: 1;
+      color: #fff;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+
+    .transport button::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .transport button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .transport button:active {
+      transform: translateY(0);
+    }
+
+    .transport button.primary {
+      background: linear-gradient(135deg, #1a6ff0, #1f6feb);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .transport button.primary:hover {
+      box-shadow: 0 4px 16px rgba(77, 163, 255, 0.3);
+    }
+
+    .transport button.danger {
+      background: var(--bg-elevated);
+      border-color: var(--accent-red);
+      color: var(--accent-red);
+    }
+
+    .transport button.danger:hover {
+      background: rgba(255, 92, 108, 0.08);
+    }
+
+    /* Right */
+    .right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Canvas area */
+    .canvas-area {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Legend overlay */
+    .legend {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      font-size: 0.68rem;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      backdrop-filter: blur(8px);
+      color: var(--text-secondary);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* Info overlay */
+    .info-overlay {
+      position: absolute;
+      bottom: 14px;
+      left: 14px;
+      right: 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      font-size: 0.73rem;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      max-height: 120px;
+      overflow-y: auto;
+      backdrop-filter: blur(8px);
+    }
+
+    .info-overlay strong {
+      color: var(--text-primary);
+    }
+
+    .info-overlay .hl {
+      color: var(--accent-blue);
+      font-weight: 600;
+    }
+
+    .info-overlay .good {
+      color: var(--accent-green);
+    }
+
+    .info-overlay .bad {
+      color: var(--accent-red);
+    }
+
+    /* Consumer log */
+    .log-panel {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      height: 140px;
+      display: flex;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .log-col {
+      flex: 1;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .log-col:last-child {
+      border-right: none;
+    }
+
+    .log-header {
+      padding: 6px 12px;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      background: var(--bg-elevated);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 500;
+    }
+
+    .log-header .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .log-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 12px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.68rem;
+      line-height: 1.7;
+    }
+
+    .log-msg {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .log-msg .seq {
+      color: var(--text-muted);
+      min-width: 22px;
+    }
+
+    .log-msg .order-ok {
+      color: var(--accent-green);
+    }
+
+    .log-msg .order-bad {
+      color: var(--accent-red);
+      font-weight: 600;
+    }
+
+    /* Prompt */
+    .prompt-area {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 12px 22px;
+      flex-shrink: 0;
+    }
+
+    .prompt-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .prompt-header span {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 500;
+    }
+
+    .copy-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 5px 14px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.7rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      border-color: var(--accent-blue);
+      color: var(--text-primary);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    .prompt-text {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      max-height: 48px;
+      overflow-y: auto;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-hover);
+    }
+
+    /* Light theme overrides */
+    [data-theme="light"] header {
+      background: linear-gradient(180deg, rgba(37,99,235,0.04) 0%, transparent 100%);
+    }
+
+    [data-theme="light"] .log-panel {
+      background: var(--bg-card);
+    }
+
+    [data-theme="light"] .log-header {
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+    }
+
+    [data-theme="light"] .log-msg .seq {
+      color: var(--text-muted);
+    }
+
+    [data-theme="light"] .preset-btn.active {
+      box-shadow: 0 0 12px var(--glow-blue);
+    }
+
+    [data-theme="light"] .transport button {
+      background: var(--bg-elevated);
+      border-color: var(--border);
+      color: var(--text-secondary);
+    }
+
+    [data-theme="light"] .transport button.primary {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    [data-theme="light"] .transport button.danger {
+      background: var(--bg-elevated);
+      border-color: var(--accent-red);
+      color: var(--accent-red);
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>RabbitMQ <span>消息顺序性</span></h1>
+    <div class="tag">交互式动画演示</div>
+  </header>
+  <div class="main">
+    <div class="controls">
+      <div>
+        <div class="sec-title">策略选择</div>
+        <div class="preset-list" id="presetList"></div>
+      </div>
+      <div>
+        <div class="sec-title">参数调整</div>
+        <div class="param-group">
+          <div class="param-row">
+            <label>消息数量</label>
+            <input type="range" id="msgCount" min="5" max="20" value="8"
+              oninput="state.msgCount=+this.value;document.getElementById('msgCountVal').textContent=this.value">
+            <span class="param-val" id="msgCountVal">8</span>
+          </div>
+          <div class="param-row">
+            <label>消费者数</label>
+            <input type="range" id="consumerCount" min="1" max="4" value="2"
+              oninput="state.consumerCount=+this.value;document.getElementById('consumerCountVal').textContent=this.value">
+            <span class="param-val" id="consumerCountVal">2</span>
+          </div>
+          <div class="param-row">
+            <label>Prefetch</label>
+            <select id="prefetch" onchange="state.prefetch=+this.value">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="4" selected>4</option>
+              <option value="8">8</option>
+            </select>
+          </div>
+          <div class="param-row">
+            <label>消费速度差异</label>
+            <select id="speedVar" onchange="state.speedVariance=this.value">
+              <option value="none">无 (匀速)</option>
+              <option value="low">低</option>
+              <option value="high" selected>高</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="sec-title">控制</div>
+        <div class="transport">
+          <button class="primary" id="btnRun" onclick="runSimulation()">▶ 开始模拟</button>
+          <button id="btnStep" onclick="stepSimulation()">⏭ 单步</button>
+          <button class="danger" onclick="resetSimulation()">↺ 重置</button>
+        </div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="canvas-area">
+        <canvas id="canvas"></canvas>
+        <div class="legend" id="legend"></div>
+        <div class="info-overlay" id="infoOverlay"></div>
+      </div>
+      <div class="log-panel" id="logPanel"></div>
+      <div class="prompt-area">
+        <div class="prompt-header">
+          <span>Prompt 输出</span>
+          <button class="copy-btn" id="copyBtn" onclick="copyPrompt()">复制</button>
+        </div>
+        <div class="prompt-text" id="promptText"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PRESETS = [
+      {
+        id: 'single', name: '单队列 + 单消费者', icon: '1️⃣',
+        desc: '经典 FIFO，天然有序', badge: 'ok', badgeText: '有序',
+        consumerCount: 1, prefetch: 4, speedVar: 'none',
+        info: '<strong>单消费者模式</strong>：一个队列绑定一个消费者，消息按 <span class="hl">FIFO</span> 顺序依次投递。<br>天然保证顺序，但<span class="bad">吞吐量受限于单个消费者的处理速度</span>。',
+        topology: 'single_queue'
+      },
+      {
+        id: 'multi_broken', name: '单队列 + 多消费者', icon: '💥',
+        desc: 'Round-Robin 分发，顺序被打破', badge: 'bad', badgeText: '乱序',
+        consumerCount: 3, prefetch: 4, speedVar: 'high',
+        info: '<strong>多消费者竞争</strong>：RabbitMQ 以 <span class="hl">Round-Robin</span> 方式将消息分发给多个消费者。由于每个消费者处理速度不同，<span class="bad">消息的完成顺序与发送顺序不一致</span>。<br>Prefetch > 1 时，消费者会预取多条消息并发处理，进一步加剧乱序。',
+        topology: 'single_queue'
+      },
+      {
+        id: 'prefetch1', name: '单队列 + Prefetch=1', icon: '🐢',
+        desc: '逐条确认，恢复顺序但吞吐下降', badge: 'warn', badgeText: '有序但慢',
+        consumerCount: 3, prefetch: 1, speedVar: 'high',
+        info: '<strong>Prefetch=1</strong>：每个消费者同一时间只处理 <span class="hl">1 条消息</span>，确认后才获取下一条。<br>虽然每个消费者内部有序，但多个消费者之间仍可能<span class="bad">交错处理</span>。<br>注意：这并不能真正保证全局顺序，只是减小了乱序窗口。<span class="bad">吞吐量大幅下降</span>。',
+        topology: 'single_queue'
+      },
+      {
+        id: 'single_active', name: 'Single Active Consumer', icon: '👑',
+        desc: 'x-single-active-consumer，同一时间只有一个活跃消费者', badge: 'ok', badgeText: '有序',
+        consumerCount: 3, prefetch: 4, speedVar: 'high',
+        info: '<strong>Single Active Consumer</strong>：队列声明时设置 <span class="hl">x-single-active-consumer=true</span>。<br>同一时间只有 <span class="good">一个消费者活跃</span>，其余为备用（Standby）。活跃消费者故障时自动切换。<br>保证全局顺序，同时提供<span class="good">高可用</span>。吞吐受限于单消费者。',
+        topology: 'single_active'
+      },
+      {
+        id: 'hash_exchange', name: '一致性哈希交换机', icon: '#️⃣',
+        desc: '按 routing key 分片，同 key 消息进同一队列', badge: 'ok', badgeText: '分区有序',
+        consumerCount: 3, prefetch: 4, speedVar: 'high',
+        info: '<strong>Consistent Hash Exchange</strong>：使用 <span class="hl">x-consistent-hash</span> 类型交换机，根据 routing key 的哈希值将消息路由到不同队列。<br><span class="good">相同 key 的消息始终进入同一队列</span>，由同一消费者处理，保证分区内有序。<br>不同 key 之间并行消费，兼顾<span class="good">顺序性和吞吐量</span>。',
+        topology: 'hash_exchange'
+      },
+      {
+        id: 'msg_group', name: '消息分组 (Super Streams)', icon: '📦',
+        desc: '按 group-id 路由，组内有序', badge: 'ok', badgeText: '分组有序',
+        consumerCount: 3, prefetch: 4, speedVar: 'high',
+        info: '<strong>消息分组 / Super Streams</strong>：利用 <span class="hl">消息属性中的分组标识</span>（如 user_id、order_id）进行路由。<br>相同分组的消息被路由到同一个分区队列，由<span class="good">固定的消费者处理</span>。<br>与一致性哈希类似，但语义更清晰：<span class="good">业务维度的顺序保证</span>。',
+        topology: 'msg_group'
+      }
+    ];
+
+    let state = {
+      activePreset: 0,
+      msgCount: 8,
+      consumerCount: 2,
+      prefetch: 4,
+      speedVariance: 'high',
+      running: false,
+      step: 0,
+      messages: [],
+      queues: [],
+      consumers: [],
+      consumerLogs: [],
+      animations: [],
+      completedOrder: [],
+      tickTimer: null
+    };
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let W, H, dpr;
+
+    function isLight() {
+      return document.documentElement.getAttribute('data-theme') === 'light';
+    }
+
+    function themeColors() {
+      const light = isLight();
+      return {
+        arrowColor: light ? 'rgba(0,0,0,0.15)' : '#ffffff30',
+        arrowColorFaint: light ? 'rgba(0,0,0,0.08)' : '#ffffff18',
+        arrowColorStandby: light ? 'rgba(0,0,0,0.06)' : '#ffffff10',
+        msgTextColor: light ? '#fff' : '#000',
+        queueFill: light ? 'rgba(37,99,235,0.08)' : '#1e3a5f',
+        queueStroke: light ? '#2563eb' : '#61dafb',
+        queueBarFill: light ? 'rgba(37,99,235,0.35)' : '#61dafb60',
+        queueTextColor: light ? '#2563eb' : '#61dafb',
+        standbyFill: light ? 'rgba(0,0,0,0.03)' : '#ffffff08',
+        standbyStroke: light ? 'rgba(0,0,0,0.2)' : '#ffffff30',
+        standbyText: light ? '#9ca3af' : '#666',
+        processedText: light ? 'rgba(0,0,0,0.5)' : '#ffffff60',
+        sacAnnotation: light ? 'rgba(0,0,0,0.3)' : '#ffffff40',
+        pendingText: light ? '#dc2626' : '#ff6b9d',
+      };
+    }
+
+    function resize() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      dpr = window.devicePixelRatio || 1;
+      W = rect.width; H = rect.height;
+      canvas.width = W * dpr; canvas.height = H * dpr;
+      canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    window.addEventListener('resize', () => { resize(); draw(); });
+
+    const KEY_COLORS_DARK = ['#ff6b9d', '#61dafb', '#50fa7b', '#f1fa8c', '#ffb86c', '#bd93f9', '#ff5555', '#8be9fd'];
+    const KEY_COLORS_LIGHT = ['#dc2626', '#2563eb', '#059669', '#ca8a04', '#d97706', '#7c3aed', '#e11d48', '#0891b2'];
+    const CONSUMER_COLORS_DARK = ['#61dafb', '#50fa7b', '#ffb86c', '#bd93f9'];
+    const CONSUMER_COLORS_LIGHT = ['#2563eb', '#059669', '#d97706', '#7c3aed'];
+
+    function getKeyColors() { return isLight() ? KEY_COLORS_LIGHT : KEY_COLORS_DARK; }
+    function getConsumerColors() { return isLight() ? CONSUMER_COLORS_LIGHT : CONSUMER_COLORS_DARK; }
+
+    function init() {
+      renderPresets();
+      selectPreset(0);
+      resize();
+      requestAnimationFrame(loop);
+    }
+
+    function renderPresets() {
+      document.getElementById('presetList').innerHTML = PRESETS.map((p, i) =>
+        `<button class="preset-btn" data-idx="${i}" onclick="selectPreset(${i})">
+      <span class="preset-icon">${p.icon}</span>
+      <span class="preset-info">
+        <span class="preset-name">${p.name}<span class="preset-badge badge-${p.badge}">${p.badgeText}</span></span>
+        <span class="preset-desc">${p.desc}</span>
+      </span>
+    </button>`
+      ).join('');
+    }
+
+    function selectPreset(idx) {
+      state.activePreset = idx;
+      const p = PRESETS[idx];
+      state.consumerCount = p.consumerCount;
+      state.prefetch = p.prefetch;
+      state.speedVariance = p.speedVar;
+      document.getElementById('consumerCount').value = p.consumerCount;
+      document.getElementById('consumerCountVal').textContent = p.consumerCount;
+      document.getElementById('prefetch').value = p.prefetch;
+      document.getElementById('speedVar').value = p.speedVar;
+      document.querySelectorAll('.preset-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+      document.getElementById('infoOverlay').innerHTML = p.info;
+      resetSimulation();
+      updatePrompt();
+    }
+
+    function resetSimulation() {
+      if (state.tickTimer) { clearInterval(state.tickTimer); state.tickTimer = null; }
+      state.running = false;
+      state.step = 0;
+      state.animations = [];
+      state.completedOrder = [];
+      document.getElementById('btnRun').textContent = '▶ 开始模拟';
+
+      const p = PRESETS[state.activePreset];
+      const nc = state.consumerCount;
+      const nm = state.msgCount;
+
+      // Build messages with keys
+      state.messages = [];
+      const keyCount = p.topology === 'hash_exchange' || p.topology === 'msg_group' ? nc : 1;
+      const keyNames = ['OrderA', 'OrderB', 'OrderC', 'OrderD'];
+      for (let i = 0; i < nm; i++) {
+        const keyIdx = p.topology === 'hash_exchange' || p.topology === 'msg_group' ? i % keyCount : 0;
+        state.messages.push({
+          id: i + 1,
+          key: keyNames[keyIdx] || `Key${keyIdx}`,
+          keyIdx,
+          color: getKeyColors()[keyIdx % getKeyColors().length],
+          state: 'pending', // pending -> in_queue -> in_flight -> acked
+          queue: -1,
+          consumer: -1,
+          x: 0, y: 0,
+          targetX: 0, targetY: 0,
+          processTime: 0,
+          processElapsed: 0
+        });
+      }
+
+      // Build queues
+      const numQueues = (p.topology === 'hash_exchange' || p.topology === 'msg_group') ? nc : 1;
+      state.queues = [];
+      for (let i = 0; i < numQueues; i++) {
+        state.queues.push({ id: i, messages: [], label: numQueues > 1 ? `Queue-${i + 1}` : 'Queue' });
+      }
+
+      // Build consumers
+      state.consumers = [];
+      state.consumerLogs = [];
+      for (let i = 0; i < nc; i++) {
+        const active = p.id === 'single_active' ? (i === 0) : true;
+        state.consumers.push({
+          id: i,
+          label: `Consumer-${i + 1}`,
+          color: getConsumerColors()[i % getConsumerColors().length],
+          active,
+          standby: p.id === 'single_active' && i > 0,
+          inFlight: [],
+          processed: 0,
+          speed: getSpeed(i)
+        });
+        state.consumerLogs.push([]);
+      }
+
+      renderLogPanel();
+      draw();
+    }
+
+    function getSpeed(consumerIdx) {
+      if (state.speedVariance === 'none') return 1;
+      if (state.speedVariance === 'low') return 0.8 + Math.random() * 0.4;
+      // high variance
+      const speeds = [1, 0.4, 1.8, 0.6];
+      return speeds[consumerIdx % speeds.length];
+    }
+
+    function renderLogPanel() {
+      const panel = document.getElementById('logPanel');
+      const nc = state.consumers.length;
+      panel.innerHTML = state.consumers.map((c, i) =>
+        `<div class="log-col">
+      <div class="log-header">
+        <span class="dot" style="background:${c.color}"></span>
+        ${c.label}${c.standby ? ' (Standby)' : ''}
+      </div>
+      <div class="log-body" id="log${i}"></div>
+    </div>`
+      ).join('') +
+        `<div class="log-col">
+    <div class="log-header"><span class="dot" style="background:var(--text3)"></span>全局完成顺序</div>
+    <div class="log-body" id="logGlobal"></div>
+  </div>`;
+    }
+
+    function runSimulation() {
+      if (state.running) {
+        clearInterval(state.tickTimer);
+        state.tickTimer = null;
+        state.running = false;
+        document.getElementById('btnRun').textContent = '▶ 继续';
+        return;
+      }
+      state.running = true;
+      document.getElementById('btnRun').textContent = '⏸ 暂停';
+      state.tickTimer = setInterval(() => {
+        tick();
+        if (isComplete()) {
+          clearInterval(state.tickTimer);
+          state.tickTimer = null;
+          state.running = false;
+          document.getElementById('btnRun').textContent = '▶ 完成';
+          updatePrompt();
+        }
+      }, 120);
+    }
+
+    function stepSimulation() {
+      tick();
+      if (isComplete()) updatePrompt();
+    }
+
+    function isComplete() {
+      return state.messages.every(m => m.state === 'acked');
+    }
+
+    function tick() {
+      const p = PRESETS[state.activePreset];
+      state.step++;
+
+      // Phase 1: Enqueue pending messages
+      const pending = state.messages.filter(m => m.state === 'pending');
+      if (pending.length > 0) {
+        const m = pending[0];
+        if (p.topology === 'hash_exchange' || p.topology === 'msg_group') {
+          m.queue = m.keyIdx % state.queues.length;
+        } else {
+          m.queue = 0;
+        }
+        m.state = 'in_queue';
+        state.queues[m.queue].messages.push(m.id);
+      }
+
+      // Phase 2: Dispatch from queues to consumers
+      state.queues.forEach((q, qi) => {
+        if (q.messages.length === 0) return;
+        let eligible;
+        if (p.id === 'single_active') {
+          eligible = state.consumers.filter(c => c.active && c.inFlight.length < state.prefetch);
+        } else if (p.topology === 'hash_exchange' || p.topology === 'msg_group') {
+          eligible = [state.consumers[qi]].filter(c => c && c.active && c.inFlight.length < state.prefetch);
+        } else {
+          eligible = state.consumers.filter(c => c.active && c.inFlight.length < state.prefetch);
+        }
+
+        // Round-robin among eligible
+        while (q.messages.length > 0 && eligible.length > 0) {
+          let bestC = eligible.reduce((a, b) => a.inFlight.length <= b.inFlight.length ? a : b);
+          if (bestC.inFlight.length >= state.prefetch) break;
+          const mid = q.messages.shift();
+          const m = state.messages[mid - 1];
+          m.state = 'in_flight';
+          m.consumer = bestC.id;
+          m.processTime = Math.ceil((3 + Math.random() * 4) / bestC.speed);
+          m.processElapsed = 0;
+          bestC.inFlight.push(mid);
+          eligible = eligible.filter(c => c.inFlight.length < state.prefetch);
+        }
+      });
+
+      // Phase 3: Process in-flight messages
+      state.consumers.forEach(c => {
+        if (!c.active) return;
+        const toAck = [];
+        c.inFlight.forEach(mid => {
+          const m = state.messages[mid - 1];
+          m.processElapsed++;
+          if (m.processElapsed >= m.processTime) {
+            toAck.push(mid);
+          }
+        });
+        toAck.forEach(mid => {
+          const m = state.messages[mid - 1];
+          m.state = 'acked';
+          c.inFlight = c.inFlight.filter(x => x !== mid);
+          c.processed++;
+          state.completedOrder.push({ id: mid, consumer: c.id, key: m.key, keyIdx: m.keyIdx });
+          state.consumerLogs[c.id].push(mid);
+          updateLog(c.id, mid);
+          updateGlobalLog(mid, c.id);
+        });
+      });
+
+      draw();
+    }
+
+    function updateLog(cid, mid) {
+      const el = document.getElementById('log' + cid);
+      if (!el) return;
+      const m = state.messages[mid - 1];
+      const logs = state.consumerLogs[cid];
+      const prev = logs.length > 1 ? logs[logs.length - 2] : null;
+      const ordered = !prev || mid > prev;
+      const cls = ordered ? 'order-ok' : 'order-bad';
+      el.innerHTML += `<div class="log-msg"><span class="seq">#${mid}</span><span style="color:${m.color}">${m.key}</span><span class="${cls}">${ordered ? '✓' : '✗ 乱序'}</span></div>`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function updateGlobalLog(mid, cid) {
+      const el = document.getElementById('logGlobal');
+      if (!el) return;
+      const m = state.messages[mid - 1];
+      const comp = state.completedOrder;
+      const prev = comp.length > 1 ? comp[comp.length - 2] : null;
+      const ordered = !prev || mid > prev.id;
+      const cls = ordered ? 'order-ok' : 'order-bad';
+      el.innerHTML += `<div class="log-msg"><span class="seq">#${mid}</span><span style="color:${m.color}">${m.key}</span><span style="color:${state.consumers[cid].color}">${state.consumers[cid].label.replace('Consumer-', 'C')}</span><span class="${cls}">${ordered ? '✓' : '✗'}</span></div>`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // =========== DRAWING ===========
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      const p = PRESETS[state.activePreset];
+      const tc = themeColors();
+
+      // Layout positions
+      const prodX = 60, prodY = H / 2;
+      const exchX = p.topology === 'hash_exchange' || p.topology === 'msg_group' ? 200 : -1;
+      const queueBaseX = (p.topology === 'hash_exchange' || p.topology === 'msg_group') ? 340 : 200;
+      const consBaseX = W - 120;
+      const nq = state.queues.length;
+      const nc = state.consumers.length;
+
+      const prodFill = isLight() ? 'rgba(220,38,38,0.08)' : '#ff6b9d30';
+      const prodStroke = isLight() ? '#dc2626' : '#ff6b9d';
+      drawBox(prodX - 30, prodY - 22, 60, 44, prodFill, prodStroke, 'Producer');
+
+      if (exchX > 0) {
+        const exchFill = isLight() ? 'rgba(124,58,237,0.08)' : '#bd93f930';
+        const exchStroke = isLight() ? '#7c3aed' : '#bd93f9';
+        drawDiamond(exchX, prodY, 50, 30, exchFill, exchStroke);
+        drawText(exchX, prodY, 'Exchange', 10, exchStroke);
+        drawArrow(prodX + 32, prodY, exchX - 26, prodY, tc.arrowColor);
+      }
+
+      const queueSpacing = Math.min(80, (H - 80) / Math.max(nq, 1));
+      const queueStartY = prodY - ((nq - 1) * queueSpacing) / 2;
+      state.queues.forEach((q, i) => {
+        const qx = queueBaseX;
+        const qy = queueStartY + i * queueSpacing;
+        q._x = qx; q._y = qy;
+        drawQueue(qx, qy, q, i);
+
+        if (exchX > 0) {
+          drawArrow(exchX + 26, prodY, qx - 50, qy, tc.arrowColorFaint);
+        } else {
+          drawArrow(prodX + 32, prodY, qx - 50, qy, tc.arrowColorFaint);
+        }
+      });
+
+      const consSpacing = Math.min(80, (H - 80) / Math.max(nc, 1));
+      const consStartY = prodY - ((nc - 1) * consSpacing) / 2;
+      state.consumers.forEach((c, i) => {
+        const cx = consBaseX;
+        const cy = consStartY + i * consSpacing;
+        c._x = cx; c._y = cy;
+        drawConsumer(cx, cy, c);
+      });
+
+      state.queues.forEach((q, qi) => {
+        state.consumers.forEach((c, ci) => {
+          let connected = false;
+          if (p.id === 'single_active') {
+            connected = c.active;
+          } else if (p.topology === 'hash_exchange' || p.topology === 'msg_group') {
+            connected = ci === qi;
+          } else {
+            connected = true;
+          }
+          if (connected) {
+            const color = c.standby ? tc.arrowColorStandby : tc.arrowColorFaint;
+            drawArrow(q._x + 50, q._y, c._x - 36, c._y, color);
+          }
+        });
+      });
+
+      state.messages.forEach(m => {
+        if (m.state === 'pending') {
+          drawMessage(prodX + 40, prodY, m, 0.5);
+        } else if (m.state === 'in_queue') {
+          const q = state.queues[m.queue];
+          const idx = q.messages.indexOf(m.id);
+          const mx = q._x - 40 + idx * 16;
+          drawMessage(mx, q._y, m, 1);
+        } else if (m.state === 'in_flight') {
+          const c = state.consumers[m.consumer];
+          const idx = c.inFlight.indexOf(m.id);
+          const mx = c._x - 44 - idx * 18;
+          drawMessage(mx, c._y, m, 1);
+          const pct = m.processElapsed / m.processTime;
+          drawProgressArc(mx, c._y, 9, pct, getKeyColors()[m.keyIdx % getKeyColors().length]);
+        }
+      });
+
+      const pendingCount = state.messages.filter(m => m.state === 'pending').length;
+      if (pendingCount > 0) {
+        drawText(prodX, prodY + 35, `待发: ${pendingCount}`, 10, tc.pendingText);
+      }
+    }
+
+    function drawBox(x, y, w, h, fill, stroke, label) {
+      ctx.fillStyle = fill;
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      roundRect(ctx, x, y, w, h, 6);
+      ctx.fill();
+      ctx.stroke();
+      if (label) drawText(x + w / 2, y + h / 2, label, 10, stroke);
+    }
+
+    function drawDiamond(cx, cy, rx, ry, fill, stroke) {
+      ctx.fillStyle = fill;
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - ry);
+      ctx.lineTo(cx + rx, cy);
+      ctx.lineTo(cx, cy + ry);
+      ctx.lineTo(cx - rx, cy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    function drawQueue(x, y, q, idx) {
+      const w = 100, h = 28;
+      const sac = PRESETS[state.activePreset].id === 'single_active';
+      const tc = themeColors();
+
+      ctx.fillStyle = tc.queueFill;
+      ctx.strokeStyle = tc.queueStroke;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      roundRect(ctx, x - w / 2, y - h / 2, w, h, 4);
+      ctx.fill();
+      ctx.stroke();
+
+      for (let i = 0; i < 3; i++) {
+        ctx.fillStyle = tc.queueBarFill;
+        ctx.fillRect(x - w / 2 + 6, y - 6 + i * 6, 14, 3);
+      }
+
+      drawText(x + 12, y, q.label, 10, tc.queueTextColor);
+      if (sac) drawText(x, y + 20, 'x-single-active-consumer', 8, tc.sacAnnotation);
+
+      const inQueue = q.messages.length;
+      if (inQueue > 0) {
+        drawText(x + w / 2 - 8, y - h / 2 - 6, String(inQueue), 9, tc.queueTextColor);
+      }
+    }
+
+    function drawConsumer(x, y, c) {
+      const r = 24;
+      const tc = themeColors();
+      const color = getConsumerColors()[c.id % getConsumerColors().length];
+      ctx.fillStyle = c.standby ? tc.standbyFill : color + '18';
+      ctx.strokeStyle = c.standby ? tc.standbyStroke : color;
+      ctx.lineWidth = c.active ? 2 : 1;
+      ctx.setLineDash(c.standby ? [4, 4] : []);
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const label = c.label.replace('Consumer-', 'C');
+      drawText(x, y - 4, label, 11, c.standby ? tc.standbyText : color);
+
+      if (c.standby) {
+        drawText(x, y + 10, 'standby', 8, tc.standbyText);
+      } else {
+        drawText(x, y + 10, `已处理:${c.processed}`, 8, tc.processedText);
+      }
+
+      if (c.active && !c.standby) {
+        const slots = state.prefetch;
+        const used = c.inFlight.length;
+        const emptySlot = isLight() ? 'rgba(0,0,0,0.06)' : '#ffffff10';
+        for (let i = 0; i < slots; i++) {
+          ctx.fillStyle = i < used ? color + '60' : emptySlot;
+          ctx.fillRect(x - (slots * 5) + i * 10, y + r + 4, 8, 3);
+        }
+      }
+    }
+
+    function drawMessage(x, y, m, alpha) {
+      const r = 8;
+      const color = getKeyColors()[m.keyIdx % getKeyColors().length];
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold 8px ${getComputedStyle(document.body).fontFamily}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(m.id, x, y);
+      ctx.globalAlpha = 1;
+    }
+
+    function drawProgressArc(x, y, r, pct, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, r + 3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
+      ctx.stroke();
+    }
+
+    function drawArrow(x1, y1, x2, y2, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+      const hl = 6;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - hl * Math.cos(angle - 0.4), y2 - hl * Math.sin(angle - 0.4));
+      ctx.lineTo(x2 - hl * Math.cos(angle + 0.4), y2 - hl * Math.sin(angle + 0.4));
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawText(x, y, text, size, color) {
+      ctx.fillStyle = color;
+      ctx.font = `${size}px ${getComputedStyle(document.body).fontFamily}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, x, y);
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+    }
+
+    function loop() {
+      requestAnimationFrame(loop);
+      if (state.running) return; // tick-based drawing
+      draw();
+    }
+
+    // Legend
+    function updateLegend() {
+      const p = PRESETS[state.activePreset];
+      let html = '';
+      if (p.topology === 'hash_exchange' || p.topology === 'msg_group') {
+        const keyNames = ['OrderA', 'OrderB', 'OrderC', 'OrderD'];
+        for (let i = 0; i < state.consumerCount; i++) {
+          html += `<div class="legend-item"><span class="legend-dot" style="background:${getKeyColors()[i]}"></span>${keyNames[i]}</div>`;
+        }
+      }
+      html += `<div class="legend-item"><span class="legend-dot" style="background:#fff3"></span>消息序号 = 发送顺序</div>`;
+      document.getElementById('legend').innerHTML = html;
+    }
+
+    function updatePrompt() {
+      const p = PRESETS[state.activePreset];
+      const parts = [];
+      parts.push(`请详细解释 RabbitMQ 中「${p.name}」策略如何保证消息消费顺序性。`);
+      parts.push(`场景配置：${state.msgCount} 条消息，${state.consumerCount} 个消费者，prefetch=${state.prefetch}。`);
+
+      if (state.completedOrder.length > 0) {
+        const seq = state.completedOrder.map(c => `#${c.id}`).join(' → ');
+        parts.push(`模拟结果的全局完成顺序为：${seq}。`);
+
+        const outOfOrder = state.completedOrder.filter((c, i) => i > 0 && c.id < state.completedOrder[i - 1].id);
+        if (outOfOrder.length > 0) {
+          parts.push(`其中出现了 ${outOfOrder.length} 次乱序。请分析乱序原因，并给出保证顺序的改进方案。`);
+        } else {
+          parts.push(`全局顺序完全正确。请解释该策略为什么能保证顺序，以及它的局限性和适用场景。`);
+        }
+      }
+
+      if (p.topology === 'hash_exchange' || p.topology === 'msg_group') {
+        parts.push(`同时请说明分区有序与全局有序的区别，以及在实际业务中（如订单处理）如何选择分区键。`);
+      }
+
+      document.getElementById('promptText').textContent = parts.join(' ');
+    }
+
+    function copyPrompt() {
+      const text = document.getElementById('promptText').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = '已复制!';
+        setTimeout(() => btn.textContent = '复制', 1500);
+      });
+    }
+
+    selectPreset(0);
+    init();
+    updateLegend();
+
+    new MutationObserver(() => {
+      resetSimulation();
+      updateLegend();
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    // Re-render legend on preset change
+    const origSelect = selectPreset;
+    selectPreset = function (idx) {
+      state.activePreset = idx;
+      const p = PRESETS[idx];
+      state.consumerCount = p.consumerCount;
+      state.prefetch = p.prefetch;
+      state.speedVariance = p.speedVar;
+      document.getElementById('consumerCount').value = p.consumerCount;
+      document.getElementById('consumerCountVal').textContent = p.consumerCount;
+      document.getElementById('prefetch').value = p.prefetch;
+      document.getElementById('speedVar').value = p.speedVar;
+      document.querySelectorAll('.preset-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+      document.getElementById('infoOverlay').innerHTML = p.info;
+      resetSimulation();
+      updateLegend();
+      updatePrompt();
+    };
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

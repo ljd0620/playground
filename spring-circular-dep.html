@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spring 循环依赖 · 三级缓存</title>
+  <meta name="description" content="交互式演示 Spring IoC 容器解决循环依赖的三级缓存机制，逐步展示 Bean 创建与代理对象的处理过程">
+  <meta name="keywords" content="Spring, 循环依赖, 三级缓存, IoC容器, Bean创建, 代理对象, Java">
+  <meta property="og:title" content="Spring 循环依赖 · 三级缓存">
+  <meta property="og:description" content="交互式演示 Spring IoC 容器解决循环依赖的三级缓存机制，逐步展示 Bean 创建与代理对象的处理过程">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      /* legacy compat vars used in inline styles & JS */
+      --grn: #36d986;
+      --ylw: #ff9f43;
+      --pur: #b07aff;
+      --red: #ff5c6c;
+      --cyn: #22d3ee;
+      --tx2: #7d8da0;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+      position: relative
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(77, 163, 255, 0.06), transparent 70%);
+      pointer-events: none;
+      z-index: 0
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 272px 1fr;
+      grid-template-rows: 1fr auto;
+      height: 100vh;
+      position: relative;
+      z-index: 1
+    }
+
+    .ctrl {
+      grid-row: 1/3;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 18px 16px;
+      backdrop-filter: blur(12px)
+    }
+
+    .ctrl::-webkit-scrollbar {
+      width: 6px
+    }
+
+    .ctrl::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    .ctrl::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px
+    }
+
+    .ctrl::-webkit-scrollbar-thumb:hover {
+      background: var(--border-hover)
+    }
+
+    .prev {
+      grid-column: 2;
+      overflow-y: auto;
+      padding: 20px 22px
+    }
+
+    .prev::-webkit-scrollbar {
+      width: 6px
+    }
+
+    .prev::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    .prev::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px
+    }
+
+    .prev::-webkit-scrollbar-thumb:hover {
+      background: var(--border-hover)
+    }
+
+    .pbar {
+      grid-column: 2;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 12px 22px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      backdrop-filter: blur(12px)
+    }
+
+    h1 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text
+    }
+
+    .sub {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      letter-spacing: 0.3px
+    }
+
+    .sec {
+      margin-bottom: 16px
+    }
+
+    .sec-t {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px
+    }
+
+    .sec-t::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-blue)
+    }
+
+    label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 4px
+    }
+
+    select {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 0.75rem;
+      margin-bottom: 8px;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s
+    }
+
+    select:focus {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue)
+    }
+
+    input[type=range] {
+      width: 100%;
+      -webkit-appearance: none;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      margin-bottom: 8px
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--accent-blue);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 8px var(--glow-blue)
+    }
+
+    .rv {
+      font-size: 0.68rem;
+      color: var(--accent-blue);
+      font-weight: 600;
+      float: right;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace
+    }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all .2s;
+      position: relative;
+      overflow: hidden
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.03), transparent);
+      opacity: 0;
+      transition: opacity .2s
+    }
+
+    .btn:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3)
+    }
+
+    .btn:hover::after {
+      opacity: 1
+    }
+
+    .btn-a {
+      background: linear-gradient(135deg, var(--accent-blue), #3b82f6);
+      border-color: transparent;
+      color: #fff;
+      font-weight: 600;
+      box-shadow: 0 2px 10px rgba(77, 163, 255, 0.25)
+    }
+
+    .btn-a:hover {
+      box-shadow: 0 4px 16px rgba(77, 163, 255, 0.35);
+      transform: translateY(-1px)
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px
+    }
+
+    .pbtn {
+      padding: 5px 11px;
+      font-size: 0.68rem;
+      border-radius: 14px;
+      text-transform: none
+    }
+
+    .pbtn.on {
+      background: linear-gradient(135deg, var(--accent-blue), #3b82f6);
+      border-color: transparent;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(77, 163, 255, 0.3)
+    }
+
+    .sep {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 14px 0
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 12px;
+      backdrop-filter: blur(8px);
+      transition: border-color .2s
+    }
+
+    .card:hover {
+      border-color: var(--border-hover)
+    }
+
+    .card h3 {
+      font-size: 0.82rem;
+      margin-bottom: 6px;
+      color: var(--text-primary)
+    }
+
+    .card p {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      line-height: 1.8
+    }
+
+    .card code {
+      background: var(--bg-input);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.68rem;
+      color: var(--accent-cyan);
+      border: 1px solid var(--border)
+    }
+
+    .ptx {
+      flex: 1;
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
+    .log {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      font-size: 0.68rem;
+      max-height: 160px;
+      overflow-y: auto;
+      line-height: 1.8
+    }
+
+    .log::-webkit-scrollbar {
+      width: 6px
+    }
+
+    .log::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    .log::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px
+    }
+
+    .log::-webkit-scrollbar-thumb:hover {
+      background: var(--border-hover)
+    }
+
+    canvas {
+      display: block;
+      border-radius: var(--radius)
+    }
+
+    .cb {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent-blue);
+      vertical-align: middle;
+      margin-right: 5px
+    }
+
+    /* step nav */
+    .step-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px
+    }
+
+    .step-nav .btn {
+      padding: 7px 13px;
+      font-size: 0.78rem
+    }
+
+    .step-info {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      flex: 1;
+      text-align: center;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace
+    }
+
+    /* cache boxes */
+    .caches {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 14px
+    }
+
+    .cache-box {
+      border-radius: var(--radius);
+      padding: 12px;
+      min-height: 70px;
+      backdrop-filter: blur(8px)
+    }
+
+    .cache-box .c-title {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      margin-bottom: 8px
+    }
+
+    .cache-box .c-items {
+      font-size: 0.68rem;
+      font-family: 'JetBrains Mono', 'SF Mono', monospace;
+      line-height: 1.9
+    }
+
+    .cache-box .c-item {
+      padding: 3px 7px;
+      border-radius: 5px;
+      display: inline-block;
+      margin: 2px
+    }
+  </style>
+</head>
+
+<body>
+  <div class="layout">
+    <div class="ctrl">
+      <h1>Spring 循环依赖</h1>
+      <div class="sub">三级缓存机制交互演示</div>
+
+      <div class="sec">
+        <div class="sec-t">场景预设</div>
+        <div class="btn-row">
+          <button class="btn pbtn on" onclick="preset('ab')">A ↔ B</button>
+          <button class="btn pbtn" onclick="preset('abc')">A→B→C→A</button>
+          <button class="btn pbtn" onclick="preset('ctor')">构造器注入</button>
+          <button class="btn pbtn" onclick="preset('proto')">Prototype</button>
+          <button class="btn pbtn" onclick="preset('aop')">AOP 代理</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">注入方式</div>
+        <select id="selInject" onchange="onCfg()">
+          <option value="setter">Setter / @Autowired 字段注入</option>
+          <option value="ctor">构造器注入</option>
+        </select>
+      </div>
+      <div class="sec">
+        <div class="sec-t">Bean 作用域</div>
+        <select id="selScope" onchange="onCfg()">
+          <option value="singleton">Singleton（单例）</option>
+          <option value="prototype">Prototype（原型）</option>
+        </select>
+      </div>
+      <div class="sec">
+        <label><input type="checkbox" class="cb" id="chkAop" onchange="onCfg()"> 启用 AOP 代理</label>
+      </div>
+
+      <div class="sep"></div>
+
+      <div class="sec">
+        <div class="sec-t">动画速度</div>
+        <label>速度 <span class="rv" id="spdV">1x</span></label>
+        <input type="range" id="spd" min="0.5" max="4" step="0.5" value="1"
+          oninput="document.getElementById('spdV').textContent=this.value+'x'">
+      </div>
+
+      <div class="sep"></div>
+
+      <div class="card">
+        <h3>三级缓存</h3>
+        <p><code>singletonObjects</code>（一级）完整 Bean<br>
+          <code>earlySingletonObjects</code>（二级）早期引用/代理<br>
+          <code>singletonFactories</code>（三级）ObjectFactory λ
+        </p>
+      </div>
+      <div class="card">
+        <h3>Bean 生命周期</h3>
+        <p>① <code>createBeanInstance</code> 实例化<br>
+          ② <code>addSingletonFactory</code> 放入三级缓存<br>
+          ③ <code>populateBean</code> 属性注入<br>
+          ④ <code>initializeBean</code> 初始化 / AOP<br>
+          ⑤ <code>addSingleton</code> 移入一级缓存</p>
+      </div>
+    </div>
+
+    <div class="prev">
+      <!-- step nav -->
+      <div class="step-nav">
+        <button class="btn" onclick="stepPrev()">◀ 上一步</button>
+        <div class="step-info" id="stepInfo">选择场景后点击 ▶</div>
+        <button class="btn" onclick="stepNext()">下一步 ▶</button>
+        <button class="btn btn-a" onclick="autoPlay()" id="playBtn">▶ 自动播放</button>
+        <button class="btn" onclick="resetSim()">重置</button>
+      </div>
+
+      <!-- cache visualization -->
+      <div class="caches" id="cachesArea">
+        <div class="cache-box" style="background:#4ecdc410;border:1px solid #4ecdc430">
+          <div class="c-title" style="color:var(--grn)">一级缓存 singletonObjects</div>
+          <div class="c-items" id="c1"></div>
+        </div>
+        <div class="cache-box" style="background:#ffd93d10;border:1px solid #ffd93d30">
+          <div class="c-title" style="color:var(--ylw)">二级缓存 earlySingletonObjects</div>
+          <div class="c-items" id="c2"></div>
+        </div>
+        <div class="cache-box" style="background:#b44dff10;border:1px solid #b44dff30">
+          <div class="c-title" style="color:var(--pur)">三级缓存 singletonFactories</div>
+          <div class="c-items" id="c3"></div>
+        </div>
+      </div>
+
+      <!-- main canvas -->
+      <canvas id="cv" width="880" height="310"></canvas>
+
+      <!-- log -->
+      <div class="log" id="log" style="margin-top:10px"></div>
+    </div>
+
+    <div class="pbar">
+      <div class="ptx" id="ptx">选择场景，逐步观察 Spring 如何通过三级缓存解决循环依赖。</div>
+      <button class="btn btn-a" onclick="copyP()">复制</button>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════ SCENARIOS ═══════════════
+    function makeSteps(inject, scope, aop, chain) {
+      // chain: ['A','B'] or ['A','B','C']
+      if (scope === 'prototype') return protoSteps(chain);
+      if (inject === 'ctor') return ctorSteps(chain);
+      if (chain.length === 2) return aop ? abAopSteps(chain) : abSteps(chain);
+      return abcSteps(chain, aop);
+    }
+
+    const C = { A: '#6c7aff', B: '#4ecdc4', C: '#ff8c42' };
+    const CN = { A: 'ServiceA', B: 'ServiceB', C: 'ServiceC' };
+
+    function abSteps() {
+      return [
+        {
+          msg: 'getBean(A) — 开始创建 A', hl: 'A', phase: 'create',
+          c1: {}, c2: {}, c3: {}, desc: '容器启动，需要获取 Bean A', act: '开始创建 A'
+        },
+        {
+          msg: '① createBeanInstance(A) — 通过构造器实例化 A（半成品）', hl: 'A', phase: 'instantiate',
+          c1: {}, c2: {}, c3: {}, desc: '调用 A 的无参构造器，创建原始对象', act: '实例化 A'
+        },
+        {
+          msg: '② addSingletonFactory(A, λ) — A 的工厂放入三级缓存', hl: 'A', phase: 'factory',
+          c1: {}, c2: {}, c3: { A: 'λ→A' }, desc: '将能获取 A 早期引用的 ObjectFactory 放入三级缓存，此时 A 尚未注入属性', act: 'A 工厂→三级缓存'
+        },
+        {
+          msg: '③ populateBean(A) — 发现 A 依赖 B，触发 getBean(B)', hl: 'A→B', phase: 'populate',
+          c1: {}, c2: {}, c3: { A: 'λ→A' }, desc: '填充属性时发现 @Autowired B，递归调用 getBean(B)', act: '注入 A 属性 → 需要 B'
+        },
+        {
+          msg: '   ① createBeanInstance(B) — 实例化 B', hl: 'B', phase: 'instantiate',
+          c1: {}, c2: {}, c3: { A: 'λ→A' }, desc: 'B 也不在任何缓存中，创建 B 的原始实例', act: '实例化 B'
+        },
+        {
+          msg: '   ② addSingletonFactory(B, λ) — B 的工厂放入三级缓存', hl: 'B', phase: 'factory',
+          c1: {}, c2: {}, c3: { A: 'λ→A', B: 'λ→B' }, desc: 'B 的 ObjectFactory 也放入三级缓存', act: 'B 工厂→三级缓存'
+        },
+        {
+          msg: '   ③ populateBean(B) — 发现 B 依赖 A，触发 getBean(A)', hl: 'B→A', phase: 'populate',
+          c1: {}, c2: {}, c3: { A: 'λ→A', B: 'λ→B' }, desc: '关键时刻！B 需要注入 A，再次 getBean(A)', act: '注入 B 属性 → 需要 A'
+        },
+        {
+          msg: '   ★ getSingleton(A): 一级 ✗ → 二级 ✗ → 三级 ✓ 命中！', hl: 'hit-A', phase: 'resolve',
+          c1: {}, c2: {}, c3: { A: 'λ→A', B: 'λ→B' }, desc: '三级缓存中找到 A 的工厂，调用 getObject() 获取 A 的早期引用', act: '三级缓存命中 A'
+        },
+        {
+          msg: '   ★ 调用工厂 λ.getObject() 获取 A 早期引用，移入二级缓存', hl: 'promote-A', phase: 'promote',
+          c1: {}, c2: { A: 'early-A' }, c3: { B: 'λ→B' }, desc: 'A 从三级缓存移到二级缓存（三级中删除），B 拿到 A 的早期引用', act: 'A: 三级→二级'
+        },
+        {
+          msg: '   ③✓ B.a = earlyRef(A) — B 属性注入完成', hl: 'B', phase: 'injected',
+          c1: {}, c2: { A: 'early-A' }, c3: { B: 'λ→B' }, desc: 'B 成功注入了 A 的早期引用（虽然 A 还没初始化完）', act: 'B 注入 A 完成'
+        },
+        {
+          msg: '   ④ initializeBean(B) — B 初始化完成', hl: 'B', phase: 'init',
+          c1: {}, c2: { A: 'early-A' }, c3: { B: 'λ→B' }, desc: '执行 B 的 @PostConstruct、InitializingBean 等', act: 'B 初始化'
+        },
+        {
+          msg: '   ⑤ addSingleton(B) — B 移入一级缓存 ✅', hl: 'B-done', phase: 'done',
+          c1: { B: 'B ✓' }, c2: { A: 'early-A' }, c3: {}, desc: 'B 创建完毕！从三级缓存删除，放入一级缓存', act: 'B→一级缓存 ✅'
+        },
+        {
+          msg: '③✓ A.b = B — A 属性注入完成（拿到完整的 B）', hl: 'A', phase: 'injected',
+          c1: { B: 'B ✓' }, c2: { A: 'early-A' }, c3: {}, desc: '回到 A 的属性填充，此时 B 已是完整 Bean', act: 'A 注入 B 完成'
+        },
+        {
+          msg: '④ initializeBean(A) — A 初始化完成', hl: 'A', phase: 'init',
+          c1: { B: 'B ✓' }, c2: { A: 'early-A' }, c3: {}, desc: '执行 A 的初始化回调', act: 'A 初始化'
+        },
+        {
+          msg: '⑤ addSingleton(A) — A 移入一级缓存 ✅ 循环依赖解决！', hl: 'A-done', phase: 'done',
+          c1: { A: 'A ✓', B: 'B ✓' }, c2: {}, c3: {}, desc: 'A 从二级缓存删除，放入一级缓存。两个 Bean 都创建完毕！', act: 'A→一级缓存 ✅ 完成!'
+        },
+      ];
+    }
+
+    function abAopSteps() {
+      return [
+        {
+          msg: 'getBean(A) — 开始创建 A（有 @Transactional AOP）', hl: 'A', phase: 'create',
+          c1: {}, c2: {}, c3: {}, desc: 'A 被 AOP 增强，需要创建代理对象', act: '创建 A（AOP）'
+        },
+        {
+          msg: '① createBeanInstance(A) — 实例化原始 A', hl: 'A', phase: 'instantiate',
+          c1: {}, c2: {}, c3: {}, desc: '先创建 A 的原始对象（非代理）', act: '实例化 A'
+        },
+        {
+          msg: '② addSingletonFactory(A, λ→proxy?) — 工厂可返回代理', hl: 'A', phase: 'factory',
+          c1: {}, c2: {}, c3: { A: 'λ→proxy(A)?' }, desc: '三级缓存的关键：ObjectFactory 内部会判断是否需要 AOP，如需则提前创建代理', act: 'A 工厂→三级（含AOP逻辑）'
+        },
+        {
+          msg: '③ populateBean(A) — 需要 B，触发 getBean(B)', hl: 'A→B', phase: 'populate',
+          c1: {}, c2: {}, c3: { A: 'λ→proxy(A)?' }, desc: 'A 属性注入需要 B', act: '注入 A → 需要 B'
+        },
+        {
+          msg: '   ① createBeanInstance(B) + ② addSingletonFactory(B)', hl: 'B', phase: 'factory',
+          c1: {}, c2: {}, c3: { A: 'λ→proxy(A)?', B: 'λ→B' }, desc: 'B 正常实例化并放入三级缓存', act: '实例化 B + 入三级缓存'
+        },
+        {
+          msg: '   ③ populateBean(B) — 需要 A，触发 getBean(A)', hl: 'B→A', phase: 'populate',
+          c1: {}, c2: {}, c3: { A: 'λ→proxy(A)?', B: 'λ→B' }, desc: 'B 也需要 A，关键时刻！', act: '注入 B → 需要 A'
+        },
+        {
+          msg: '   ★ 三级缓存命中！调用 λ.getObject()...', hl: 'hit-A', phase: 'resolve',
+          c1: {}, c2: {}, c3: { A: 'λ→proxy(A)?', B: 'λ→B' }, desc: '找到 A 的工厂，工厂内部检测到 A 需要 AOP', act: '三级缓存命中 A 工厂'
+        },
+        {
+          msg: '   ★ 工厂检测到 AOP → 提前创建 A 的代理对象！', hl: 'aop-A', phase: 'aop',
+          c1: {}, c2: {}, c3: { A: 'λ→proxy(A)?', B: 'λ→B' }, desc: '这就是三级缓存存在的核心意义！二级缓存无法做到"按需创建代理"', act: '提前创建 proxy(A)'
+        },
+        {
+          msg: '   ★ proxy(A) 移入二级缓存（B 拿到的是代理对象）', hl: 'promote-A', phase: 'promote',
+          c1: {}, c2: { A: 'proxy(A)' }, c3: { B: 'λ→B' }, desc: '代理对象放入二级，后续谁再需要 A 都拿到同一个代理', act: 'proxy(A): 三级→二级'
+        },
+        {
+          msg: '   B 注入 proxy(A) → B 初始化 → B 入一级缓存 ✅', hl: 'B-done', phase: 'done',
+          c1: { B: 'B ✓' }, c2: { A: 'proxy(A)' }, c3: {}, desc: 'B 拿到的是 A 的代理对象，B 自身完成创建', act: 'B 完成 ✅'
+        },
+        {
+          msg: 'A 注入 B → A 初始化（跳过 AOP，代理已提前创建）', hl: 'A', phase: 'init',
+          c1: { B: 'B ✓' }, c2: { A: 'proxy(A)' }, c3: {}, desc: 'A 初始化时发现代理已在二级缓存创建，不再重复创建', act: 'A 初始化（AOP 已完成）'
+        },
+        {
+          msg: '⑤ proxy(A) 移入一级缓存 ✅ 完成！', hl: 'A-done', phase: 'done',
+          c1: { A: 'proxy(A) ✓', B: 'B ✓' }, c2: {}, c3: {}, desc: '最终一级缓存中存的是 A 的代理对象，所有引用一致', act: 'proxy(A)→一级缓存 ✅'
+        },
+      ];
+    }
+
+    function abcSteps(_, aop) {
+      return [
+        {
+          msg: 'getBean(A) → 实例化 A → 工厂入三级缓存', hl: 'A', phase: 'factory',
+          c1: {}, c2: {}, c3: { A: 'λ→A' }, desc: '开始创建 A', act: 'A 实例化 + 入三级'
+        },
+        {
+          msg: 'populateBean(A) → 需要 B → getBean(B)', hl: 'A→B', phase: 'populate',
+          c1: {}, c2: {}, c3: { A: 'λ→A' }, desc: 'A 需要注入 B', act: 'A 需要 B'
+        },
+        {
+          msg: 'getBean(B) → 实例化 B → 工厂入三级缓存', hl: 'B', phase: 'factory',
+          c1: {}, c2: {}, c3: { A: 'λ→A', B: 'λ→B' }, desc: 'B 也不存在，创建 B', act: 'B 实例化 + 入三级'
+        },
+        {
+          msg: 'populateBean(B) → 需要 C → getBean(C)', hl: 'B→C', phase: 'populate',
+          c1: {}, c2: {}, c3: { A: 'λ→A', B: 'λ→B' }, desc: 'B 需要注入 C', act: 'B 需要 C'
+        },
+        {
+          msg: 'getBean(C) → 实例化 C → 工厂入三级缓存', hl: 'C', phase: 'factory',
+          c1: {}, c2: {}, c3: { A: 'λ→A', B: 'λ→B', C: 'λ→C' }, desc: 'C 也不存在，创建 C', act: 'C 实例化 + 入三级'
+        },
+        {
+          msg: 'populateBean(C) → 需要 A → getBean(A)', hl: 'C→A', phase: 'populate',
+          c1: {}, c2: {}, c3: { A: 'λ→A', B: 'λ→B', C: 'λ→C' }, desc: 'C 需要 A！三级缓存命中', act: 'C 需要 A → 三级缓存!'
+        },
+        {
+          msg: '★ getSingleton(A): 三级缓存命中 → 获取早期 A → 移入二级', hl: 'hit-A', phase: 'promote',
+          c1: {}, c2: { A: 'early-A' }, c3: { B: 'λ→B', C: 'λ→C' }, desc: 'A 从三级移到二级，C 拿到 A 的早期引用', act: 'A: 三级→二级'
+        },
+        {
+          msg: 'C 注入 early(A) → C 初始化 → C 入一级缓存 ✅', hl: 'C-done', phase: 'done',
+          c1: { C: 'C ✓' }, c2: { A: 'early-A' }, c3: { B: 'λ→B' }, desc: 'C 完成创建，回到 B 的属性注入', act: 'C 完成 ✅'
+        },
+        {
+          msg: 'B 注入 C → B 初始化 → B 入一级缓存 ✅', hl: 'B-done', phase: 'done',
+          c1: { B: 'B ✓', C: 'C ✓' }, c2: { A: 'early-A' }, c3: {}, desc: 'B 拿到完整 C，B 也完成创建', act: 'B 完成 ✅'
+        },
+        {
+          msg: 'A 注入 B → A 初始化 → A 入一级缓存 ✅ 全部完成！', hl: 'A-done', phase: 'done',
+          c1: { A: 'A ✓', B: 'B ✓', C: 'C ✓' }, c2: {}, c3: {}, desc: 'A 拿到完整 B，三个 Bean 全部创建完毕', act: 'A 完成 ✅ 全部解决!'
+        },
+      ];
+    }
+
+    function ctorSteps() {
+      return [
+        {
+          msg: 'getBean(A) → 构造器需要 B → getBean(B)', hl: 'A', phase: 'create',
+          c1: {}, c2: {}, c3: {}, desc: 'A 的构造器参数中有 B，必须先获取 B 才能实例化 A', act: '创建 A → 构造器需要 B', fail: false
+        },
+        {
+          msg: 'getBean(B) → 构造器需要 A → getBean(A)', hl: 'B', phase: 'create',
+          c1: {}, c2: {}, c3: {}, desc: 'B 的构造器参数中有 A，必须先获取 A 才能实例化 B', act: '创建 B → 构造器需要 A', fail: false
+        },
+        {
+          msg: 'getBean(A) → A 正在创建中（singletonsCurrentlyInCreation）', hl: 'A', phase: 'create',
+          c1: {}, c2: {}, c3: {}, desc: 'A 还在创建中，但因为还没实例化完成，三级缓存中也没有 A！', act: 'A 在创建中...', fail: false
+        },
+        {
+          msg: '★ 三级缓存全部为空！三级缓存只在 createBeanInstance 之后才写入', hl: 'fail', phase: 'fail',
+          c1: {}, c2: {}, c3: {}, desc: '构造器注入时，对象还没实例化完成，无法提前暴露引用', act: '三级缓存无法帮忙', fail: true
+        },
+        {
+          msg: '✗ 抛出 BeanCurrentlyInCreationException！循环依赖无法解决', hl: 'fail', phase: 'fail',
+          c1: {}, c2: {}, c3: {}, desc: '构造器注入的循环依赖是死锁：A 需要 B 才能 new，B 需要 A 才能 new', act: 'BeanCurrentlyInCreationException ✗', fail: true
+        },
+      ];
+    }
+
+    function protoSteps() {
+      return [
+        {
+          msg: 'getBean(A, prototype) → 每次创建新实例', hl: 'A', phase: 'create',
+          c1: {}, c2: {}, c3: {}, desc: 'Prototype 作用域不使用缓存，每次 getBean 都创建新对象', act: '创建 A（prototype）', fail: false
+        },
+        {
+          msg: 'populateBean(A) → 需要 B → getBean(B, prototype)', hl: 'A→B', phase: 'populate',
+          c1: {}, c2: {}, c3: {}, desc: 'A 需要 B，B 也是 prototype', act: 'A 需要 B', fail: false
+        },
+        {
+          msg: 'populateBean(B) → 需要 A → getBean(A, prototype)', hl: 'B→A', phase: 'populate',
+          c1: {}, c2: {}, c3: {}, desc: 'B 又需要 A，但 prototype 不放缓存', act: 'B 需要 A', fail: false
+        },
+        {
+          msg: '★ Prototype Bean 不会放入三级缓存！Spring 只缓存 Singleton', hl: 'fail', phase: 'fail',
+          c1: {}, c2: {}, c3: {}, desc: 'Spring 的三级缓存只服务于 Singleton 作用域，Prototype 每次都是新对象', act: '无缓存可用', fail: true
+        },
+        {
+          msg: '✗ 抛出 BeanCurrentlyInCreationException！Prototype 无法解决循环依赖', hl: 'fail', phase: 'fail',
+          c1: {}, c2: {}, c3: {}, desc: 'Prototype 没有缓存兜底，陷入无限递归后被检测拦截', act: 'BeanCurrentlyInCreationException ✗', fail: true
+        },
+      ];
+    }
+
+    // ═══════════════ STATE ═══════════════
+    let S = { step: -1, steps: [], playing: false, scenario: 'ab' };
+    let autoTimer = null;
+
+    function getConfig() {
+      return {
+        inject: document.getElementById('selInject').value,
+        scope: document.getElementById('selScope').value,
+        aop: document.getElementById('chkAop').checked,
+      };
+    }
+
+    function buildSteps() {
+      const cfg = getConfig();
+      const chain = S.scenario === 'abc' ? ['A', 'B', 'C'] : ['A', 'B'];
+      S.steps = makeSteps(cfg.inject, cfg.scope, cfg.aop, chain);
+      S.step = -1;
+    }
+
+    function onCfg() {
+      stopAuto();
+      document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+      buildSteps();
+      renderStep();
+    }
+
+    function preset(name) {
+      stopAuto();
+      document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+      event.target.classList.add('on');
+      S.scenario = name;
+      if (name === 'ab') { setUI('setter', 'singleton', false); }
+      else if (name === 'abc') { setUI('setter', 'singleton', false); }
+      else if (name === 'ctor') { setUI('ctor', 'singleton', false); }
+      else if (name === 'proto') { setUI('setter', 'prototype', false); }
+      else if (name === 'aop') { setUI('setter', 'singleton', true); }
+      buildSteps();
+      renderStep();
+    }
+
+    function setUI(inj, scp, aop) {
+      document.getElementById('selInject').value = inj;
+      document.getElementById('selScope').value = scp;
+      document.getElementById('chkAop').checked = aop;
+    }
+
+    // ═══════════════ STEP NAVIGATION ═══════════════
+    function stepNext() {
+      if (S.step < S.steps.length - 1) { S.step++; renderStep(); }
+    }
+    function stepPrev() {
+      if (S.step > 0) { S.step--; renderStep(); }
+    }
+    function resetSim() {
+      stopAuto(); S.step = -1; renderStep();
+    }
+    function autoPlay() {
+      if (S.playing) { stopAuto(); return; }
+      S.playing = true;
+      document.getElementById('playBtn').textContent = '⏸ 暂停';
+      if (S.step >= S.steps.length - 1) S.step = -1;
+      const spd = +document.getElementById('spd').value;
+      function tick() {
+        if (S.step >= S.steps.length - 1) { stopAuto(); return; }
+        S.step++;
+        renderStep();
+        autoTimer = setTimeout(tick, 1200 / spd);
+      }
+      tick();
+    }
+    function stopAuto() {
+      S.playing = false;
+      if (autoTimer) clearTimeout(autoTimer);
+      document.getElementById('playBtn').textContent = '▶ 自动播放';
+    }
+
+    // ═══════════════ RENDERING ═══════════════
+    function renderStep() {
+      const step = S.steps[S.step];
+      // Step info
+      document.getElementById('stepInfo').textContent = S.step < 0
+        ? `共 ${S.steps.length} 步 · 点击 ▶ 或「下一步」`
+        : `步骤 ${S.step + 1} / ${S.steps.length}`;
+
+      // Caches
+      renderCaches(step);
+      // Canvas
+      drawCanvas(step);
+      // Log
+      renderLog();
+      // Prompt
+      updatePrompt();
+    }
+
+    function renderCaches(step) {
+      const caches = [
+        { el: 'c1', data: step ? step.c1 : {}, color: '#4ecdc4' },
+        { el: 'c2', data: step ? step.c2 : {}, color: '#ffd93d' },
+        { el: 'c3', data: step ? step.c3 : {}, color: '#b44dff' },
+      ];
+      caches.forEach(c => {
+        const el = document.getElementById(c.el);
+        const keys = Object.keys(c.data);
+        if (!keys.length) { el.innerHTML = '<span style="color:#8b90a540;font-size:10px">（空）</span>'; return; }
+        el.innerHTML = keys.map(k => {
+          const bc = C[k] || '#8b90a5';
+          return `<span class="c-item" style="background:${bc}22;color:${bc};border:1px solid ${bc}40">${k}: ${c.data[k]}</span>`;
+        }).join(' ');
+      });
+    }
+
+    function drawCanvas(step) {
+      const cv = document.getElementById('cv');
+      const ctx = cv.getContext('2d');
+      const W = cv.width, H = cv.height;
+      ctx.clearRect(0, 0, W, H);
+
+      if (!step) {
+        ctx.font = '13px -apple-system,sans-serif';
+        ctx.fillStyle = '#8b90a5';
+        ctx.textAlign = 'center';
+        ctx.fillText('点击「下一步」或「▶ 自动播放」开始演示', W / 2, H / 2);
+        return;
+      }
+
+      const beans = S.scenario === 'abc' ? ['A', 'B', 'C'] : ['A', 'B'];
+      const beanW = 180, beanH = 220, gap = 60;
+      const totalW = beans.length * beanW + (beans.length - 1) * gap;
+      const startX = (W - totalW) / 2;
+      const startY = 40;
+
+      // Draw each bean lifecycle column
+      beans.forEach((b, i) => {
+        const x = startX + i * (beanW + gap);
+        const y = startY;
+        const col = C[b];
+
+        // Column header
+        ctx.font = 'bold 13px -apple-system,sans-serif';
+        ctx.fillStyle = col;
+        ctx.textAlign = 'center';
+        ctx.fillText(CN[b], x + beanW / 2, y);
+
+        // Lifecycle stages
+        const stages = ['实例化', '入三级缓存', '属性注入', '初始化', '入一级缓存'];
+        const stageH = 34;
+        const sy = y + 16;
+
+        // Determine how far this bean has progressed
+        const progress = getBeanProgress(b, S.step);
+
+        stages.forEach((s, si) => {
+          const sy2 = sy + si * stageH;
+          const active = si === progress;
+          const done = si < progress;
+          const failed = step.fail && active;
+
+          ctx.beginPath();
+          rr(ctx, x, sy2, beanW, stageH - 4, 6);
+          if (failed) {
+            ctx.fillStyle = '#ff5f6d18';
+            ctx.fill();
+            ctx.strokeStyle = '#ff5f6d60';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          } else if (active) {
+            ctx.fillStyle = col + '20';
+            ctx.fill();
+            ctx.strokeStyle = col;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            // Glow
+            ctx.shadowColor = col;
+            ctx.shadowBlur = 10;
+            ctx.strokeRect(x, sy2, beanW, stageH - 4);
+            ctx.shadowBlur = 0;
+          } else if (done) {
+            ctx.fillStyle = col + '10';
+            ctx.fill();
+            ctx.strokeStyle = col + '30';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          } else {
+            ctx.fillStyle = '#1a1d27';
+            ctx.fill();
+            ctx.strokeStyle = '#2e334850';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+
+          // Stage label
+          ctx.font = `${active ? 'bold ' : ''}11px -apple-system,sans-serif`;
+          ctx.fillStyle = failed ? '#ff5f6d' : active ? col : done ? col + 'aa' : '#8b90a540';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText((done ? '✓ ' : failed ? '✗ ' : '') + s, x + beanW / 2, sy2 + (stageH - 4) / 2);
+          ctx.textBaseline = 'alphabetic';
+        });
+      });
+
+      // Draw dependency arrows
+      if (step.hl && step.hl.includes('→')) {
+        const parts = step.hl.split('→');
+        const fromIdx = beans.indexOf(parts[0]);
+        const toIdx = beans.indexOf(parts[1]);
+        if (fromIdx >= 0 && toIdx >= 0) {
+          const fx = startX + fromIdx * (beanW + gap) + beanW;
+          const tx = startX + toIdx * (beanW + gap);
+          const fy = startY + 16 + 2 * 34 + 15; // populate row center
+          ctx.beginPath();
+          ctx.strokeStyle = '#ffd93d80';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 3]);
+          if (fromIdx < toIdx) {
+            ctx.moveTo(fx + 4, fy); ctx.lineTo(tx - 4, fy);
+            drawArrow(ctx, tx - 4, fy, 1);
+          } else {
+            ctx.moveTo(fx - beanW - 4, fy); ctx.lineTo(tx + beanW + 4, fy);
+            drawArrow(ctx, tx + beanW + 4, fy, -1);
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font = 'bold 10px SF Mono,monospace';
+          ctx.fillStyle = '#ffd93d';
+          ctx.textAlign = 'center';
+          ctx.fillText('getBean(' + parts[1] + ')', (fx + tx) / 2 + (fromIdx < toIdx ? 0 : beanW), fy - 10);
+        }
+      }
+
+      // Description box
+      if (step.desc) {
+        const dy = H - 50;
+        ctx.fillStyle = '#1a1d27cc';
+        ctx.fillRect(20, dy, W - 40, 40);
+        ctx.strokeStyle = step.fail ? '#ff5f6d40' : '#6c7aff30';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(20, dy, W - 40, 40);
+        ctx.font = '12px -apple-system,sans-serif';
+        ctx.fillStyle = step.fail ? '#ff5f6d' : '#e2e4ed';
+        ctx.textAlign = 'center';
+        ctx.fillText(step.desc, W / 2, dy + 24);
+      }
+    }
+
+    function getBeanProgress(bean, stepIdx) {
+      // Determine lifecycle stage index (0-4) for a bean at a given step
+      if (stepIdx < 0) return -1;
+      const cfg = getConfig();
+      const isFail = cfg.inject === 'ctor' || cfg.scope === 'prototype';
+
+      if (S.scenario === 'ab' || S.scenario === 'aop') {
+        const aop = document.getElementById('chkAop').checked;
+        if (isFail) {
+          if (bean === 'A') return stepIdx >= 0 ? (stepIdx >= 3 ? -2 : 0) : -1;
+          if (bean === 'B') return stepIdx >= 1 ? (stepIdx >= 3 ? -2 : 0) : -1;
+        }
+        // Normal A↔B or AOP
+        if (bean === 'A') {
+          if (aop) {
+            if (stepIdx >= 11) return 5;
+            if (stepIdx >= 10) return 3;
+            if (stepIdx >= 12) return 4;
+            if (stepIdx >= 3) return 2;
+            if (stepIdx >= 2) return 1;
+            if (stepIdx >= 1) return 0;
+            return stepIdx >= 0 ? 0 : -1;
+          }
+          if (stepIdx >= 14) return 5;
+          if (stepIdx >= 13) return 3;
+          if (stepIdx >= 12) return 2;
+          if (stepIdx >= 3) return 2;
+          if (stepIdx >= 2) return 1;
+          if (stepIdx >= 1) return 0;
+          return stepIdx >= 0 ? 0 : -1;
+        }
+        if (bean === 'B') {
+          if (aop) {
+            if (stepIdx >= 9) return 5;
+            if (stepIdx >= 5) return 2;
+            if (stepIdx >= 4) return 1;
+            return stepIdx >= 4 ? 0 : -1;
+          }
+          if (stepIdx >= 11) return 5;
+          if (stepIdx >= 10) return 3;
+          if (stepIdx >= 9) return 2;
+          if (stepIdx >= 6) return 2;
+          if (stepIdx >= 5) return 1;
+          if (stepIdx >= 4) return 0;
+          return -1;
+        }
+      }
+
+      if (S.scenario === 'abc') {
+        if (bean === 'A') {
+          if (stepIdx >= 9) return 5;
+          if (stepIdx >= 1) return stepIdx >= 9 ? 5 : 2;
+          return stepIdx >= 0 ? 0 : -1;
+        }
+        if (bean === 'B') {
+          if (stepIdx >= 8) return 5;
+          if (stepIdx >= 3) return 2;
+          if (stepIdx >= 2) return 1;
+          return stepIdx >= 2 ? 0 : -1;
+        }
+        if (bean === 'C') {
+          if (stepIdx >= 7) return 5;
+          if (stepIdx >= 5) return 2;
+          if (stepIdx >= 4) return 1;
+          return stepIdx >= 4 ? 0 : -1;
+        }
+      }
+
+      if (S.scenario === 'ctor' || S.scenario === 'proto') {
+        if (bean === 'A') return stepIdx >= 3 ? -2 : (stepIdx >= 0 ? 0 : -1);
+        if (bean === 'B') return stepIdx >= 3 ? -2 : (stepIdx >= 1 ? 0 : -1);
+      }
+      return -1;
+    }
+
+    function drawArrow(ctx, x, y, dir) {
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - dir * 8, y - 5);
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - dir * 8, y + 5);
+    }
+
+    function rr(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    }
+
+    function renderLog() {
+      const log = document.getElementById('log');
+      log.innerHTML = '';
+      for (let i = 0; i <= Math.max(S.step, -1); i++) {
+        if (i < 0) continue;
+        const s = S.steps[i];
+        const cls = s.fail ? 'log-error' : s.phase === 'done' ? 'log-ok' : s.phase === 'resolve' || s.phase === 'promote' || s.phase === 'aop' ? 'log-warn' : 'log-info';
+        log.innerHTML += `<div style="color:${s.fail ? 'var(--red)' : s.phase === 'done' ? 'var(--grn)' : s.phase === 'promote' || s.phase === 'resolve' ? 'var(--ylw)' : 'var(--cyn)'}"><span style="color:var(--tx2)">[${String(i + 1).padStart(2, '0')}]</span> ${s.msg}</div>`;
+      }
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function updatePrompt() {
+      const cfg = getConfig();
+      const scenarioNames = { ab: 'A↔B 双向依赖', abc: 'A→B→C→A 三角依赖', ctor: '构造器注入（失败）', proto: 'Prototype 作用域（失败）', aop: 'AOP 代理场景' };
+      const parts = [scenarioNames[S.scenario] || 'A↔B'];
+      parts.push(cfg.inject === 'ctor' ? '构造器注入' : 'Setter注入');
+      parts.push(cfg.scope);
+      if (cfg.aop) parts.push('有AOP');
+      if (S.step >= 0 && S.step === S.steps.length - 1) {
+        const last = S.steps[S.step];
+        parts.push(last.fail ? '结果: 失败 ✗' : '结果: 解决 ✓');
+      }
+      document.getElementById('ptx').textContent = 'Spring 循环依赖 · ' + parts.join(' · ');
+    }
+
+    function copyP() {
+      navigator.clipboard.writeText(document.getElementById('ptx').textContent).then(() => {
+        const b = event.target; b.textContent = '已复制!'; setTimeout(() => b.textContent = '复制', 1500);
+      });
+    }
+
+    // Init
+    buildSteps();
+    renderStep();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

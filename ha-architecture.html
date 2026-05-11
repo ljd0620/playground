@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>高可用分布式架构</title>
+  <meta name="description" content="交互式演示高可用分布式架构设计，包括负载均衡、熔断降级、服务注册与容灾切换">
+  <meta name="keywords" content="高可用, 分布式架构, 负载均衡, 熔断降级, 服务注册, 容灾">
+  <meta property="og:title" content="高可用分布式架构">
+  <meta property="og:description" content="交互式演示高可用分布式架构设计，包括负载均衡、熔断降级、服务注册与容灾切换">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --mo: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 13px;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    header {
+      position: relative;
+      z-index: 1;
+      padding: 14px 20px;
+      background: linear-gradient(180deg, rgba(77, 163, 255, 0.04) 0%, transparent 100%);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 0%, #a8c8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    header h1 span {
+      background: linear-gradient(135deg, #36d986 0%, #22d3ee 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 2px;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      transition: all 0.2s;
+    }
+
+    .tab:hover {
+      color: var(--text-secondary);
+      background: var(--bg-elevated);
+      border-color: var(--border);
+    }
+
+    .tab.on {
+      color: var(--accent-blue);
+      background: linear-gradient(135deg, rgba(77, 163, 255, 0.08), rgba(77, 163, 255, 0.02));
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 12px var(--glow-blue);
+    }
+
+    .main {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .L {
+      width: 300px;
+      min-width: 300px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .R {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .cw {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .sec {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .sec:hover {
+      border-color: var(--border-hover);
+    }
+
+    .st {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .st::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 0;
+    }
+
+    .row label {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+    }
+
+    .row select {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: var(--radius-sm);
+      padding: 4px 8px;
+      font-size: 0.72rem;
+      width: 120px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .row select:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    .row input[type=range] {
+      width: 80px;
+      accent-color: var(--accent-blue);
+    }
+
+    .rv {
+      font-family: var(--mo);
+      font-size: 0.68rem;
+      color: var(--accent-blue);
+      min-width: 22px;
+      text-align: right;
+    }
+
+    .bs {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .b {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 0;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.72rem;
+      font-weight: 500;
+      transition: all 0.2s;
+      flex: 1;
+      text-align: center;
+      min-width: 60px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .b::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .b:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .b.p {
+      background: linear-gradient(135deg, #1a9f4a, #238636);
+      color: #fff;
+      font-weight: 600;
+      border-color: transparent;
+    }
+
+    .b.p:hover {
+      background: linear-gradient(135deg, #22b856, #2ea043);
+      box-shadow: 0 4px 12px rgba(54, 217, 134, 0.2);
+    }
+
+    .b.r {
+      color: var(--accent-red);
+      border-color: rgba(255, 92, 108, 0.2);
+    }
+
+    .b.r:hover {
+      border-color: var(--accent-red);
+      box-shadow: 0 0 12px rgba(255, 92, 108, 0.1);
+    }
+
+    .b.y {
+      color: var(--accent-orange);
+      border-color: rgba(255, 159, 67, 0.2);
+    }
+
+    .b.y:hover {
+      border-color: var(--accent-orange);
+      box-shadow: 0 0 12px rgba(255, 159, 67, 0.1);
+    }
+
+    .inf {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-size: 0.68rem;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      font-family: var(--mo);
+    }
+
+    .inf b {
+      color: var(--text-primary);
+    }
+
+    .inf .h {
+      color: var(--accent-green);
+      font-weight: 600;
+    }
+
+    .inf .r {
+      color: var(--accent-red);
+    }
+
+    .inf .bl {
+      color: var(--accent-blue);
+    }
+
+    .inf .y {
+      color: var(--accent-orange);
+    }
+
+    .inf .p {
+      color: var(--accent-purple);
+    }
+
+    .pb {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 10px 18px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .pb .pt {
+      flex: 1;
+      font-size: 0.68rem;
+      font-family: var(--mo);
+      color: var(--text-secondary);
+      line-height: 1.7;
+      max-height: 48px;
+      overflow-y: auto;
+    }
+
+    .cb {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 5px 14px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.68rem;
+      font-weight: 500;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+
+    .cb:hover {
+      border-color: var(--accent-blue);
+      color: var(--text-primary);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-hover);
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>高可用<span>分布式架构</span></h1>
+    <div class="tabs" id="tabs"></div>
+  </header>
+  <div class="main">
+    <div class="L" id="lp"></div>
+    <div class="R">
+      <div class="cw"><canvas id="cv"></canvas></div>
+      <div class="pb">
+        <div class="pt" id="pt"></div><button class="cb"
+          onclick="navigator.clipboard.writeText(document.getElementById('pt').textContent).then(()=>{event.target.textContent='已复制!';setTimeout(()=>event.target.textContent='复制',1200)})">复制</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    const cv = document.getElementById('cv'), cx = cv.getContext('2d'); let W, H, dpr;
+    function rsz() { const r = cv.parentElement.getBoundingClientRect(); dpr = devicePixelRatio || 1; W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px'; cx.setTransform(dpr, 0, 0, dpr, 0, 0) }
+    addEventListener('resize', () => { rsz(); M[aT].draw() });
+    const F = () => getComputedStyle(document.body).fontFamily;
+    const MO = () => getComputedStyle(document.body).getPropertyValue('--mo').trim() || 'monospace';
+    function t(x, y, s, sz, c, a = 'center', bl = 'middle') { cx.fillStyle = c; cx.font = `${sz}px ${F()}`; cx.textAlign = a; cx.textBaseline = bl; cx.fillText(s, x, y) }
+    function tb(x, y, s, sz, c, a = 'center', bl = 'middle') { cx.font = `bold ${sz}px ${F()}`; t(x, y, s, sz, c, a, bl) }
+    function tm(x, y, s, sz, c, a = 'center') { cx.fillStyle = c; cx.font = `${sz}px ${MO()}`; cx.textAlign = a; cx.textBaseline = 'middle'; cx.fillText(s, x, y) }
+    function rr(x, y, w, h, r) { cx.beginPath(); cx.moveTo(x + r, y); cx.lineTo(x + w - r, y); cx.quadraticCurveTo(x + w, y, x + w, y + r); cx.lineTo(x + w, y + h - r); cx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); cx.lineTo(x + r, y + h); cx.quadraticCurveTo(x, y + h, x, y + h - r); cx.lineTo(x, y + r); cx.quadraticCurveTo(x, y, x + r, y) }
+    function bx(x, y, w, h, f, s, r = 5) { cx.fillStyle = f; cx.strokeStyle = s; cx.lineWidth = 1.2; rr(x, y, w, h, r); cx.fill(); cx.stroke() }
+    function ar(x1, y1, x2, y2, c, w = 1.2) { cx.strokeStyle = c; cx.lineWidth = w; cx.beginPath(); cx.moveTo(x1, y1); cx.lineTo(x2, y2); cx.stroke(); const a = Math.atan2(y2 - y1, x2 - x1), l = 5; cx.fillStyle = c; cx.beginPath(); cx.moveTo(x2, y2); cx.lineTo(x2 - l * Math.cos(a - .35), y2 - l * Math.sin(a - .35)); cx.lineTo(x2 - l * Math.cos(a + .35), y2 - l * Math.sin(a + .35)); cx.closePath(); cx.fill() }
+    function circ(x, y, r, f, s) { cx.fillStyle = f; cx.strokeStyle = s; cx.lineWidth = 1.2; cx.beginPath(); cx.arc(x, y, r, 0, Math.PI * 2); cx.fill(); cx.stroke() }
+    function dl(x1, y1, x2, y2, c) { cx.strokeStyle = c; cx.lineWidth = 1; cx.setLineDash([4, 4]); cx.beginPath(); cx.moveTo(x1, y1); cx.lineTo(x2, y2); cx.stroke(); cx.setLineDash([]) }
+    function pct(x, y, w, h, p, c) { bx(x, y, w, h, '#ffffff06', '#ffffff08', 3); cx.fillStyle = c; rr(x, y, Math.max(2, w * Math.min(1, p)), h, 3); cx.fill() }
+    const PC = ['#3b82f6', '#10b981', '#f97316', '#8b5cf6', '#ec4899', '#06b6d4', '#eab308', '#ef4444'];
+
+    const TABS = [{ id: 'lb', l: '负载均衡' }, { id: 'cb', l: '熔断器' }, { id: 'cache', l: '缓存策略' }, { id: 'reg', l: '服务注册' }, { id: 'repl', l: '主从复制' }, { id: 'cap', l: 'CAP 定理' }];
+    let aT = 'lb';
+    document.getElementById('tabs').innerHTML = TABS.map(x => `<button class="tab${x.id === aT ? ' on' : ''}" onclick="sw('${x.id}')">${x.l}</button>`).join('');
+    function sw(id) { aT = id; document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x.textContent === TABS.find(y => y.id === id).l)); M[id].init(); rsz(); M[id].draw() }
+
+    // ==================== 1. LOAD BALANCER ====================
+    const lb = (() => {
+      let algo = 'rr', servers = [], reqs = [], rrIdx = 0, tid = null, seq = 0, hashRing = [];
+      function init() {
+        algo = 'rr'; seq = 0; rrIdx = 0;
+        servers = [{ id: 0, w: 5, conn: 0, hp: 100, ok: true }, { id: 1, w: 3, conn: 0, hp: 100, ok: true }, { id: 2, w: 1, conn: 0, hp: 100, ok: true }, { id: 3, w: 2, conn: 0, hp: 100, ok: true }];
+        reqs = []; if (tid) clearInterval(tid); tid = null;
+        buildHashRing(); renderL(); draw(); uP();
+      }
+      function buildHashRing() { hashRing = []; servers.forEach(s => { for (let i = 0; i < 20; i++)hashRing.push({ hash: (s.id * 1000 + i * 37) % 360, sid: s.id }) }); hashRing.sort((a, b) => a.hash - b.hash) }
+      function renderL() {
+        document.getElementById('lp').innerHTML = `
+    <div class="sec"><div class="st">负载均衡算法</div>
+      <div class="bs">
+        ${['rr:Round-Robin', 'wt:加权轮询', 'lc:最少连接', 'ch:一致性哈希'].map(x => { const [k, v] = x.split(':'); return `<button class="b${algo === k ? ' p' : ''}" onclick="lb.setAlgo('${k}')">${v}</button>` }).join('')}
+      </div>
+    </div>
+    <div class="sec"><div class="st">服务器状态</div>
+      ${servers.map((s, i) => `<div class="row"><label style="color:${PC[i]}">Server-${i} ${s.ok ? '' : '❌'}</label><span class="rv">w=${s.w} conn=${s.conn}</span></div>`).join('')}
+      <div style="height:4px"></div>
+      <div class="bs"><button class="b y" onclick="lb.killSvr()">模拟宕机</button><button class="b" onclick="lb.reviveSvr()">恢复</button></div>
+    </div>
+    <div class="sec"><div class="st">操作</div>
+      <div class="bs">
+        <button class="b p" onclick="lb.send()">发送请求</button>
+        <button class="b" onclick="lb.auto()">▶ 持续</button>
+        <button class="b r" onclick="lb.init()">↺</button>
+      </div>
+    </div>
+    <div class="sec"><div class="st">算法说明</div>
+      <div class="inf">${{
+            rr: '<span class="h">Round-Robin</span>：请求按顺序轮流分配到每台服务器。简单公平，不考虑服务器性能差异和当前负载。',
+            wt: '<span class="h">加权轮询</span>：根据权重 (weight) 分配请求。权重高的服务器分配更多请求。适用于<b>服务器性能不均匀</b>的场景。',
+            lc: '<span class="h">最少连接</span>：将请求分配给当前<b>活跃连接数最少</b>的服务器。能动态适应服务器的负载差异。',
+            ch: '<span class="h">一致性哈希</span>：根据请求 key 的哈希值在哈希环上定位。<b>相同 key 总是路由到同一服务器</b>。增减节点只影响相邻区间。'
+          }[algo]}</div>
+    </div>`;
+      }
+      function setAlgo(a) { algo = a; servers.forEach(s => { s.conn = 0 }); reqs = []; seq = 0; rrIdx = 0; renderL(); draw(); uP() }
+      function route() {
+        const ok = servers.filter(s => s.ok);
+        if (!ok.length) return -1;
+        if (algo === 'rr') { rrIdx = (rrIdx + 1) % ok.length; return ok[rrIdx].id }
+        if (algo === 'wt') { const tw = ok.reduce((a, s) => a + s.w, 0); let r = Math.random() * tw, cum = 0; for (const s of ok) { cum += s.w; if (r <= cum) return s.id } return ok[0].id }
+        if (algo === 'lc') { ok.sort((a, b) => a.conn - b.conn); return ok[0].id }
+        if (algo === 'ch') { const h = (seq * 67) % 360; for (const n of hashRing) if (n.hash >= h && servers[n.sid].ok) return n.sid; const first = hashRing.find(n => servers[n.sid].ok); return first ? first.sid : ok[0].id }
+        return ok[0].id;
+      }
+      function send() {
+        seq++; const sid = route(); if (sid < 0) return;
+        servers[sid].conn++;
+        const r = { id: seq, sid, born: Date.now(), life: 800 + Math.random() * 1200 };
+        reqs.push(r);
+        setTimeout(() => { servers[sid].conn = Math.max(0, servers[sid].conn - 1); reqs = reqs.filter(x => x !== r); draw(); renderL() }, r.life);
+        draw(); renderL(); uP();
+      }
+      function auto() { if (tid) { clearInterval(tid); tid = null; return } tid = setInterval(() => { send(); if (seq >= 40) { clearInterval(tid); tid = null } }, 300) }
+      function killSvr() { const ok = servers.filter(s => s.ok); if (ok.length > 1) { ok[ok.length - 1].ok = false; renderL(); draw(); uP() } }
+      function reviveSvr() { const d = servers.find(s => !s.ok); if (d) { d.ok = true; renderL(); draw(); uP() } }
+      function draw() {
+        cx.clearRect(0, 0, W, H);
+        // Client
+        const clx = 50, cly = H / 2;
+        bx(clx - 30, cly - 20, 60, 40, '#f59e0b15', '#f59e0b'); tb(clx, cly - 4, 'Client', 10, '#f59e0b'); t(clx, cly + 10, `#${seq}`, 8, '#t2');
+        // LB
+        const lbx = 180, lby = H / 2;
+        bx(lbx - 35, lby - 28, 70, 56, '#3b82f615', '#3b82f6'); tb(lbx, lby - 10, 'LB', 12, '#3b82f6'); t(lbx, lby + 6, algo.toUpperCase(), 8, '#94a3b8');
+        ar(clx + 32, cly, lbx - 37, lby, '#f59e0b30');
+        // Servers
+        const sx = 340, gap = Math.min(90, (H - 60) / 4);
+        const sy0 = H / 2 - (servers.length - 1) * gap / 2;
+        servers.forEach((s, i) => {
+          const sy = sy0 + i * gap; s._x = sx; s._y = sy;
+          const c = s.ok ? PC[i] : '#ef4444';
+          bx(sx - 40, sy - 24, 130, 48, s.ok ? c + '12' : '#ef444408', s.ok ? c + '50' : '#ef444430');
+          tb(sx + 24, sy - 8, `Server-${i}`, 10, s.ok ? c : '#475569');
+          t(sx + 24, sy + 8, s.ok ? `conn:${s.conn} w:${s.w}` : 'OFFLINE', 8, s.ok ? '#94a3b8' : '#ef4444');
+          // HP bar
+          if (s.ok) { pct(sx - 34, sy + 18, 118, 4, s.conn > 0 ? Math.min(1, s.conn / 6) : 0, c + '60') }
+          // Connection line
+          ar(lbx + 37, lby, sx - 42, sy, s.ok ? '#ffffff10' : '#ef444410');
+        });
+        // Active requests as dots
+        reqs.forEach(r => {
+          const s = servers[r.sid]; if (!s) return;
+          const prog = Math.min(1, (Date.now() - r.born) / r.life);
+          const x = lbx + 37 + (s._x - 42 - lbx - 37) * Math.min(1, prog * 2);
+          const y = lby + (s._y - lby) * Math.min(1, prog * 2);
+          circ(x, y, 3, PC[r.sid], PC[r.sid] + '80');
+        });
+        // Hash ring for CH
+        if (algo === 'ch') {
+          const rx = W - 100, ry = 80, rr2 = 55;
+          cx.strokeStyle = '#ffffff10'; cx.lineWidth = 1.5; cx.beginPath(); cx.arc(rx, ry, rr2, 0, Math.PI * 2); cx.stroke();
+          t(rx, ry - rr2 - 10, 'Hash Ring', 9, '#475569');
+          servers.forEach((s, i) => { if (!s.ok) return; const angle = ((i * 90 + 45) * Math.PI) / 180; const nx = rx + rr2 * Math.cos(angle), ny = ry + rr2 * Math.sin(angle); circ(nx, ny, 5, PC[i], PC[i]); t(nx, ny + 12, `S${i}`, 7, PC[i]) });
+        }
+      }
+      function uP() {
+        const dist = servers.map((s, i) => `S${i}:${s.conn}`).join(' ');
+        document.getElementById('pt').textContent = `请解释${algo === 'rr' ? 'Round-Robin轮询' : algo === 'wt' ? '加权轮询(Weighted Round-Robin)' : algo === 'lc' ? '最少连接(Least Connections)' : '一致性哈希(Consistent Hashing)'}负载均衡算法。当前${servers.length}台服务器(${servers.filter(s => !s.ok).length}台宕机)，已分发${seq}个请求(${dist})。请说明：1)算法原理和请求分配过程；2)服务器宕机时的处理（健康检查/故障摘除）；3)与其他算法的对比和适用场景；4)Nginx/Spring Cloud中的配置方式。`
+      }
+      return { init, draw, send, auto, setAlgo, killSvr, reviveSvr }
+    })();
+
+    // ==================== 2. CIRCUIT BREAKER ====================
+    const cb = (() => {
+      let st = 'CLOSED', failCnt = 0, successCnt = 0, threshold = 3, halfMax = 2, timer = null, cooldown = 5, cooldownLeft = 0, log = [], tid = null, seq = 0;
+      function init() {
+        st = 'CLOSED'; failCnt = 0; successCnt = 0; threshold = 3; halfMax = 2; cooldown = 5; cooldownLeft = 0; log = []; seq = 0;
+        if (tid) clearInterval(tid); tid = null; if (timer) clearInterval(timer); timer = null;
+        renderL(); draw(); uP();
+      }
+      function renderL() {
+        document.getElementById('lp').innerHTML = `
+    <div class="sec"><div class="st">熔断器状态</div>
+      <div style="text-align:center;padding:8px 0">
+        <span style="font-size:22px;color:${{ CLOSED: '#10b981', OPEN: '#ef4444', HALF_OPEN: '#eab308' }[st]}">${{ CLOSED: '✅ 关闭', OPEN: '🔴 打开', HALF_OPEN: '🟡 半开' }[st]}</span>
+      </div>
+      <div class="inf">
+        失败计数: <b>${failCnt}/${threshold}</b> | 半开成功: <b>${successCnt}/${halfMax}</b>
+        ${st === 'OPEN' ? `<br>冷却剩余: <span class="r">${cooldownLeft}s</span>` : ''}
+      </div>
+    </div>
+    <div class="sec"><div class="st">参数</div>
+      <div class="row"><label>失败阈值</label><input type="range" min="2" max="6" value="${threshold}" oninput="cb.setTh(+this.value)"><span class="rv">${threshold}</span></div>
+      <div class="row"><label>冷却时间(s)</label><input type="range" min="3" max="10" value="${cooldown}" oninput="cb.setCd(+this.value)"><span class="rv">${cooldown}</span></div>
+    </div>
+    <div class="sec"><div class="st">模拟请求</div>
+      <div class="bs">
+        <button class="b p" onclick="cb.req(true)">✓ 成功请求</button>
+        <button class="b r" onclick="cb.req(false)">✗ 失败请求</button>
+      </div>
+      <div style="height:4px"></div>
+      <div class="bs">
+        <button class="b y" onclick="cb.chaos()">▶ 混沌模拟</button>
+        <button class="b r" onclick="cb.init()">↺</button>
+      </div>
+    </div>
+    <div class="sec"><div class="st">状态转换规则</div>
+      <div class="inf">
+        <span class="h">CLOSED→OPEN</span>：连续失败达到阈值(${threshold}次)<br>
+        <span class="y">OPEN→HALF_OPEN</span>：冷却${cooldown}s后自动进入<br>
+        <span class="h">HALF_OPEN→CLOSED</span>：连续${halfMax}次成功<br>
+        <span class="r">HALF_OPEN→OPEN</span>：任何一次失败立即打开
+      </div>
+    </div>`;
+      }
+      function setTh(v) { threshold = v; renderL() }
+      function setCd(v) { cooldown = v; renderL() }
+      function req(success) {
+        seq++;
+        const entry = { id: seq, ok: success, state: st, time: Date.now() };
+        if (st === 'OPEN') { entry.action = 'REJECTED'; entry.ok = false; log.push(entry); draw(); uP(); renderL(); return }
+        if (st === 'CLOSED') {
+          if (success) { failCnt = 0 } else { failCnt++; if (failCnt >= threshold) { st = 'OPEN'; startCooldown() } }
+        } else if (st === 'HALF_OPEN') {
+          if (success) { successCnt++; if (successCnt >= halfMax) { st = 'CLOSED'; failCnt = 0; successCnt = 0 } }
+          else { st = 'OPEN'; successCnt = 0; startCooldown() }
+        }
+        entry.newState = st; log.push(entry); draw(); uP(); renderL();
+      }
+      function startCooldown() {
+        cooldownLeft = cooldown; if (timer) clearInterval(timer);
+        timer = setInterval(() => { cooldownLeft--; renderL(); draw(); if (cooldownLeft <= 0) { clearInterval(timer); timer = null; st = 'HALF_OPEN'; successCnt = 0; renderL(); draw(); uP() } }, 1000);
+      }
+      function chaos() {
+        if (tid) { clearInterval(tid); tid = null; return }
+        tid = setInterval(() => { req(Math.random() > 0.45); if (seq >= 30) { clearInterval(tid); tid = null } }, 500);
+      }
+      function draw() {
+        cx.clearRect(0, 0, W, H);
+        const colors = { CLOSED: '#10b981', OPEN: '#ef4444', HALF_OPEN: '#eab308' };
+        const labels = { CLOSED: 'CLOSED (关闭)', OPEN: 'OPEN (打开)', HALF_OPEN: 'HALF-OPEN (半开)' };
+        // State machine
+        const states = [{ id: 'CLOSED', x: 120, y: 80 }, { id: 'OPEN', x: W / 2, y: 80 }, { id: 'HALF_OPEN', x: W - 150, y: 80 }];
+        states.forEach(s => {
+          const active = st === s.id; const c = colors[s.id];
+          circ(s.x, s.y, active ? 38 : 32, active ? c + '20' : c + '08', active ? c : c + '40');
+          if (active) { cx.strokeStyle = c + '30'; cx.lineWidth = 2; cx.beginPath(); cx.arc(s.x, s.y, 44, 0, Math.PI * 2); cx.stroke() }
+          tb(s.x, s.y - 4, s.id, active ? 11 : 10, active ? c : c + '80');
+          t(s.x, s.y + 12, s.id === 'CLOSED' ? '正常放行' : s.id === 'OPEN' ? '快速失败' : '试探放行', 8, active ? '#94a3b8' : '#475569');
+        });
+        // Transitions
+        ar(states[0].x + 35, states[0].y - 10, states[1].x - 35, states[1].y - 10, '#ef444450');
+        t((states[0].x + states[1].x) / 2, states[0].y - 28, `失败 ≥ ${threshold}次`, 8, '#ef4444');
+        ar(states[1].x + 35, states[1].y + 10, states[2].x - 35, states[2].y + 10, '#eab30850');
+        t((states[1].x + states[2].x) / 2, states[1].y + 28, `冷却 ${cooldown}s`, 8, '#eab308');
+        ar(states[2].x - 10, states[2].y + 35, states[0].x + 10, states[0].y + 35, '#10b98150');
+        t((states[0].x + states[2].x) / 2, states[2].y + 56, `连续成功 ${halfMax}次`, 8, '#10b981');
+        // HALF_OPEN -> OPEN (back arrow)
+        const hx = states[2].x - 20, hy = states[2].y - 36;
+        ar(hx, hy, states[1].x + 20, states[1].y - 36, '#ef444440');
+        t((states[1].x + states[2].x) / 2, states[1].y - 50, '任何失败', 8, '#ef4444');
+
+        // Request timeline
+        const tlY = 160, tlH = H - tlY - 20;
+        t(20, tlY, '请求时间线', 9, '#475569', 'left');
+        const visible = log.slice(-Math.floor((W - 40) / 28));
+        visible.forEach((e, i) => {
+          const ex = 30 + i * 28, ey = tlY + 16;
+          const c = e.action === 'REJECTED' ? '#f59e0b' : e.ok ? '#10b981' : '#ef4444';
+          bx(ex, ey, 24, 50, c + '12', c + '40', 4);
+          tb(ex + 12, ey + 12, `${e.id}`, 9, c);
+          t(ex + 12, ey + 28, e.action === 'REJECTED' ? '拒绝' : e.ok ? '成功' : '失败', 7, c);
+          t(ex + 12, ey + 42, e.state.slice(0, 2), 7, '#475569');
+        });
+
+        // Counters
+        if (st === 'CLOSED') {
+          const by = tlY + 80;
+          t(20, by, '失败计数', 9, '#475569', 'left');
+          for (let i = 0; i < threshold; i++) { bx(20 + i * 24, by + 6, 20, 20, i < failCnt ? '#ef444430' : '#ffffff06', i < failCnt ? '#ef444460' : '#ffffff10', 3); t(30 + i * 24, by + 16, i < failCnt ? '✗' : '·', 10, i < failCnt ? '#ef4444' : '#475569') }
+        }
+        if (st === 'HALF_OPEN') {
+          const by = tlY + 80;
+          t(20, by, '半开成功计数', 9, '#475569', 'left');
+          for (let i = 0; i < halfMax; i++) { bx(20 + i * 24, by + 6, 20, 20, i < successCnt ? '#10b98130' : '#ffffff06', i < successCnt ? '#10b98160' : '#ffffff10', 3); t(30 + i * 24, by + 16, i < successCnt ? '✓' : '·', 10, i < successCnt ? '#10b981' : '#475569') }
+        }
+        if (st === 'OPEN') {
+          const by = tlY + 80;
+          t(20, by, '冷却倒计时', 9, '#475569', 'left');
+          pct(20, by + 8, 120, 10, 1 - cooldownLeft / cooldown, '#ef444460');
+          t(80, by + 13, `${cooldownLeft}s`, 8, '#ef4444');
+        }
+      }
+      function uP() { document.getElementById('pt').textContent = `请详细解释熔断器(Circuit Breaker)模式。当前状态: ${st}，失败计数: ${failCnt}/${threshold}，冷却时间: ${cooldown}s。请说明：1) 三种状态(CLOSED/OPEN/HALF-OPEN)的转换条件和行为；2) 与 Hystrix / Resilience4j / Sentinel 的实现对比；3) 滑动窗口(计数/时间)的统计方式；4) 熔断降级的 fallback 策略设计；5) 在微服务调用链中的部署位置和最佳实践。` }
+      return { init, draw, req, chaos, setTh, setCd }
+    })();
+
+    // ==================== 3. CACHING ====================
+    const cache = (() => {
+      let strategy = 'aside', log = [], seq = 0, cacheData = {}, dbData = {}, hitRate = 0, hits = 0, misses = 0, tid = null;
+      function init() {
+        strategy = 'aside'; log = []; seq = 0; cacheData = {}; dbData = { a: 1, b: 2, c: 3, d: 4, e: 5 }; hits = 0; misses = 0;
+        if (tid) clearInterval(tid); tid = null;
+        renderL(); draw(); uP();
+      }
+      function renderL() {
+        hitRate = hits + misses > 0 ? ((hits / (hits + misses)) * 100).toFixed(1) : 0;
+        document.getElementById('lp').innerHTML = `
+    <div class="sec"><div class="st">缓存策略</div>
+      <div class="bs">
+        ${['aside:Cache Aside', 'rt:Read Through', 'wt:Write Through', 'wb:Write Behind'].map(x => { const [k, v] = x.split(':'); return `<button class="b${strategy === k ? ' p' : ''}" onclick="cache.setS('${k}')">${v}</button>` }).join('')}
+      </div>
+    </div>
+    <div class="sec"><div class="st">统计</div>
+      <div class="inf">命中率: <span class="h">${hitRate}%</span> | 命中: <b>${hits}</b> | 未命中: <b>${misses}</b></div>
+    </div>
+    <div class="sec"><div class="st">操作</div>
+      <div class="bs">
+        <button class="b p" onclick="cache.read()">读取(随机key)</button>
+        <button class="b" onclick="cache.write()">写入(随机key)</button>
+      </div><div style="height:4px"></div>
+      <div class="bs">
+        <button class="b y" onclick="cache.auto()">▶ 模拟流量</button>
+        <button class="b r" onclick="cache.init()">↺</button>
+      </div><div style="height:4px"></div>
+      <div class="bs">
+        <button class="b r" onclick="cache.avalanche()">💥 缓存雪崩</button>
+        <button class="b y" onclick="cache.penetrate()">🔍 缓存穿透</button>
+      </div>
+    </div>
+    <div class="sec"><div class="st">策略说明</div>
+      <div class="inf">${{
+            aside: '<span class="h">Cache Aside</span> (旁路缓存)：<br>读：先查缓存→命中返回；未命中→查DB→写缓存→返回<br>写：先更新DB→<span class="r">删除缓存</span>(不是更新)<br><b>最常用</b>，应用层控制缓存逻辑。',
+            rt: '<span class="h">Read Through</span>：<br>读：查缓存→未命中时<b>缓存组件自动</b>加载DB→返回<br>写：直接写DB<br>对应用透明，缓存组件封装了加载逻辑。',
+            wt: '<span class="h">Write Through</span>：<br>写：<b>同步</b>写缓存+DB（缓存组件保证两者一致）<br>读：查缓存→未命中→缓存组件加载DB<br>强一致，但写入延迟较高。',
+            wb: '<span class="h">Write Behind</span> (Write Back)：<br>写：只写缓存，<b>异步批量</b>刷回DB<br>读：查缓存→未命中→加载DB<br>高吞吐，但有<span class="r">数据丢失风险</span>。'
+          }[strategy]}</div>
+    </div>`;
+      }
+      function setS(s) { strategy = s; log = []; seq = 0; cacheData = {}; hits = 0; misses = 0; renderL(); draw(); uP() }
+      function read() {
+        seq++; const keys = Object.keys(dbData); const k = keys[Math.floor(Math.random() * keys.length)];
+        const hit = cacheData.hasOwnProperty(k);
+        if (hit) { hits++; log.push({ id: seq, op: 'READ', key: k, hit: true, path: 'Cache→App' }) }
+        else { misses++; cacheData[k] = dbData[k]; log.push({ id: seq, op: 'READ', key: k, hit: false, path: 'Cache✗→DB→Cache→App' }) }
+        renderL(); draw(); uP();
+      }
+      function write() {
+        seq++; const keys = Object.keys(dbData); const k = keys[Math.floor(Math.random() * keys.length)];
+        dbData[k] = (dbData[k] || 0) + 1;
+        if (strategy === 'aside') { delete cacheData[k]; log.push({ id: seq, op: 'WRITE', key: k, path: 'DB→删除Cache' }) }
+        else if (strategy === 'wt') { cacheData[k] = dbData[k]; log.push({ id: seq, op: 'WRITE', key: k, path: 'Cache+DB同步写' }) }
+        else if (strategy === 'wb') { cacheData[k] = dbData[k]; log.push({ id: seq, op: 'WRITE', key: k, path: '写Cache(异步→DB)' }) }
+        else { log.push({ id: seq, op: 'WRITE', key: k, path: '直接写DB' }) }
+        renderL(); draw(); uP();
+      }
+      function avalanche() { cacheData = {}; hits = 0; misses = 0; log.push({ id: ++seq, op: 'AVALANCHE', key: '*', path: '全部缓存过期!' }); renderL(); draw(); uP() }
+      function penetrate() { seq++; const k = 'not_exist_' + seq; log.push({ id: seq, op: 'PENETRATE', key: k, hit: false, path: 'Cache✗→DB✗(空)' }); misses++; renderL(); draw(); uP() }
+      function auto() { if (tid) { clearInterval(tid); tid = null; return } tid = setInterval(() => { Math.random() > 0.3 ? read() : write(); if (seq >= 30) { clearInterval(tid); tid = null } }, 350) }
+      function draw() {
+        cx.clearRect(0, 0, W, H);
+        // Components
+        const appX = 60, appY = 70, cacheX = W / 2, cacheY = 70, dbX = W - 100, dbY = 70, compW = 100, compH = 50;
+        bx(appX - compW / 2, appY - compH / 2, compW, compH, '#3b82f615', '#3b82f6'); tb(appX, appY - 6, 'Application', 10, '#3b82f6'); t(appX, appY + 10, '应用层', 8, '#94a3b8');
+        bx(cacheX - compW / 2, cacheY - compH / 2, compW, compH, '#10b98115', '#10b981'); tb(cacheX, cacheY - 6, 'Cache', 10, '#10b981'); t(cacheX, cacheY + 10, `${Object.keys(cacheData).length} keys`, 8, '#94a3b8');
+        bx(dbX - compW / 2, dbY - compH / 2, compW, compH, '#f59e0b15', '#f59e0b'); tb(dbX, dbY - 6, 'Database', 10, '#f59e0b'); t(dbX, dbY + 10, `${Object.keys(dbData).length} rows`, 8, '#94a3b8');
+        ar(appX + compW / 2 + 2, appY, cacheX - compW / 2 - 2, cacheY, '#10b98130');
+        ar(cacheX + compW / 2 + 2, cacheY, dbX - compW / 2 - 2, dbY, '#f59e0b30');
+
+        // Cache entries
+        const ceY = appY + compH / 2 + 20;
+        t(cacheX, ceY, '缓存内容', 9, '#475569');
+        const entries = Object.entries(cacheData);
+        entries.slice(0, 8).forEach(([k, v], i) => {
+          const ex = cacheX - entries.length * 18 + i * 36;
+          bx(ex, ceY + 8, 32, 22, '#10b98118', '#10b98140', 3);
+          t(ex + 16, ceY + 19, `${k}:${v}`, 8, '#10b981');
+        });
+
+        // Hit rate bar
+        const hrY = ceY + 44;
+        t(30, hrY, '命中率', 9, '#475569', 'left');
+        pct(70, hrY - 5, W - 110, 10, hitRate / 100, '#10b98160');
+        t(W - 30, hrY, `${hitRate}%`, 9, '#10b981');
+
+        // Log
+        const tlY = hrY + 24;
+        t(20, tlY, '操作日志', 9, '#475569', 'left');
+        const vis = log.slice(-Math.floor((H - tlY - 20) / 18));
+        vis.forEach((e, i) => {
+          const ey = tlY + 14 + i * 18;
+          const c = e.op === 'AVALANCHE' ? '#ef4444' : e.op === 'PENETRATE' ? '#ec4899' : e.hit ? '#10b981' : e.op === 'WRITE' ? '#f59e0b' : '#eab308';
+          t(30, ey, `#${e.id}`, 8, '#475569', 'left');
+          tb(60, ey, e.op, 9, c, 'left');
+          tm(120, ey, e.key, 9, c, 'left');
+          t(180, ey, e.hit ? 'HIT' : '', 8, '#10b981', 'left');
+          t(220, ey, e.path, 8, '#94a3b8', 'left');
+        });
+
+        // Problem zones
+        const last = log[log.length - 1];
+        if (last && (last.op === 'AVALANCHE' || last.op === 'PENETRATE')) {
+          const wy = H - 40;
+          bx(20, wy, W - 40, 30, last.op === 'AVALANCHE' ? '#ef444410' : '#ec489910', last.op === 'AVALANCHE' ? '#ef444430' : '#ec489930');
+          t(W / 2, wy + 15, last.op === 'AVALANCHE' ? '缓存雪崩：大量 key 同时过期，请求全部打到 DB → 随机过期时间 + 集群限流' : '缓存穿透：查询不存在的 key，永远不会命中 → 布隆过滤器 + 缓存空值', 9, last.op === 'AVALANCHE' ? '#ef4444' : '#ec4899');
+        }
+      }
+      function uP() { document.getElementById('pt').textContent = `请解释分布式缓存的 ${strategy === 'aside' ? 'Cache Aside' : strategy === 'rt' ? 'Read Through' : strategy === 'wt' ? 'Write Through' : 'Write Behind'} 策略。当前命中率 ${hitRate}%，缓存 ${Object.keys(cacheData).length} 个 key。请说明：1) 该策略的读写流程和一致性保证；2) 缓存三大问题（雪崩/穿透/击穿）的成因和解决方案；3) 与其他缓存策略的对比；4) Redis 集群中的实际应用和配置。` }
+      return { init, draw, read, write, auto, setS, avalanche, penetrate }
+    })();
+
+    // ==================== 4. SERVICE REGISTRY ====================
+    const reg = (() => {
+      let services = [], tid = null, tick = 0;
+      function init() {
+        services = [
+          { name: 'user-svc', instances: [{ id: 'i1', hp: 100, port: 8081, up: true, lastBeat: 0 }, { id: 'i2', hp: 100, port: 8082, up: true, lastBeat: 0 }] },
+          { name: 'order-svc', instances: [{ id: 'i3', hp: 100, port: 8091, up: true, lastBeat: 0 }, { id: 'i4', hp: 100, port: 8092, up: true, lastBeat: 0 }] },
+          { name: 'pay-svc', instances: [{ id: 'i5', hp: 100, port: 8071, up: true, lastBeat: 0 }] }
+        ]; tick = 0; if (tid) clearInterval(tid); tid = null;
+        renderL(); draw(); uP();
+      }
+      function renderL() {
+        document.getElementById('lp').innerHTML = `
+    <div class="sec"><div class="st">服务注册中心</div>
+      <div class="inf">
+        服务注册中心维护所有服务实例的<b>地址列表</b>。<br>
+        - 服务启动时 <span class="h">注册</span>（Register）<br>
+        - 定期发送 <span class="bl">心跳</span>（Heartbeat）<br>
+        - 心跳超时 → <span class="r">摘除</span>（Deregister）<br>
+        - 消费者通过注册中心 <span class="h">发现</span> 服务（Discovery）<br><br>
+        实现：<b>Eureka / Nacos / Consul / ZooKeeper</b>
+      </div>
+    </div>
+    <div class="sec"><div class="st">实例列表</div>
+      ${services.map(s => `<div style="margin-bottom:6px"><b style="font-size:11px">${s.name}</b>${s.instances.map(i => `<div class="row"><label style="color:${i.up ? '#10b981' : '#ef4444'}">:${i.port} ${i.up ? '✓ UP' : '✗ DOWN'}</label><span class="rv">${i.up ? 'beat:' + i.lastBeat + 's' : ''}</span></div>`).join('')}</div>`).join('')}
+    </div>
+    <div class="sec"><div class="st">操作</div>
+      <div class="bs">
+        <button class="b p" onclick="reg.run()">▶ 运行心跳</button>
+        <button class="b y" onclick="reg.killInst()">宕机实例</button>
+        <button class="b" onclick="reg.addInst()">新增实例</button>
+      </div><div style="height:4px"></div>
+      <div class="bs"><button class="b r" onclick="reg.init()">↺</button></div>
+    </div>`;
+      }
+      function run() {
+        if (tid) { clearInterval(tid); tid = null; return }
+        tid = setInterval(() => {
+          tick++;
+          services.forEach(s => s.instances.forEach(i => {
+            if (i.up) { i.lastBeat = 0; i.hp = 100 }
+            else { i.lastBeat++; i.hp = Math.max(0, 100 - i.lastBeat * 20); if (i.lastBeat > 4) { s.instances = s.instances.filter(x => x !== i) } }
+          }));
+          renderL(); draw(); if (tick > 30) { clearInterval(tid); tid = null }
+        }, 1500);
+      }
+      function killInst() {
+        for (const s of services) { const up = s.instances.find(i => i.up); if (up) { up.up = false; up.lastBeat = 0; break } }
+        renderL(); draw(); uP();
+      }
+      function addInst() {
+        const s = services[Math.floor(Math.random() * services.length)];
+        s.instances.push({ id: 'i' + Date.now(), hp: 100, port: 8000 + Math.floor(Math.random() * 900), up: true, lastBeat: 0 });
+        renderL(); draw(); uP();
+      }
+      function draw() {
+        cx.clearRect(0, 0, W, H);
+        // Registry center
+        const rcX = W / 2, rcY = 60;
+        bx(rcX - 60, rcY - 25, 120, 50, '#8b5cf615', '#8b5cf6'); tb(rcX, rcY - 6, 'Registry', 12, '#8b5cf6'); t(rcX, rcY + 10, '注册中心', 8, '#94a3b8');
+        // Services
+        let sy = rcY + 70;
+        services.forEach((s, si) => {
+          const svcX = 80;
+          t(svcX, sy, s.name, 11, PC[si], 'left');
+          s.instances.forEach((inst, ii) => {
+            const ix = svcX + ii * 140 + 20, iy = sy + 20;
+            const c = inst.up ? PC[si] : '#ef4444';
+            bx(ix, iy, 120, 40, inst.up ? c + '12' : '#ef444408', inst.up ? c + '40' : '#ef444430');
+            tb(ix + 60, iy + 12, `:${inst.port}`, 10, c);
+            t(ix + 60, iy + 28, inst.up ? 'UP' : 'DOWN', 8, inst.up ? '#10b981' : '#ef4444');
+            // Heartbeat line
+            if (inst.up) {
+              dl(ix + 60, iy, rcX, rcY + 25, c + '30');
+              // Heartbeat pulse
+              const pulse = Math.sin(Date.now() / 500 + ii) * 0.3 + 0.7;
+              cx.globalAlpha = pulse; circ(ix + 110, iy + 12, 4, '#10b981', '#10b98140'); cx.globalAlpha = 1;
+            }
+          });
+          sy += 80;
+        });
+        // Consumer
+        const conX = W - 100, conY = H / 2;
+        bx(conX - 45, conY - 20, 90, 40, '#06b6d415', '#06b6d4'); tb(conX, conY - 4, 'Consumer', 10, '#06b6d4'); t(conX, conY + 10, '服务消费者', 8, '#94a3b8');
+        ar(conX - 47, conY, rcX + 62, rcY, '#06b6d420');
+        t(conX - 80, conY - 30, '发现服务', 8, '#06b6d4');
+      }
+      function uP() { const total = services.reduce((a, s) => a + s.instances.length, 0); const up = services.reduce((a, s) => a + s.instances.filter(i => i.up).length, 0); document.getElementById('pt').textContent = `请解释微服务中的服务注册与发现机制。当前 ${services.length} 个服务，${total} 个实例（${up} 个在线）。请说明：1) 服务注册/注销/心跳的完整流程；2) AP 模式(Eureka)和 CP 模式(ZooKeeper/Consul)的区别；3) 客户端发现 vs 服务端发现；4) 健康检查和故障摘除策略；5) Nacos 同时支持 AP/CP 的实现方式。` }
+      return { init, draw, run, killInst, addInst }
+    })();
+
+    // ==================== 5. MASTER-SLAVE REPLICATION ====================
+    const repl = (() => {
+      let master = { data: [], ok: true }, slaves = [], tid = null, seq = 0, mode = 'async';
+      function init() {
+        master = { data: [], ok: true };
+        slaves = [{ id: 0, data: [], ok: true, lag: 0 }, { id: 1, data: [], ok: true, lag: 0 }];
+        seq = 0; mode = 'async'; if (tid) clearInterval(tid); tid = null;
+        renderL(); draw(); uP();
+      }
+      function renderL() {
+        document.getElementById('lp').innerHTML = `
+    <div class="sec"><div class="st">复制模式</div>
+      <div class="bs">
+        ${['async:异步复制', 'semi:半同步', 'sync:全同步'].map(x => { const [k, v] = x.split(':'); return `<button class="b${mode === k ? ' p' : ''}" onclick="repl.setMode('${k}')">${v}</button>` }).join('')}
+      </div>
+    </div>
+    <div class="sec"><div class="st">节点状态</div>
+      <div class="inf">
+        Master: <b>${master.data.length} ops</b> ${master.ok ? '<span class="h">UP</span>' : '<span class="r">DOWN</span>'}<br>
+        ${slaves.map((s, i) => `Slave-${i}: <b>${s.data.length} ops</b> lag=${s.lag} ${s.ok ? '<span class="h">UP</span>' : '<span class="r">DOWN</span>'}`).join('<br>')}
+      </div>
+    </div>
+    <div class="sec"><div class="st">操作</div>
+      <div class="bs">
+        <button class="b p" onclick="repl.write()">写入 Master</button>
+        <button class="b" onclick="repl.replicate()">同步到 Slave</button>
+      </div><div style="height:4px"></div>
+      <div class="bs">
+        <button class="b" onclick="repl.auto()">▶ 自动</button>
+        <button class="b y" onclick="repl.failover()">Master 宕机</button>
+        <button class="b r" onclick="repl.init()">↺</button>
+      </div>
+    </div>
+    <div class="sec"><div class="st">复制模式说明</div>
+      <div class="inf">${{
+            async: '<span class="h">异步复制</span>：Master 写入后<b>立即返回</b>客户端，异步推送到 Slave。<br>优点：<span class="h">低延迟</span>；缺点：<span class="r">Master 宕机可能丢数据</span>。<br>MySQL 默认模式。',
+            semi: '<span class="y">半同步复制</span>：Master 写入后等待<b>至少一个 Slave 确认</b>后返回。<br>平衡了性能和数据安全。<br>MySQL Semi-Sync / Redis WAIT 命令。',
+            sync: '<span class="bl">全同步复制</span>：Master 写入后等待<b>所有 Slave 确认</b>后返回。<br>最高一致性，但<span class="r">延迟最高</span>。<br>适用于金融等强一致场景。'
+          }[mode]}</div>
+    </div>`;
+      }
+      function setMode(m) { mode = m; renderL() }
+      function write() {
+        if (!master.ok) return;
+        seq++; master.data.push(seq);
+        slaves.forEach(s => { if (s.ok) s.lag++ });
+        renderL(); draw(); uP();
+      }
+      function replicate() {
+        slaves.forEach(s => {
+          if (!s.ok) return;
+          if (s.data.length < master.data.length) {
+            s.data.push(master.data[s.data.length]);
+            s.lag = Math.max(0, s.lag - 1);
+          }
+        });
+        renderL(); draw(); uP();
+      }
+      function auto() {
+        if (tid) { clearInterval(tid); tid = null; return }
+        let phase = 0;
+        tid = setInterval(() => {
+          if (phase % 2 === 0) write(); else replicate();
+          phase++; if (seq >= 15) { clearInterval(tid); tid = null }
+        }, 400);
+      }
+      function failover() {
+        if (!master.ok) return;
+        master.ok = false;
+        // Promote slave with most data
+        const best = slaves.filter(s => s.ok).sort((a, b) => b.data.length - a.data.length)[0];
+        if (best) {
+          const lost = master.data.length - best.data.length;
+          master = { data: [...best.data], ok: true, promoted: true };
+          best.role = 'NEW MASTER';
+          if (lost > 0) master.lost = lost;
+        }
+        renderL(); draw(); uP();
+      }
+      function draw() {
+        cx.clearRect(0, 0, W, H);
+        // Master
+        const mx = 140, my = 70;
+        bx(mx - 55, my - 28, 110, 56, master.ok ? '#f59e0b15' : '#ef444415', master.ok ? '#f59e0b' : '#ef4444');
+        tb(mx, my - 10, master.promoted ? 'NEW Master' : 'Master', 11, master.ok ? '#f59e0b' : '#ef4444');
+        t(mx, my + 8, `${master.data.length} ops`, 9, '#94a3b8');
+        if (master.lost) t(mx, my + 22, `丢失 ${master.lost} ops!`, 9, '#ef4444');
+
+        // Data in master
+        const mdY = my + 40;
+        master.data.slice(-12).forEach((d, i) => {
+          bx(mx - 55 + i * 18, mdY, 16, 16, '#f59e0b18', '#f59e0b40', 2);
+          t(mx - 55 + i * 18 + 8, mdY + 8, `${d}`, 7, '#f59e0b');
+        });
+
+        // Slaves
+        const slaveX = W - 180;
+        slaves.forEach((s, i) => {
+          const sy = 60 + i * 120;
+          const c = s.ok ? (s.role ? '#f59e0b' : PC[i]) : '#ef4444';
+          bx(slaveX - 55, sy - 28, 140, 56, c + '12', c + '40');
+          tb(slaveX + 15, sy - 10, s.role || `Slave-${i}`, 10, c);
+          t(slaveX + 15, sy + 8, `${s.data.length} ops | lag=${s.lag}`, 9, '#94a3b8');
+
+          // Data
+          s.data.slice(-8).forEach((d, di) => {
+            bx(slaveX - 55 + di * 16, sy + 32, 14, 14, c + '18', c + '30', 2);
+            t(slaveX - 55 + di * 16 + 7, sy + 39, `${d}`, 7, c);
+          });
+
+          // Replication arrow
+          if (master.ok && s.ok) {
+            ar(mx + 57, my, slaveX - 57, sy, '#ffffff15');
+            if (s.lag > 0) t((mx + slaveX) / 2, my + (sy - my) * (i === 0 ? 0.3 : 0.7), `lag:${s.lag}`, 8, '#eab308');
+          }
+        });
+
+        // Replication mode label
+        const modeC = { async: '#10b981', semi: '#eab308', sync: '#3b82f6' }[mode];
+        bx((mx + slaveX) / 2 - 50, 15, 100, 22, modeC + '10', modeC + '40', 3);
+        t((mx + slaveX) / 2, 26, { async: '异步复制', semi: '半同步复制', sync: '全同步复制' }[mode], 9, modeC);
+
+        // Client
+        const clY = H - 50;
+        bx(mx - 35, clY, 70, 30, '#3b82f612', '#3b82f640'); tb(mx, clY + 15, 'Client', 9, '#3b82f6');
+        ar(mx, clY, mx, my + 28, '#3b82f620');
+        t(mx - 50, clY - 10, '写入', 8, '#3b82f6', 'left');
+
+        // Read from slave
+        ar(slaveX, slaves[0].ok ? 60 + 28 : 60 + 120 + 28, slaveX, clY + 15, '#10b98120');
+        bx(slaveX - 35, clY, 70, 30, '#10b98112', '#10b98140'); tb(slaveX, clY + 15, '读请求', 9, '#10b981');
+        t(slaveX + 50, clY - 10, '读取', 8, '#10b981', 'left');
+      }
+      function uP() { document.getElementById('pt').textContent = `请解释数据库主从复制与故障转移(Failover)机制。当前模式: ${{ async: '异步', semi: '半同步', sync: '全同步' }[mode]}复制，Master ${master.data.length} ops，Slave lag=[${slaves.map(s => s.lag).join(',')}]。请说明：1) 三种复制模式(异步/半同步/全同步)的工作流程和数据安全性对比；2) 主从延迟的成因和监控方案；3) 故障转移(Failover)的自动切换流程（哨兵/MHA/Orchestrator）；4) 脑裂问题和防护措施；5) 读写分离的实现和一致性问题。` }
+      return { init, draw, write, replicate, auto, failover, setMode }
+    })();
+
+    // ==================== 6. CAP THEOREM ====================
+    const cap = (() => {
+      let focus = 'CP', scenario = 'normal';
+      function init() { focus = 'CP'; scenario = 'normal'; renderL(); draw(); uP() }
+      function renderL() {
+        document.getElementById('lp').innerHTML = `
+    <div class="sec"><div class="st">CAP 定理</div>
+      <div class="inf">
+        分布式系统最多同时满足以下<b>三个中的两个</b>：<br><br>
+        <span class="h">C (Consistency)</span> 一致性：所有节点看到相同数据<br>
+        <span class="bl">A (Availability)</span> 可用性：每个请求都能收到响应<br>
+        <span class="y">P (Partition Tolerance)</span> 分区容错：网络分区时系统继续运行<br><br>
+        网络分区<b>必然会发生</b>（P 无法放弃），所以实际选择是 <span class="h">CP</span> vs <span class="bl">AP</span>。
+      </div>
+    </div>
+    <div class="sec"><div class="st">系统类型</div>
+      <div class="bs">
+        <button class="b${focus === 'CP' ? ' p' : ''}" onclick="cap.setFocus('CP')">CP 系统</button>
+        <button class="b${focus === 'AP' ? ' p' : ''}" onclick="cap.setFocus('AP')">AP 系统</button>
+      </div>
+    </div>
+    <div class="sec"><div class="st">场景模拟</div>
+      <div class="bs">
+        <button class="b${scenario === 'normal' ? ' p' : ''}" onclick="cap.setScene('normal')">正常</button>
+        <button class="b${scenario === 'partition' ? ' p' : ''}" style="color:var(--rd)" onclick="cap.setScene('partition')">网络分区</button>
+      </div>
+    </div>
+    <div class="sec"><div class="st">${focus} 系统特性</div>
+      <div class="inf">${focus === 'CP' ?
+            '<span class="h">CP 系统</span>在网络分区时：<br>- <span class="h">保证一致性</span>：拒绝无法确认一致的请求<br>- <span class="r">牺牲可用性</span>：少数派节点拒绝服务<br><br><b>代表</b>：ZooKeeper, etcd, HBase, Redis Cluster, MongoDB (默认)<br><b>场景</b>：配置中心、分布式锁、金融交易' :
+            '<span class="bl">AP 系统</span>在网络分区时：<br>- <span class="bl">保证可用性</span>：所有节点继续响应<br>- <span class="r">牺牲一致性</span>：可能返回旧数据<br><br><b>代表</b>：Eureka, Cassandra, DynamoDB, CouchDB<br><b>场景</b>：服务注册、CDN、社交 feed、购物车'
+          }</div>
+    </div>`;
+      }
+      function setFocus(f) { focus = f; renderL(); draw(); uP() }
+      function setScene(s) { scenario = s; renderL(); draw(); uP() }
+      function draw() {
+        cx.clearRect(0, 0, W, H);
+        // CAP Triangle
+        const tcx = W / 2, tcy = H * 0.38, tr = Math.min(W, H) * 0.25;
+        const pts = [
+          { x: tcx, y: tcy - tr, label: 'C', full: 'Consistency\n一致性', c: '#10b981' },
+          { x: tcx - tr * 0.87, y: tcy + tr * 0.5, label: 'A', full: 'Availability\n可用性', c: '#3b82f6' },
+          { x: tcx + tr * 0.87, y: tcy + tr * 0.5, label: 'P', full: 'Partition Tolerance\n分区容错', c: '#eab308' }
+        ];
+        // Triangle edges
+        cx.strokeStyle = '#ffffff10'; cx.lineWidth = 1.5; cx.beginPath(); cx.moveTo(pts[0].x, pts[0].y); cx.lineTo(pts[1].x, pts[1].y); cx.lineTo(pts[2].x, pts[2].y); cx.closePath(); cx.stroke();
+        // Highlight selected edge
+        const edgeMap = { CP: [0, 2], AP: [1, 2], CA: [0, 1] };
+        const [ei, ej] = edgeMap[focus];
+        cx.strokeStyle = focus === 'CP' ? '#10b981' : '#3b82f6'; cx.lineWidth = 3; cx.beginPath(); cx.moveTo(pts[ei].x, pts[ei].y); cx.lineTo(pts[ej].x, pts[ej].y); cx.stroke();
+        // Filled area
+        cx.fillStyle = (focus === 'CP' ? '#10b981' : '#3b82f6') + '08'; cx.beginPath(); cx.moveTo(pts[0].x, pts[0].y); cx.lineTo(pts[1].x, pts[1].y); cx.lineTo(pts[2].x, pts[2].y); cx.closePath(); cx.fill();
+        // Nodes
+        pts.forEach((p, i) => {
+          const active = (focus === 'CP' && (i === 0 || i === 2)) || (focus === 'AP' && (i === 1 || i === 2));
+          const dimmed = (focus === 'CP' && i === 1) || (focus === 'AP' && i === 0);
+          circ(p.x, p.y, active ? 28 : 24, active ? p.c + '25' : p.c + '08', active ? p.c : p.c + '30');
+          tb(p.x, p.y - 6, p.label, active ? 18 : 14, dimmed ? p.c + '40' : p.c);
+          p.full.split('\n').forEach((l, li) => t(p.x, p.y + 10 + li * 12, l, 9, dimmed ? '#333' : '#94a3b8'));
+        });
+        // Sacrificed label
+        if (focus === 'CP') { t(pts[1].x - 20, pts[1].y - 40, '⚠ 牺牲', 9, '#ef4444') }
+        else { t(pts[0].x + 20, pts[0].y + 40, '⚠ 牺牲', 9, '#ef4444') }
+
+        // Partition scenario
+        const sy = tcy + tr + 40;
+        if (scenario === 'partition') {
+          // Two node groups
+          const n1x = W * 0.25, n2x = W * 0.75, ny = sy + 40;
+          bx(n1x - 60, ny - 20, 120, 40, '#10b98115', '#10b981'); tb(n1x, ny - 4, 'Node A (主)', 10, '#10b981'); t(n1x, ny + 10, '数据: v2', 8, '#10b981');
+          bx(n2x - 60, ny - 20, 120, 40, '#3b82f615', '#3b82f6'); tb(n2x, ny - 4, 'Node B (从)', 10, '#3b82f6'); t(n2x, ny + 10, focus === 'CP' ? '拒绝服务 ✗' : '数据: v1 (旧)', 8, focus === 'CP' ? '#ef4444' : '#eab308');
+          // Partition line
+          cx.strokeStyle = '#ef4444'; cx.lineWidth = 2; cx.setLineDash([8, 6]);
+          cx.beginPath(); cx.moveTo(W / 2, ny - 30); cx.lineTo(W / 2, ny + 30); cx.stroke(); cx.setLineDash([]);
+          tb(W / 2, ny - 38, '⚡ 网络分区', 10, '#ef4444');
+          // Behavior
+          const by = ny + 50;
+          if (focus === 'CP') {
+            bx(n1x - 80, by, 160, 30, '#10b98110', '#10b98130'); t(n1x, by + 15, '多数派正常服务', 9, '#10b981');
+            bx(n2x - 80, by, 160, 30, '#ef444410', '#ef444430'); t(n2x, by + 15, '少数派拒绝读写', 9, '#ef4444');
+          } else {
+            bx(n1x - 80, by, 160, 30, '#10b98110', '#10b98130'); t(n1x, by + 15, '返回最新数据 v2', 9, '#10b981');
+            bx(n2x - 80, by, 160, 30, '#eab30810', '#eab30830'); t(n2x, by + 15, '返回旧数据 v1', 9, '#eab308');
+            t(W / 2, by + 44, '分区恢复后需要 → 数据合并 / 冲突解决 (Last Write Wins / Vector Clock)', 9, '#94a3b8');
+          }
+        } else {
+          // Normal state
+          const ny = sy + 30;
+          bx(W / 2 - 100, ny, 200, 36, '#10b98110', '#10b98130');
+          t(W / 2, ny + 18, '网络正常：C + A + P 三者都可满足', 10, '#10b981');
+          // Example systems
+          const ey = ny + 50;
+          tb(W * 0.25, ey, 'CP 系统', 10, '#10b981');
+          t(W * 0.25, ey + 16, 'ZooKeeper / etcd / HBase', 9, '#94a3b8');
+          t(W * 0.25, ey + 30, 'Redis Cluster / MongoDB', 9, '#94a3b8');
+          tb(W * 0.75, ey, 'AP 系统', 10, '#3b82f6');
+          t(W * 0.75, ey + 16, 'Eureka / Cassandra', 9, '#94a3b8');
+          t(W * 0.75, ey + 30, 'DynamoDB / CouchDB', 9, '#94a3b8');
+        }
+      }
+      function uP() { document.getElementById('pt').textContent = `请详细解释 CAP 定理及其在分布式系统中的应用。当前选择 ${focus} 模式，场景: ${scenario === 'normal' ? '正常' : '网络分区'}。请说明：1) CAP 三要素的精确定义；2) 为什么网络分区不可避免(P必选)，实际选择是CP vs AP；3) ${focus} 系统在网络分区时的具体行为和数据处理方式；4) 典型系统(ZooKeeper/Eureka/Cassandra等)的CAP选择和实现细节；5) BASE理论作为CAP的工程实践补充；6) 如何根据业务需求选择CP或AP。` }
+      return { init, draw, setFocus, setScene }
+    })();
+
+    // ==================== REGISTRY ====================
+    const M = { lb, cb, cache, reg, repl, cap };
+    rsz(); sw('lb');
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

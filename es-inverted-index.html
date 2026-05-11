@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elasticsearch 倒排索引</title>
+  <meta name="description" content="交互式演示 Elasticsearch 倒排索引原理，包括分词、词项字典、倒排列表与相关性评分">
+  <meta name="keywords" content="Elasticsearch, 倒排索引, 全文检索, 分词, TF-IDF">
+  <meta property="og:title" content="Elasticsearch 倒排索引">
+  <meta property="og:description" content="交互式演示 Elasticsearch 倒排索引原理，包括分词、词项字典、倒排列表与相关性评分">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .L {
+      display: grid;
+      grid-template-columns: 290px 1fr;
+      grid-template-rows: 1fr auto;
+      height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    .C {
+      grid-row: 1/3;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 18px 16px;
+    }
+
+    .C::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .C::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .C::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .P {
+      grid-column: 2;
+      overflow-y: auto;
+      padding: 18px 22px;
+    }
+
+    .P::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .P::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .P::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .BB {
+      grid-column: 2;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 12px 22px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    h1 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+      background: linear-gradient(135deg, #fff 0%, #a8c8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .sub {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      font-weight: 400;
+    }
+
+    .sec {
+      margin-bottom: 14px;
+    }
+
+    .sec-t {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sec-t::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    label {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    select,
+    textarea {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 0.74rem;
+      margin-bottom: 8px;
+      font-family: inherit;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    textarea {
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.68rem;
+      resize: vertical;
+      line-height: 1.6;
+    }
+
+    input[type=text] {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      margin-bottom: 8px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type=text]:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      font-size: 0.74rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-a {
+      background: linear-gradient(135deg, #1a6ff0, #4da3ff);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .btn-g {
+      background: rgba(54, 217, 134, 0.1);
+      border: 1px solid rgba(54, 217, 134, 0.3);
+      color: var(--accent-green);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .pbtn {
+      padding: 5px 12px;
+      font-size: 0.68rem;
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+
+    .pbtn:hover {
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+      background: rgba(77, 163, 255, 0.06);
+    }
+
+    .pbtn.on {
+      background: rgba(77, 163, 255, 0.1);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+
+    .sep {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 14px 0;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .card h3 {
+      font-size: 0.82rem;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    .card p {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    .card code {
+      background: var(--bg-elevated);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-size: 0.65rem;
+      color: var(--accent-cyan);
+    }
+
+    .ptx {
+      flex: 1;
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 10px 8px;
+      font-size: 0.74rem;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--text-secondary);
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .tab.on {
+      color: var(--accent-blue);
+      border-bottom-color: var(--accent-blue);
+      background: rgba(77, 163, 255, 0.06);
+    }
+
+    .tab:hover:not(.on) {
+      color: var(--text-primary);
+      background: rgba(77, 163, 255, 0.04);
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.on {
+      display: block;
+    }
+
+    /* Index table */
+    .idx-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.72rem;
+      margin-top: 8px;
+    }
+
+    .idx-table th {
+      text-align: left;
+      padding: 8px 10px;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .idx-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    .idx-table tr:hover td {
+      background: rgba(77, 163, 255, 0.04);
+    }
+
+    .idx-table tr.hit td {
+      background: rgba(255, 159, 67, 0.06);
+    }
+
+    .term {
+      color: var(--accent-cyan);
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-weight: 600;
+    }
+
+    .doc-id {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-size: 0.62rem;
+      margin: 1px;
+    }
+
+    .pos {
+      font-size: 0.58rem;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+    }
+
+    /* Pipeline */
+    .pipe {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin: 10px 0;
+      flex-wrap: wrap;
+    }
+
+    .pipe-step {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 6px 12px;
+      font-size: 0.65rem;
+      text-align: center;
+      min-width: 65px;
+      transition: all 0.3s;
+    }
+
+    .pipe-step.active {
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 12px var(--glow-blue);
+      background: linear-gradient(135deg, rgba(77, 163, 255, 0.08), rgba(77, 163, 255, 0.02));
+    }
+
+    .pipe-arrow {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* Token list */
+    .token {
+      display: inline-block;
+      padding: 3px 8px;
+      margin: 2px;
+      border-radius: 5px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-size: 0.68rem;
+    }
+
+    .token-hit {
+      background: rgba(255, 159, 67, 0.15);
+      color: var(--accent-orange);
+      border: 1px solid rgba(255, 159, 67, 0.35);
+    }
+
+    .token-norm {
+      background: var(--bg-elevated);
+      color: var(--accent-cyan);
+      border: 1px solid var(--border);
+    }
+
+    /* Score bar */
+    .score-bar {
+      height: 6px;
+      border-radius: 3px;
+      margin-top: 3px;
+    }
+
+    /* Forward index */
+    .fwd-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      margin-bottom: 6px;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      transition: border-color 0.2s;
+    }
+
+    .fwd-row:hover {
+      border-color: var(--border-hover);
+    }
+
+    .fwd-id {
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-weight: 700;
+      font-size: 0.74rem;
+      min-width: 44px;
+    }
+
+    .fwd-txt {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    .hl {
+      background: rgba(255, 159, 67, 0.2);
+      color: var(--accent-orange);
+      padding: 0 3px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="L">
+    <div class="C">
+      <h1>Elasticsearch 倒排索引</h1>
+      <div class="sub">Inverted Index 原理交互演示</div>
+
+      <div class="sec">
+        <div class="sec-t">预设数据</div>
+        <div class="btn-row">
+          <button class="btn pbtn on" onclick="preset('en')">英文文档</button>
+          <button class="btn pbtn" onclick="preset('zh')">中文文档</button>
+          <button class="btn pbtn" onclick="preset('mixed')">中英混合</button>
+          <button class="btn pbtn" onclick="preset('code')">技术文档</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">文档输入（每行一篇文档）</div>
+        <textarea id="docs" rows="6" oninput="rebuild()">The quick brown fox jumps over the lazy dog
+The quick brown fox is very quick
+A lazy dog sleeps all day long</textarea>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">搜索查询</div>
+        <input type="text" id="query" placeholder="输入搜索词，如: quick fox" oninput="doSearch()">
+        <div class="btn-row">
+          <label style="display:inline;font-size:11px;margin-right:8px">
+            <input type="radio" name="op" value="OR" checked onchange="doSearch()"> OR
+          </label>
+          <label style="display:inline;font-size:11px">
+            <input type="radio" name="op" value="AND" onchange="doSearch()"> AND
+          </label>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">分词器 (Analyzer)</div>
+        <select id="analyzer" onchange="rebuild()">
+          <option value="standard">Standard（标准分词 + 小写）</option>
+          <option value="whitespace">Whitespace（仅按空格分词）</option>
+          <option value="simple">Simple（按非字母分割 + 小写）</option>
+          <option value="chinese">中文分词（模拟 IK/jieba）</option>
+        </select>
+      </div>
+
+      <div class="sep"></div>
+
+      <div class="card">
+        <h3>Analyzer 三阶段</h3>
+        <p><code>Character Filter</code> 字符过滤 (去HTML等)<br>
+          <code>Tokenizer</code> 分词器 (切分 Token)<br>
+          <code>Token Filter</code> 词元过滤 (小写/停用词/同义词)
+        </p>
+      </div>
+      <div class="card">
+        <h3>倒排索引结构</h3>
+        <p><code>Term Index</code> FST 快速定位 Term<br>
+          <code>Term Dictionary</code> 排序的词项表<br>
+          <code>Posting List</code> 文档ID + TF + Position
+        </p>
+      </div>
+    </div>
+
+    <div class="P">
+      <div class="tabs">
+        <div class="tab on" onclick="switchTab('index')">倒排索引</div>
+        <div class="tab" onclick="switchTab('pipeline')">分词管道</div>
+        <div class="tab" onclick="switchTab('search')">搜索过程</div>
+        <div class="tab" onclick="switchTab('compare')">正排 vs 倒排</div>
+      </div>
+
+      <!-- ═══ Tab: Inverted Index ═══ -->
+      <div class="panel on" id="tab-index">
+        <div id="indexView"></div>
+      </div>
+
+      <!-- ═══ Tab: Analyzer Pipeline ═══ -->
+      <div class="panel" id="tab-pipeline">
+        <div id="pipelineView"></div>
+      </div>
+
+      <!-- ═══ Tab: Search Process ═══ -->
+      <div class="panel" id="tab-search">
+        <div id="searchView"></div>
+      </div>
+
+      <!-- ═══ Tab: Forward vs Inverted ═══ -->
+      <div class="panel" id="tab-compare">
+        <div id="compareView"></div>
+      </div>
+    </div>
+
+    <div class="BB">
+      <div class="ptx" id="ptx">输入文档和搜索词，实时观察倒排索引的建立与搜索过程。</div>
+      <button class="btn btn-a" onclick="copyP()">复制</button>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════ STATE ═══════════════
+    const S = {
+      docs: [],
+      tokens: {},    // docId -> [tokens]
+      index: {},     // term -> {df, postings:[{docId, tf, positions:[]}]}
+      queryTerms: [],
+      queryOp: 'OR',
+      results: [],
+      analyzer: 'standard',
+      activeTab: 'index',
+    };
+
+    // ═══════════════ ANALYZER ═══════════════
+    const STOP_WORDS = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'in', 'on', 'at', 'to', 'for', 'of', 'and', 'or', 'but', 'not', 'with', 'this', 'that', 'it', 'as', 'by', 'from', 'all', 'very']);
+
+    const ZH_DICT = ['搜索引擎', '倒排索引', '全文搜索', '分布式', '数据库', '高性能', '实时', '分析', '存储', '索引', '查询', '文档', '集群', '分片', '副本', '映射', '聚合', '过滤', '排序', '分页', '中国', '人民', '共和国', '中华', '大学', '计算机', '科学', '技术', '编程', '语言', '学习', '机器', '深度', '人工', '智能', '系统', '服务', '数据', '结构', '算法', '设计', '模式', '架构', '微服务', '容器', '消息', '队列', '缓存', '网络', '安全'];
+
+    function analyze(text, analyzerType) {
+      analyzerType = analyzerType || S.analyzer;
+
+      // Character Filter: remove HTML, special chars
+      let cleaned = text.replace(/<[^>]+>/g, ' ').replace(/[""'']/g, '');
+
+      let tokens = [];
+
+      if (analyzerType === 'standard') {
+        tokens = cleaned.match(/[\w一-鿿]+/g) || [];
+        tokens = tokens.map(t => t.toLowerCase());
+        tokens = tokens.filter(t => !STOP_WORDS.has(t) && t.length > 0);
+      } else if (analyzerType === 'whitespace') {
+        tokens = cleaned.split(/\s+/).filter(t => t.length > 0);
+      } else if (analyzerType === 'simple') {
+        tokens = cleaned.split(/[^a-zA-Z一-鿿]+/).filter(t => t.length > 0);
+        tokens = tokens.map(t => t.toLowerCase());
+      } else if (analyzerType === 'chinese') {
+        tokens = chineseTokenize(cleaned);
+      }
+      return tokens;
+    }
+
+    function chineseTokenize(text) {
+      const results = [];
+      // Extract English words first
+      const parts = text.split(/([一-鿿]+)/);
+      for (const part of parts) {
+        if (/[一-鿿]/.test(part)) {
+          // Max forward matching with dictionary
+          let i = 0;
+          while (i < part.length) {
+            let matched = false;
+            for (let len = Math.min(4, part.length - i); len >= 2; len--) {
+              const word = part.substring(i, i + len);
+              if (ZH_DICT.includes(word)) {
+                results.push(word);
+                i += len;
+                matched = true;
+                break;
+              }
+            }
+            if (!matched) {
+              results.push(part[i]);
+              i++;
+            }
+          }
+        } else {
+          const words = part.match(/[a-zA-Z]+/g);
+          if (words) results.push(...words.map(w => w.toLowerCase()));
+        }
+      }
+      return results.filter(t => t.trim().length > 0);
+    }
+
+    // ═══════════════ INDEX BUILD ═══════════════
+    function rebuild() {
+      const raw = document.getElementById('docs').value;
+      S.analyzer = document.getElementById('analyzer').value;
+      S.docs = raw.split('\n').filter(d => d.trim().length > 0);
+      S.tokens = {};
+      S.index = {};
+
+      S.docs.forEach((doc, di) => {
+        const toks = analyze(doc);
+        S.tokens[di] = toks;
+
+        const termPos = {}; // term -> [positions]
+        toks.forEach((t, pos) => {
+          if (!termPos[t]) termPos[t] = [];
+          termPos[t].push(pos);
+        });
+
+        for (const [term, positions] of Object.entries(termPos)) {
+          if (!S.index[term]) S.index[term] = { df: 0, postings: [] };
+          S.index[term].df++;
+          S.index[term].postings.push({ docId: di, tf: positions.length, positions });
+        }
+      });
+
+      doSearch();
+    }
+
+    // ═══════════════ SEARCH ═══════════════
+    function doSearch() {
+      const q = document.getElementById('query').value.trim();
+      S.queryOp = document.querySelector('input[name=op]:checked')?.value || 'OR';
+      S.queryTerms = q ? analyze(q) : [];
+      S.results = [];
+
+      if (S.queryTerms.length === 0) { render(); return; }
+
+      // Gather posting lists for each query term
+      const postingLists = S.queryTerms.map(t => {
+        const entry = S.index[t];
+        return entry ? entry.postings.map(p => p.docId) : [];
+      });
+
+      let docIds;
+      if (S.queryOp === 'AND') {
+        docIds = postingLists.reduce((a, b) => a.filter(id => b.includes(id)), postingLists[0] || []);
+      } else {
+        const s = new Set();
+        postingLists.forEach(pl => pl.forEach(id => s.add(id)));
+        docIds = [...s];
+      }
+
+      // Score using simplified BM25
+      const N = S.docs.length;
+      const avgDl = S.docs.reduce((sum, d) => sum + analyze(d).length, 0) / Math.max(N, 1);
+      const k1 = 1.2, b = 0.75;
+
+      S.results = docIds.map(docId => {
+        let score = 0;
+        const dl = (S.tokens[docId] || []).length;
+        S.queryTerms.forEach(term => {
+          const entry = S.index[term];
+          if (!entry) return;
+          const posting = entry.postings.find(p => p.docId === docId);
+          if (!posting) return;
+          const tf = posting.tf;
+          const df = entry.df;
+          const idf = Math.log((N - df + 0.5) / (df + 0.5) + 1);
+          score += idf * ((tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (dl / avgDl))));
+        });
+        return { docId, score };
+      }).sort((a, b) => b.score - a.score);
+
+      render();
+    }
+
+    // ═══════════════ PRESETS ═══════════════
+    function preset(n) {
+      document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+      event.target.classList.add('on');
+      const data = {
+        en: { docs: "The quick brown fox jumps over the lazy dog\nThe quick brown fox is very quick\nA lazy dog sleeps all day long", q: "quick fox", a: 'standard' },
+        zh: { docs: "搜索引擎使用倒排索引实现全文搜索\nElasticsearch是一个分布式搜索引擎\n倒排索引是搜索引擎的核心数据结构\n数据库索引和搜索引擎索引有本质区别", q: "搜索引擎 索引", a: 'chinese' },
+        mixed: { docs: "Redis是一个高性能的缓存数据库\nElasticsearch基于倒排索引实现全文搜索\nKafka是一个分布式消息队列系统\n微服务架构通常使用消息队列解耦服务", q: "分布式 消息", a: 'chinese' },
+        code: { docs: "HashMap uses hash table with O(1) lookup time\nTreeMap uses red-black tree with O(log n) operations\nConcurrentHashMap provides thread-safe hash table\nLinkedHashMap maintains insertion order with hash table", q: "hash table", a: 'standard' },
+      }[n];
+      document.getElementById('docs').value = data.docs;
+      document.getElementById('query').value = data.q;
+      document.getElementById('analyzer').value = data.a;
+      rebuild();
+    }
+
+    // ═══════════════ TAB SWITCHING ═══════════════
+    function switchTab(tab) {
+      S.activeTab = tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('on'));
+      event.target.classList.add('on');
+      document.getElementById('tab-' + tab).classList.add('on');
+      render();
+    }
+
+    // ═══════════════ RENDERING ═══════════════
+    function render() {
+      switch (S.activeTab) {
+        case 'index': renderIndex(); break;
+        case 'pipeline': renderPipeline(); break;
+        case 'search': renderSearch(); break;
+        case 'compare': renderCompare(); break;
+      }
+      updatePrompt();
+    }
+
+    const DOC_COLORS = ['#6c7aff', '#4ecdc4', '#ff8c42', '#b44dff', '#ffd93d', '#ff6bb5', '#00d2ff', '#ff5f6d'];
+
+    function renderIndex() {
+      const el = document.getElementById('indexView');
+      const hitTerms = new Set(S.queryTerms);
+
+      // Sort terms alphabetically
+      const terms = Object.keys(S.index).sort();
+
+      let html = `<div class="card"><h3>倒排索引 · ${terms.length} 个词项 · ${S.docs.length} 篇文档</h3>
+  <p>每个 Term 指向包含它的文档列表 (Posting List)，记录文档ID、词频(TF)和位置(Position)</p></div>`;
+
+      html += `<table class="idx-table"><thead><tr>
+    <th style="width:120px">Term (词项)</th>
+    <th style="width:40px">DF</th>
+    <th>Posting List → [DocID : TF : Positions]</th>
+  </tr></thead><tbody>`;
+
+      terms.forEach(term => {
+        const entry = S.index[term];
+        const isHit = hitTerms.has(term);
+        html += `<tr class="${isHit ? 'hit' : ''}">`;
+        html += `<td><span class="term">${esc(term)}</span></td>`;
+        html += `<td style="color:var(--org)">${entry.df}</td>`;
+        html += `<td>`;
+        entry.postings.forEach((p, i) => {
+          const c = DOC_COLORS[p.docId % DOC_COLORS.length];
+          html += `<span class="doc-id" style="background:${c}20;color:${c};border:1px solid ${c}40">`;
+          html += `Doc${p.docId} <span style="color:${c}99">tf=${p.tf}</span>`;
+          html += ` <span class="pos">[${p.positions.join(',')}]</span></span> `;
+        });
+        html += `</td></tr>`;
+      });
+
+      html += `</tbody></table>`;
+
+      // Term Index (FST trie visualization)
+      if (terms.length > 0) {
+        html += `<div class="card" style="margin-top:10px"><h3>Term Index (FST / Trie 前缀树)</h3>
+    <p style="margin-bottom:6px">Term Dictionary 按字母排序存储在磁盘，Term Index 是内存中的前缀树，用于快速定位 Term 所在的磁盘 Block。</p>
+    <div style="font-family:'SF Mono',monospace;font-size:10px;line-height:1.8;color:var(--tx2)">`;
+        // Build simple prefix tree display
+        const prefixes = {};
+        terms.forEach(t => {
+          const p = t.substring(0, Math.min(2, t.length));
+          if (!prefixes[p]) prefixes[p] = [];
+          prefixes[p].push(t);
+        });
+        for (const [prefix, ts] of Object.entries(prefixes).sort()) {
+          const isHit = ts.some(t => hitTerms.has(t));
+          html += `<span style="color:${isHit ? 'var(--ylw)' : 'var(--pur)'}">${esc(prefix)}*</span>`;
+          html += ` → Block [${ts.map(t => `<span style="color:${hitTerms.has(t) ? 'var(--ylw)' : 'var(--cyn)'}">${esc(t)}</span>`).join(', ')}]  `;
+        }
+        html += `</div></div>`;
+      }
+
+      el.innerHTML = html;
+    }
+
+    function renderPipeline() {
+      const el = document.getElementById('pipelineView');
+      let html = '';
+
+      S.docs.forEach((doc, di) => {
+        const c = DOC_COLORS[di % DOC_COLORS.length];
+        html += `<div class="card">`;
+        html += `<h3 style="color:${c}">Doc${di}: "${esc(doc.length > 60 ? doc.substring(0, 60) + '...' : doc)}"</h3>`;
+
+        // Pipeline stages
+        html += `<div class="pipe">`;
+        html += `<div class="pipe-step" style="border-color:${c}40"><div style="font-size:8px;color:var(--tx2)">原始文本</div><div style="font-size:10px;color:${c}">${doc.split(/\s+/).length} words</div></div>`;
+        html += `<span class="pipe-arrow">→</span>`;
+        html += `<div class="pipe-step"><div style="font-size:8px;color:var(--tx2)">Char Filter</div><div style="font-size:10px">去特殊字符</div></div>`;
+        html += `<span class="pipe-arrow">→</span>`;
+
+        const analyzerNames = { standard: 'Standard', whitespace: 'Whitespace', simple: 'Simple', chinese: '中文分词' };
+        html += `<div class="pipe-step active"><div style="font-size:8px;color:var(--tx2)">Tokenizer</div><div style="font-size:10px;color:var(--acc)">${analyzerNames[S.analyzer]}</div></div>`;
+        html += `<span class="pipe-arrow">→</span>`;
+
+        const filters = [];
+        if (S.analyzer === 'standard' || S.analyzer === 'simple') filters.push('lowercase');
+        if (S.analyzer === 'standard') filters.push('stop words');
+        html += `<div class="pipe-step"><div style="font-size:8px;color:var(--tx2)">Token Filter</div><div style="font-size:10px">${filters.join(' + ') || '—'}</div></div>`;
+        html += `<span class="pipe-arrow">→</span>`;
+        html += `<div class="pipe-step" style="border-color:var(--grn)40"><div style="font-size:8px;color:var(--tx2)">最终 Tokens</div><div style="font-size:10px;color:var(--grn)">${(S.tokens[di] || []).length} terms</div></div>`;
+        html += `</div>`;
+
+        // Token list
+        const toks = S.tokens[di] || [];
+        const hitTerms = new Set(S.queryTerms);
+        html += `<div style="margin-top:4px">`;
+        toks.forEach((t, i) => {
+          const isHit = hitTerms.has(t);
+          html += `<span class="token ${isHit ? 'token-hit' : 'token-norm'}" title="position=${i}">${esc(t)}<sub style="font-size:8px;opacity:.5">${i}</sub></span>`;
+        });
+        html += `</div>`;
+        html += `</div>`;
+      });
+
+      el.innerHTML = html;
+    }
+
+    function renderSearch() {
+      const el = document.getElementById('searchView');
+      const q = document.getElementById('query').value.trim();
+
+      if (!q) {
+        el.innerHTML = '<div class="card"><p style="text-align:center;color:var(--tx2);padding:20px">在左侧输入搜索词开始查询</p></div>';
+        return;
+      }
+
+      let html = '';
+
+      // Step 1: Query analyze
+      html += `<div class="card"><h3>① 查询分词</h3>`;
+      html += `<div class="pipe">`;
+      html += `<div class="pipe-step"><div style="font-size:8px;color:var(--tx2)">原始查询</div><div style="font-size:11px;color:var(--ylw)">"${esc(q)}"</div></div>`;
+      html += `<span class="pipe-arrow">→</span>`;
+      html += `<div class="pipe-step active"><div style="font-size:8px;color:var(--tx2)">Analyzer</div><div style="font-size:10px">${S.analyzer}</div></div>`;
+      html += `<span class="pipe-arrow">→</span>`;
+      html += `<div class="pipe-step" style="border-color:var(--ylw)40">`;
+      S.queryTerms.forEach(t => { html += `<span class="token token-hit">${esc(t)}</span> `; });
+      html += `</div></div></div>`;
+
+      // Step 2: Lookup inverted index
+      html += `<div class="card"><h3>② 查找倒排索引 → 获取 Posting List</h3>`;
+      S.queryTerms.forEach(term => {
+        const entry = S.index[term];
+        html += `<div style="margin:6px 0"><span class="term">${esc(term)}</span> → `;
+        if (entry) {
+          entry.postings.forEach(p => {
+            const c = DOC_COLORS[p.docId % DOC_COLORS.length];
+            html += `<span class="doc-id" style="background:${c}20;color:${c};border:1px solid ${c}40">Doc${p.docId}(tf=${p.tf})</span> `;
+          });
+        } else {
+          html += `<span style="color:var(--red)">未找到</span>`;
+        }
+        html += `</div>`;
+      });
+      html += `</div>`;
+
+      // Step 3: Merge posting lists
+      html += `<div class="card"><h3>③ 合并 Posting List（${S.queryOp}）</h3>`;
+      if (S.queryTerms.length > 1) {
+        const lists = S.queryTerms.map(t => {
+          const e = S.index[t];
+          return e ? e.postings.map(p => p.docId) : [];
+        });
+        html += `<div style="font-size:11px;margin:4px 0">`;
+        lists.forEach((l, i) => {
+          html += `<span class="term">${esc(S.queryTerms[i])}</span>: {${l.join(', ')}}`;
+          if (i < lists.length - 1) html += ` <span style="color:var(--org);font-weight:700"> ${S.queryOp} </span>`;
+        });
+        const resultIds = S.results.map(r => r.docId);
+        html += ` = {${resultIds.join(', ')}}`;
+        html += `</div>`;
+      }
+      html += `</div>`;
+
+      // Step 4: BM25 Scoring
+      html += `<div class="card"><h3>④ 相关性评分（BM25）</h3>`;
+      html += `<p style="font-size:10px;margin-bottom:6px">score(D,Q) = Σ IDF(q<sub>i</sub>) · <sup>tf · (k₁+1)</sup>/<sub>tf + k₁·(1-b+b·|D|/avgDl)</sub>  &nbsp; k₁=1.2, b=0.75</p>`;
+
+      const maxScore = S.results.length ? S.results[0].score : 1;
+      S.results.forEach((r, i) => {
+        const c = DOC_COLORS[r.docId % DOC_COLORS.length];
+        const pct = maxScore > 0 ? (r.score / maxScore * 100) : 0;
+        html += `<div style="margin:6px 0">`;
+        html += `<div style="display:flex;align-items:center;gap:8px">`;
+        html += `<span style="color:${c};font-weight:700;min-width:45px">Doc${r.docId}</span>`;
+        html += `<span style="font-family:'SF Mono',monospace;font-size:11px;color:var(--ylw);min-width:70px">${r.score.toFixed(4)}</span>`;
+        html += `<div style="flex:1;background:var(--s2);border-radius:3px;height:6px"><div class="score-bar" style="width:${pct}%;background:${c}"></div></div>`;
+        html += `</div>`;
+        // Highlight doc text
+        const doc = S.docs[r.docId] || '';
+        html += `<div style="font-size:10px;color:var(--tx2);margin-top:2px">${highlightDoc(doc)}</div>`;
+        html += `</div>`;
+      });
+
+      if (S.results.length === 0) {
+        html += `<p style="color:var(--red)">没有匹配的文档</p>`;
+      }
+      html += `</div>`;
+
+      // Step 5: Return results
+      html += `<div class="card"><h3>⑤ 返回排序结果</h3>`;
+      html += `<p>共匹配 <span style="color:var(--ylw);font-weight:700">${S.results.length}</span> 篇文档，按 BM25 得分降序返回。</p>`;
+      html += `</div>`;
+
+      el.innerHTML = html;
+    }
+
+    function renderCompare() {
+      const el = document.getElementById('compareView');
+      let html = '';
+
+      // Forward Index
+      html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">`;
+
+      html += `<div class="card"><h3 style="color:var(--org)">正排索引 (Forward Index)</h3>`;
+      html += `<p style="margin-bottom:8px">文档 → 包含哪些词。适合根据文档ID获取内容，但全文搜索需要遍历所有文档。</p>`;
+      S.docs.forEach((doc, di) => {
+        const c = DOC_COLORS[di % DOC_COLORS.length];
+        const toks = S.tokens[di] || [];
+        html += `<div class="fwd-row"><span class="fwd-id" style="color:${c}">Doc${di}</span>`;
+        html += `<div class="fwd-txt">→ [${toks.map(t => `<span style="color:var(--cyn)">${esc(t)}</span>`).join(', ')}]</div></div>`;
+      });
+      html += `<div style="margin-top:8px;padding:8px;background:#ff5f6d10;border-radius:6px;border:1px solid #ff5f6d30;font-size:10px;color:var(--red)">`;
+      html += `⚠ 搜索 "${esc(S.queryTerms.join(' '))}" 需要遍历全部 ${S.docs.length} 篇文档 → O(N×M) 全表扫描</div>`;
+      html += `</div>`;
+
+      // Inverted Index
+      html += `<div class="card"><h3 style="color:var(--grn)">倒排索引 (Inverted Index)</h3>`;
+      html += `<p style="margin-bottom:8px">词项 → 出现在哪些文档。搜索时直接定位词项，取出文档列表，无需遍历。</p>`;
+      const hitTerms = new Set(S.queryTerms);
+      const sortedTerms = Object.keys(S.index).sort();
+      const showTerms = sortedTerms.slice(0, 12);
+      showTerms.forEach(term => {
+        const entry = S.index[term];
+        const isHit = hitTerms.has(term);
+        html += `<div class="fwd-row" style="${isHit ? 'border-color:#ffd93d40;background:#ffd93d08' : ''}">`;
+        html += `<span class="fwd-id" style="color:${isHit ? 'var(--ylw)' : 'var(--cyn)'}; min-width:70px">${esc(term)}</span>`;
+        html += `<div class="fwd-txt">→ `;
+        entry.postings.forEach(p => {
+          const c = DOC_COLORS[p.docId % DOC_COLORS.length];
+          html += `<span class="doc-id" style="background:${c}20;color:${c};border:1px solid ${c}40">Doc${p.docId}</span> `;
+        });
+        html += `</div></div>`;
+      });
+      if (sortedTerms.length > 12) html += `<div style="font-size:10px;color:var(--tx2);margin-top:4px">... 还有 ${sortedTerms.length - 12} 个词项</div>`;
+      html += `<div style="margin-top:8px;padding:8px;background:#4ecdc410;border-radius:6px;border:1px solid #4ecdc430;font-size:10px;color:var(--grn)">`;
+      html += `✓ 搜索 "${esc(S.queryTerms.join(' '))}" 直接查找 ${S.queryTerms.length} 个词项 → O(1) 哈希/树查找 + 合并 Posting List</div>`;
+      html += `</div>`;
+
+      html += `</div>`;
+
+      // Complexity comparison
+      html += `<div class="card" style="margin-top:10px"><h3>性能对比</h3>`;
+      html += `<table class="idx-table"><thead><tr><th></th><th>正排索引</th><th>倒排索引</th></tr></thead><tbody>`;
+      const rows = [
+        ['搜索复杂度', 'O(N × M) 全表扫描', 'O(K) 词项查找 + 合并', 'var(--red)', 'var(--grn)'],
+        ['根据ID取文档', 'O(1) 直接定位', '不适用（需要另存 _source）', 'var(--grn)', 'var(--tx2)'],
+        ['存储方式', '文档 → 词项列表', '词项 → 文档列表', 'var(--tx2)', 'var(--tx2)'],
+        ['适用场景', 'NoSQL 文档存储', '全文搜索引擎', 'var(--tx2)', 'var(--tx2)'],
+        ['空间占用', '与文档大小成正比', '需要额外的索引空间', 'var(--tx2)', 'var(--tx2)'],
+      ];
+      rows.forEach(([label, fwd, inv, fc, ic]) => {
+        html += `<tr><td style="font-weight:600">${label}</td><td style="color:${fc}">${fwd}</td><td style="color:${ic}">${inv}</td></tr>`;
+      });
+      html += `</tbody></table></div>`;
+
+      el.innerHTML = html;
+    }
+
+    function highlightDoc(doc) {
+      if (!S.queryTerms.length) return esc(doc);
+      let result = esc(doc);
+      S.queryTerms.forEach(term => {
+        const re = new RegExp(`(${escRegex(term)})`, 'gi');
+        result = result.replace(re, '<span class="hl">$1</span>');
+      });
+      return result;
+    }
+
+    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function escRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+    function updatePrompt() {
+      const terms = Object.keys(S.index).length;
+      const parts = [`ES 倒排索引 · ${S.docs.length} 篇文档 · ${terms} 个词项 · ${S.analyzer} 分词器`];
+      if (S.queryTerms.length) {
+        parts.push(`查询: "${S.queryTerms.join(' ')}" (${S.queryOp})`);
+        parts.push(`命中 ${S.results.length} 篇`);
+      }
+      document.getElementById('ptx').textContent = parts.join(' · ');
+    }
+
+    function copyP() {
+      navigator.clipboard.writeText(document.getElementById('ptx').textContent).then(() => {
+        const b = event.target; b.textContent = '已复制!'; setTimeout(() => b.textContent = '复制', 1500);
+      });
+    }
+
+    // Init
+    rebuild();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

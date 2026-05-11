@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redis Sentinel 哨兵模式</title>
+  <meta name="description" content="交互式演示 Redis Sentinel 哨兵模式的主从监控、故障检测、自动故障转移及客户端重定向机制">
+  <meta name="keywords" content="Redis Sentinel, 哨兵模式, 故障转移, 主从复制, 高可用, 交互式演示">
+  <meta property="og:title" content="Redis Sentinel 哨兵模式">
+  <meta property="og:description" content="交互式演示 Redis Sentinel 哨兵模式的主从监控、故障检测、自动故障转移及客户端重定向机制">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      /* Legacy aliases used in JS inline styles */
+      --grn: #36d986;
+      --red: #ff5c6c;
+      --ylw: #ffd93d;
+      --org: #ff9f43;
+      --pur: #b07aff;
+      --acc: #4da3ff;
+      --cyn: #22d3ee;
+      --tx: #e8edf5;
+      --tx2: #7d8da0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .L {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      grid-template-rows: 1fr auto;
+      height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    .C {
+      grid-row: 1/3;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 18px;
+    }
+
+    .P {
+      grid-column: 2;
+      overflow-y: auto;
+      padding: 18px 22px;
+    }
+
+    .BB {
+      grid-column: 2;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 12px 22px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 0%, #a8c8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 4px;
+    }
+
+    .sub {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      font-weight: 400;
+    }
+
+    .sec {
+      margin-bottom: 16px;
+    }
+
+    .sec-t {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sec-t::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    label {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    input[type=range] {
+      width: 100%;
+      -webkit-appearance: none;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      margin-bottom: 10px;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--accent-blue);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 6px var(--glow-blue);
+    }
+
+    .rv {
+      font-size: 0.68rem;
+      color: var(--accent-blue);
+      font-weight: 700;
+      float: right;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+    }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn:active {
+      transform: translateY(0) scale(0.97);
+    }
+
+    .btn-a {
+      background: linear-gradient(135deg, #1a6ff0, #1f6feb);
+      color: #fff;
+    }
+
+    .btn-r {
+      background: rgba(255, 92, 108, 0.1);
+      border: 1px solid rgba(255, 92, 108, 0.3);
+      color: var(--accent-red);
+    }
+
+    .btn-r:hover {
+      background: rgba(255, 92, 108, 0.18);
+      border-color: rgba(255, 92, 108, 0.5);
+    }
+
+    .btn-g {
+      background: rgba(54, 217, 134, 0.1);
+      border: 1px solid rgba(54, 217, 134, 0.3);
+      color: var(--accent-green);
+    }
+
+    .btn-g:hover {
+      background: rgba(54, 217, 134, 0.18);
+      border-color: rgba(54, 217, 134, 0.5);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .pbtn {
+      padding: 5px 10px;
+      font-size: 0.68rem;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+    }
+
+    .pbtn.on {
+      background: linear-gradient(135deg, #1a6ff0, #1f6feb);
+      border-color: var(--accent-blue);
+      color: #fff;
+      box-shadow: 0 0 12px var(--glow-blue);
+    }
+
+    .sep {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 14px 0;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 10px;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .card h3 {
+      font-size: 0.78rem;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+    }
+
+    .card p {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    .card code {
+      background: var(--bg-elevated);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-size: 0.65rem;
+      color: var(--accent-cyan);
+    }
+
+    .ptx {
+      flex: 1;
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .log {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-size: 0.68rem;
+      max-height: 160px;
+      overflow-y: auto;
+      line-height: 1.7;
+    }
+
+    .log::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .log::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .log::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .log div {
+      animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-4px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    canvas {
+      display: block;
+      border-radius: var(--radius);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .st {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px;
+      text-align: center;
+      transition: border-color 0.3s;
+    }
+
+    .st:hover {
+      border-color: var(--border-hover);
+    }
+
+    .st .n {
+      font-size: 1.1rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+    }
+
+    .st .l {
+      font-size: 0.62rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .phase-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+    }
+
+    .phase {
+      flex: 1;
+      text-align: center;
+      padding: 8px 4px;
+      border-radius: var(--radius-sm);
+      font-size: 0.65rem;
+      font-weight: 600;
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      opacity: 0.25;
+      border: 1px solid transparent;
+    }
+
+    .phase.done {
+      opacity: 0.6;
+    }
+
+    .phase.active {
+      opacity: 1;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 16px var(--glow-blue);
+    }
+
+    /* Scrollbar for sidebar */
+    .C::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .C::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .C::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .P::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .P::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .P::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    /* Light mode overrides for legacy aliases */
+    [data-theme="light"] {
+      --grn: #059669;
+      --red: #dc2626;
+      --ylw: #b45309;
+      --org: #d97706;
+      --pur: #7c3aed;
+      --acc: #2563eb;
+      --cyn: #0891b2;
+      --tx: #111827;
+      --tx2: #4b5563;
+    }
+
+    [data-theme="light"] .log {
+      background: var(--bg-elevated);
+    }
+
+    [data-theme="light"] h1 {
+      background: linear-gradient(135deg, #111827 0%, #2563eb 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    [data-theme="light"] .st {
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    [data-theme="light"] .phase {
+      opacity: 0.4;
+    }
+
+    [data-theme="light"] .phase.active {
+      opacity: 1;
+      box-shadow: 0 0 8px var(--glow-blue);
+    }
+
+    [data-theme="light"] .phase.done {
+      opacity: 0.7;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="L">
+    <div class="C">
+      <h1>Redis Sentinel</h1>
+      <div class="sub">哨兵模式高可用机制演示</div>
+
+      <div class="sec">
+        <div class="sec-t">预设场景</div>
+        <div class="btn-row">
+          <button class="btn pbtn on" onclick="preset('default')">标准 3哨兵</button>
+          <button class="btn pbtn" onclick="preset('five')">5哨兵高可用</button>
+          <button class="btn pbtn" onclick="preset('min')">最小部署</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">集群配置</div>
+        <label>Sentinel 数量 <span class="rv" id="sentV">3</span></label>
+        <input type="range" id="sentN" min="1" max="5" value="3" oninput="onCfg()">
+        <label>Slave 从节点数量 <span class="rv" id="slaveV">2</span></label>
+        <input type="range" id="slaveN" min="1" max="4" value="2" oninput="onCfg()">
+        <label>quorum（确认下线票数）<span class="rv" id="quorumV">2</span></label>
+        <input type="range" id="quorumN" min="1" max="5" value="2" oninput="onCfg()">
+        <label>down-after-milliseconds <span class="rv" id="downV">3s</span></label>
+        <input type="range" id="downN" min="1" max="10" value="3" oninput="onCfg()">
+      </div>
+
+      <div class="sep"></div>
+
+      <div class="sec">
+        <div class="sec-t">模拟故障</div>
+        <div class="btn-row">
+          <button class="btn btn-r" onclick="killMaster()">主节点宕机</button>
+          <button class="btn btn-r" onclick="killSlave()">从节点宕机</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-r" onclick="killSentinel()">哨兵宕机</button>
+          <button class="btn btn-g" onclick="recoverAll()">全部恢复</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-a" onclick="autoDemo()">▶ 自动演示故障转移</button>
+          <button class="btn" onclick="fullReset()">重置</button>
+        </div>
+      </div>
+
+      <div class="sep"></div>
+      <div class="card">
+        <h3>从节点选主优先级</h3>
+        <p>① <code>slave-priority</code> 值最小<br>
+          ② <code>replication offset</code> 最大（数据最新）<br>
+          ③ <code>run_id</code> 字典序最小</p>
+      </div>
+      <div class="card">
+        <h3>Sentinel 核心能力</h3>
+        <p><code>监控</code> PING 心跳检测存活<br>
+          <code>通知</code> 状态变更通知客户端<br>
+          <code>故障转移</code> 自动选主 + 切换<br>
+          <code>配置中心</code> 提供主节点地址
+        </p>
+      </div>
+    </div>
+
+    <div class="P">
+      <!-- Phase bar -->
+      <div class="phase-bar" id="phases">
+        <div class="phase" style="background:#4ecdc420;color:var(--grn)">正常监控</div>
+        <div class="phase" style="background:#ffd93d20;color:var(--ylw)">SDOWN 主观下线</div>
+        <div class="phase" style="background:#ff8c4220;color:var(--org)">ODOWN 客观下线</div>
+        <div class="phase" style="background:#b44dff20;color:var(--pur)">Leader 选举</div>
+        <div class="phase" style="background:#6c7aff20;color:var(--acc)">故障转移</div>
+        <div class="phase" style="background:#4ecdc420;color:var(--grn)">完成恢复</div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats">
+        <div class="st">
+          <div class="n" style="color:var(--grn)" id="stMaster">在线</div>
+          <div class="l">Master</div>
+        </div>
+        <div class="st">
+          <div class="n" style="color:var(--cyn)" id="stSlaves">2/2</div>
+          <div class="l">Slaves</div>
+        </div>
+        <div class="st">
+          <div class="n" style="color:var(--pur)" id="stSent">3/3</div>
+          <div class="l">Sentinels</div>
+        </div>
+        <div class="st">
+          <div class="n" style="color:var(--tx)" id="stEpoch">0</div>
+          <div class="l">Current Epoch</div>
+        </div>
+      </div>
+
+      <!-- Main Canvas -->
+      <canvas id="cv"></canvas>
+
+      <!-- Log -->
+      <div class="log" id="log" style="margin-top:8px"></div>
+    </div>
+
+    <div class="BB">
+      <div class="ptx" id="ptx">Redis Sentinel 哨兵模式 · 3 Sentinel · 1 Master + 2 Slaves · quorum=2</div>
+      <button class="btn btn-a" onclick="copyP()">复制</button>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════ STATE ═══════════════
+    const G = {
+      sentN: 3, slaveN: 2, quorum: 2, downAfter: 3,
+      master: null, slaves: [], sentinels: [],
+      phase: 0, epoch: 0, leader: null,
+      heartbeats: [], // animated packets
+      failoverStep: 0,
+      autoTimer: null, hbTimer: null,
+    };
+
+    function getThemeColors() {
+      const s = getComputedStyle(document.documentElement);
+      const get = v => s.getPropertyValue(v).trim();
+      return {
+        master: get('--red') || '#ff5f6d',
+        slave: get('--grn') || '#4ecdc4',
+        sentinel: get('--pur') || '#b44dff',
+        newMaster: get('--ylw') || '#ffd93d',
+        accent: get('--acc') || '#6c7aff',
+        cyan: get('--cyn') || '#22d3ee',
+        text: get('--tx') || '#e8edf5',
+        textSec: get('--tx2') || '#7d8da0',
+        bg: get('--bg-primary') || '#080b12',
+        border: get('--border') || '#1e2a3a',
+      };
+    }
+    let TC = getThemeColors();
+    new MutationObserver(() => { TC = getThemeColors(); render(); })
+      .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+
+    function initCluster() {
+      G.master = { id: 'M', port: 6379, status: 'online', x: 0, y: 0 };
+      G.slaves = [];
+      for (let i = 0; i < G.slaveN; i++) {
+        G.slaves.push({ id: `S${i + 1}`, port: 6380 + i, status: 'online', priority: 100, offset: 1000 - i * 50, runid: `runid_${String.fromCharCode(97 + i)}`, x: 0, y: 0 });
+      }
+      G.sentinels = [];
+      for (let i = 0; i < G.sentN; i++) {
+        G.sentinels.push({ id: `Sentinel-${i + 1}`, port: 26379 + i, status: 'online', sdown: false, vote: null, isLeader: false, x: 0, y: 0 });
+      }
+      G.phase = 0; G.epoch = 0; G.leader = null; G.heartbeats = []; G.failoverStep = 0;
+    }
+
+    function onCfg() {
+      G.sentN = +document.getElementById('sentN').value;
+      G.slaveN = +document.getElementById('slaveN').value;
+      G.quorum = Math.min(+document.getElementById('quorumN').value, G.sentN);
+      document.getElementById('quorumN').max = G.sentN;
+      document.getElementById('quorumN').value = G.quorum;
+      G.downAfter = +document.getElementById('downN').value;
+      document.getElementById('sentV').textContent = G.sentN;
+      document.getElementById('slaveV').textContent = G.slaveN;
+      document.getElementById('quorumV').textContent = G.quorum;
+      document.getElementById('downV').textContent = G.downAfter + 's';
+      document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+      initCluster(); render();
+    }
+
+    function preset(n) {
+      document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+      event.target.classList.add('on');
+      const p = { default: [3, 2, 2, 3], five: [5, 3, 3, 3], min: [3, 1, 2, 5] }[n];
+      G.sentN = p[0]; G.slaveN = p[1]; G.quorum = p[2]; G.downAfter = p[3];
+      document.getElementById('sentN').value = p[0]; document.getElementById('slaveN').value = p[1];
+      document.getElementById('quorumN').value = p[2]; document.getElementById('quorumN').max = p[0];
+      document.getElementById('downN').value = p[3];
+      document.getElementById('sentV').textContent = p[0]; document.getElementById('slaveV').textContent = p[1];
+      document.getElementById('quorumV').textContent = p[2]; document.getElementById('downV').textContent = p[3] + 's';
+      fullReset();
+    }
+
+    function fullReset() {
+      stopAll(); initCluster(); document.getElementById('log').innerHTML = '';
+      setPhase(0); render();
+    }
+
+    function recoverAll() {
+      stopAll(); initCluster(); addLog('grn', '所有节点已恢复在线'); setPhase(0); render();
+    }
+
+    function stopAll() {
+      if (G.autoTimer) clearTimeout(G.autoTimer); G.autoTimer = null;
+      if (G.hbTimer) clearInterval(G.hbTimer); G.hbTimer = null;
+    }
+
+    // ═══════════════ SIMULATION ═══════════════
+    function killMaster() {
+      if (G.master.status === 'offline') return;
+      G.master.status = 'offline';
+      addLog('red', `Master :${G.master.port} 宕机! 停止响应 PING`);
+      setPhase(0); render();
+    }
+
+    function killSlave() {
+      const alive = G.slaves.filter(s => s.status === 'online');
+      if (!alive.length) return;
+      const t = alive[alive.length - 1];
+      t.status = 'offline';
+      addLog('red', `Slave ${t.id} :${t.port} 宕机`);
+      render();
+    }
+
+    function killSentinel() {
+      const alive = G.sentinels.filter(s => s.status === 'online');
+      if (!alive.length) return;
+      const t = alive[alive.length - 1];
+      t.status = 'offline';
+      addLog('red', `${t.id} :${t.port} 宕机`);
+      render();
+    }
+
+    function autoDemo() {
+      stopAll(); initCluster(); document.getElementById('log').innerHTML = '';
+      setPhase(0); render();
+      addLog('cyn', '▶ 开始自动演示故障转移全流程');
+
+      const q = [];
+      const d = (fn, ms) => q.push({ fn, ms });
+
+      // Phase 0: normal heartbeat
+      d(() => { addLog('grn', 'Sentinel 集群正常监控中，每秒发送 PING 心跳...'); sendHeartbeats(); }, 500);
+      d(() => sendHeartbeats(), 1500);
+      d(() => sendHeartbeats(), 2500);
+
+      // Kill master
+      d(() => { G.master.status = 'offline'; addLog('red', `★ Master :${G.master.port} 突然宕机!`); render(); }, 3500);
+
+      // SDOWN detection
+      d(() => {
+        addLog('ylw', `⏱ 等待 down-after-milliseconds (${G.downAfter}s)...`);
+        sendHeartbeats(); // show failed pings
+      }, 4500);
+
+      d(() => {
+        const s1 = G.sentinels.find(s => s.status === 'online');
+        if (s1) { s1.sdown = true; addLog('ylw', `${s1.id}: Master PING 无响应 → 标记 +sdown (主观下线)`); }
+        setPhase(1); render();
+      }, 5500);
+
+      d(() => {
+        G.sentinels.filter(s => s.status === 'online').forEach(s => s.sdown = true);
+        const cnt = G.sentinels.filter(s => s.sdown).length;
+        addLog('ylw', `所有在线 Sentinel 均标记 Master 为 SDOWN (${cnt}个)`);
+        render();
+      }, 6500);
+
+      // ODOWN
+      d(() => {
+        const cnt = G.sentinels.filter(s => s.sdown && s.status === 'online').length;
+        addLog('org', `★ SDOWN 票数 ${cnt} ≥ quorum ${G.quorum} → 确认 +odown (客观下线)!`);
+        setPhase(2); render();
+      }, 7500);
+
+      // Leader election
+      d(() => {
+        G.epoch++;
+        addLog('pur', `Sentinel 发起 Leader 选举 (epoch: ${G.epoch})...`);
+        setPhase(3); render();
+      }, 8500);
+
+      d(() => {
+        const online = G.sentinels.filter(s => s.status === 'online');
+        const leader = online[0];
+        online.forEach(s => s.vote = leader.id);
+        leader.isLeader = true;
+        G.leader = leader;
+        addLog('pur', `${leader.id} 获得 ${online.length}/${online.length} 票 → 当选 Leader!`);
+        render();
+      }, 9500);
+
+      // Failover: select new master
+      d(() => {
+        setPhase(4);
+        addLog('acc', `★ ${G.leader.id} 开始执行故障转移...`);
+        addLog('acc', '筛选候选从节点: 排除已下线 / 断连过久的从节点');
+        render();
+      }, 10500);
+
+      d(() => {
+        const candidates = G.slaves.filter(s => s.status === 'online');
+        candidates.sort((a, b) => a.priority - b.priority || b.offset - a.offset || a.runid.localeCompare(b.runid));
+        let explain = candidates.map(s => `${s.id}(pri=${s.priority}, offset=${s.offset})`).join(' > ');
+        addLog('acc', `排序: ${explain}`);
+        addLog('acc', `选定 ${candidates[0].id} 为新 Master (priority=${candidates[0].priority}, offset=${candidates[0].offset})`);
+        render();
+      }, 11500);
+
+      d(() => {
+        const candidates = G.slaves.filter(s => s.status === 'online');
+        candidates.sort((a, b) => a.priority - b.priority || b.offset - a.offset || a.runid.localeCompare(b.runid));
+        const newM = candidates[0];
+        addLog('acc', `向 ${newM.id} 发送 SLAVEOF NO ONE → 晋升为 Master`);
+        newM.role = 'master';
+        render();
+      }, 12500);
+
+      d(() => {
+        const candidates = G.slaves.filter(s => s.status === 'online');
+        candidates.sort((a, b) => a.priority - b.priority || b.offset - a.offset || a.runid.localeCompare(b.runid));
+        const newM = candidates[0];
+        const others = candidates.slice(1);
+        if (others.length) addLog('acc', `向其他从节点发送 SLAVEOF ${newM.id} :${newM.port}`);
+        addLog('acc', '通知客户端新 Master 地址 (通过 Pub/Sub +switch-master)');
+
+        // Swap: make newM the master
+        G.master = { id: newM.id, port: newM.port, status: 'online', x: 0, y: 0, isNew: true };
+        G.slaves = G.slaves.filter(s => s.id !== newM.id);
+        // Old master becomes slave (for later recovery)
+        G.slaves.push({ id: 'M(旧)', port: 6379, status: 'offline', priority: 100, offset: 0, runid: 'old', x: 0, y: 0 });
+        render();
+      }, 13500);
+
+      d(() => {
+        setPhase(5);
+        G.sentinels.forEach(s => { s.sdown = false; s.vote = null; s.isLeader = false; });
+        addLog('grn', '✅ 故障转移完成! 新 Master 开始服务，集群恢复正常');
+        render();
+      }, 14500);
+
+      d(() => sendHeartbeats(), 15500);
+
+      // Execute queue
+      let idx = 0;
+      function tick() {
+        if (idx >= q.length) return;
+        const item = q[idx]; idx++;
+        G.autoTimer = setTimeout(() => { item.fn(); tick(); }, idx === 1 ? item.ms : (q[idx - 1].ms - (idx > 1 ? q[idx - 2].ms : 0)));
+      }
+      // Use absolute delays
+      q.forEach((item, i) => {
+        G.autoTimer = setTimeout(item.fn, item.ms);
+      });
+    }
+
+    function sendHeartbeats() {
+      G.heartbeats = [];
+      const online = G.sentinels.filter(s => s.status === 'online');
+      // Sentinel → Master PING
+      online.forEach(s => {
+        G.heartbeats.push({ from: s, to: G.master, type: 'PING', progress: 0, fail: G.master.status === 'offline' });
+      });
+      // Sentinel → Slaves PING
+      online.forEach(s => {
+        G.slaves.filter(sl => sl.status === 'online').forEach(sl => {
+          G.heartbeats.push({ from: s, to: sl, type: 'PING', progress: 0, fail: false });
+        });
+      });
+      animateHeartbeats();
+    }
+
+    function animateHeartbeats() {
+      const start = performance.now();
+      const dur = 800;
+      function tick(now) {
+        const t = Math.min(1, (now - start) / dur);
+        G.heartbeats.forEach(h => h.progress = t);
+        render();
+        if (t < 1) requestAnimationFrame(tick);
+        else G.heartbeats = [];
+      }
+      requestAnimationFrame(tick);
+    }
+
+    // ═══════════════ RENDERING ═══════════════
+    function setPhase(p) {
+      G.phase = p;
+      const els = document.querySelectorAll('.phase');
+      els.forEach((el, i) => {
+        el.classList.remove('active', 'done');
+        if (i < p) el.classList.add('done');
+        else if (i === p) el.classList.add('active');
+      });
+    }
+
+    function render() {
+      renderStats();
+      drawCanvas();
+      updatePrompt();
+    }
+
+    function renderStats() {
+      document.getElementById('stMaster').textContent = G.master.status === 'online' ? '在线' : '宕机';
+      document.getElementById('stMaster').style.color = G.master.status === 'online' ? 'var(--grn)' : 'var(--red)';
+      const sa = G.slaves.filter(s => s.status === 'online').length;
+      document.getElementById('stSlaves').textContent = `${sa}/${G.slaves.length}`;
+      const sea = G.sentinels.filter(s => s.status === 'online').length;
+      document.getElementById('stSent').textContent = `${sea}/${G.sentinels.length}`;
+      document.getElementById('stEpoch').textContent = G.epoch;
+    }
+
+    function drawCanvas() {
+      const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+      // Auto-size canvas to container
+      const container = cv.parentElement;
+      const dpr = window.devicePixelRatio || 1;
+      const w = container.clientWidth - 44;
+      const h = 370;
+      cv.style.width = w + 'px';
+      cv.style.height = h + 'px';
+      cv.width = w * dpr;
+      cv.height = h * dpr;
+      ctx.scale(dpr, dpr);
+      const W = w, H = h;
+      TC = getThemeColors();
+      ctx.clearRect(0, 0, W, H);
+
+      // Layout positions — center horizontally with room for client on right
+      const cx = Math.min(W * 0.38, 360), cy = 130, masterR = 32;
+      G.master.x = cx; G.master.y = cy;
+
+      // Slaves around master (right side)
+      const slaveR = 24;
+      G.slaves.forEach((s, i) => {
+        const angle = -Math.PI / 3 + (i / (Math.max(G.slaves.length - 1, 1))) * (2 * Math.PI / 3);
+        s.x = cx + 140 * Math.cos(angle);
+        s.y = cy + 110 * Math.sin(angle);
+      });
+
+      // Sentinels (top area)
+      const sentY = cy - 120;
+      G.sentinels.forEach((s, i) => {
+        const total = G.sentinels.length;
+        s.x = cx - (total - 1) * 55 / 2 + i * 55;
+        s.y = sentY;
+      });
+
+      // Draw replication lines: master → slaves
+      G.slaves.forEach(s => {
+        if (s.status === 'offline' && s.id.includes('旧')) return;
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = s.status === 'online' ? (G.master.status === 'online' ? TC.slave + '50' : TC.master + '30') : TC.master + '30';
+        ctx.lineWidth = 1.5;
+        ctx.moveTo(G.master.x, G.master.y + masterR);
+        ctx.lineTo(s.x, s.y - slaveR);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (s.status === 'online' && G.master.status === 'online') {
+          const mx = (G.master.x + s.x) / 2, my = (G.master.y + masterR + s.y - slaveR) / 2;
+          ctx.font = '8px SF Mono,monospace';
+          ctx.fillStyle = TC.slave + '60';
+          ctx.textAlign = 'center';
+          ctx.fillText('SYNC', mx + 15, my);
+        }
+      });
+
+      // Draw monitoring lines: sentinel → master
+      G.sentinels.forEach(s => {
+        if (s.status === 'offline') return;
+        ctx.beginPath();
+        ctx.setLineDash([2, 3]);
+        ctx.strokeStyle = s.sdown ? TC.master + '40' : TC.sentinel + '25';
+        ctx.lineWidth = 1;
+        ctx.moveTo(s.x, s.y + 16);
+        ctx.lineTo(G.master.x, G.master.y - masterR);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
+
+      // Draw heartbeat packets
+      G.heartbeats.forEach(hb => {
+        if (!hb.from.x || !hb.to.x) return;
+        const t = hb.progress;
+        const px = hb.from.x + (hb.to.x - hb.from.x) * t;
+        const py = hb.from.y + (hb.to.y - hb.from.y) * t;
+        ctx.beginPath();
+        ctx.arc(px, py, 4, 0, Math.PI * 2);
+        ctx.fillStyle = hb.fail ? TC.master : TC.newMaster;
+        ctx.fill();
+        if (hb.fail && t > 0.7) {
+          ctx.font = 'bold 9px SF Mono,monospace';
+          ctx.fillStyle = TC.master;
+          ctx.textAlign = 'center';
+          ctx.fillText('✗', px + 10, py - 4);
+        }
+      });
+
+      // Draw Master node
+      drawNode(ctx, G.master.x, G.master.y, masterR, G.master.status === 'online' ? (G.master.isNew ? TC.newMaster : TC.master) : TC.master,
+        G.master.isNew ? 'NEW MASTER' : 'MASTER', `:${G.master.port}`, G.master.status, G.master.isNew);
+
+      // Draw Slave nodes
+      G.slaves.forEach(s => {
+        if (s.id.includes('旧') && s.status === 'offline') {
+          drawNode(ctx, s.x, s.y, 20, TC.master, '旧Master', `:${s.port}`, s.status, false);
+          return;
+        }
+        const isPromoted = s.role === 'master';
+        drawNode(ctx, s.x, s.y, slaveR, isPromoted ? TC.newMaster : TC.slave,
+          isPromoted ? 'NEW MASTER' : `SLAVE ${s.id}`, `:${s.port}`, s.status, isPromoted);
+        if (s.status === 'online') {
+          ctx.font = '8px SF Mono,monospace';
+          ctx.fillStyle = TC.textSec + '80';
+          ctx.textAlign = 'center';
+          ctx.fillText(`pri=${s.priority} off=${s.offset}`, s.x, s.y + slaveR + 22);
+        }
+      });
+
+      // Draw Sentinel nodes
+      G.sentinels.forEach(s => {
+        const r = 16;
+        const col = s.status === 'offline' ? TC.master : s.isLeader ? TC.newMaster : TC.sentinel;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y - r); ctx.lineTo(s.x + r, s.y); ctx.lineTo(s.x, s.y + r); ctx.lineTo(s.x - r, s.y); ctx.closePath();
+        if (s.status === 'offline') {
+          ctx.fillStyle = TC.master + '15'; ctx.fill();
+          ctx.strokeStyle = TC.master + '60'; ctx.lineWidth = 1.5; ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(s.x - 6, s.y - 6); ctx.lineTo(s.x + 6, s.y + 6);
+          ctx.moveTo(s.x + 6, s.y - 6); ctx.lineTo(s.x - 6, s.y + 6);
+          ctx.strokeStyle = TC.master; ctx.lineWidth = 2; ctx.stroke();
+        } else {
+          if (s.isLeader) {
+            ctx.shadowColor = TC.newMaster; ctx.shadowBlur = 12;
+          }
+          ctx.fillStyle = col + '20'; ctx.fill();
+          ctx.strokeStyle = col; ctx.lineWidth = s.isLeader ? 2.5 : 1.5; ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+        ctx.font = `${s.isLeader ? 'bold ' : ''}9px -apple-system,sans-serif`;
+        ctx.fillStyle = s.status === 'offline' ? TC.master + '60' : col;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(s.isLeader ? 'Leader' : 'S' + (G.sentinels.indexOf(s) + 1), s.x, s.y);
+        ctx.textBaseline = 'alphabetic';
+        ctx.font = '8px SF Mono,monospace';
+        ctx.fillStyle = TC.textSec + '70';
+        ctx.fillText(`:${s.port}`, s.x, s.y + r + 10);
+        if (s.sdown && s.status === 'online') {
+          ctx.font = 'bold 8px SF Mono,monospace';
+          ctx.fillStyle = TC.newMaster;
+          ctx.fillText('SDOWN', s.x, s.y - r - 5);
+        }
+        if (s.vote && s.status === 'online') {
+          ctx.font = '7px SF Mono,monospace';
+          ctx.fillStyle = TC.sentinel + '80';
+          ctx.fillText(`vote→${s.vote}`, s.x, s.y + r + 20);
+        }
+      });
+
+      // Draw client
+      const clx = cx + 280, cly = cy;
+      ctx.beginPath();
+      rr(ctx, clx - 22, cly - 16, 44, 32, 6);
+      ctx.fillStyle = TC.accent + '15'; ctx.fill();
+      ctx.strokeStyle = TC.accent + '50'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.font = '10px -apple-system,sans-serif'; ctx.fillStyle = TC.accent;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('Client', clx, cly);
+      ctx.textBaseline = 'alphabetic';
+      ctx.beginPath(); ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = G.master.status === 'online' ? TC.accent + '40' : TC.master + '30';
+      ctx.moveTo(clx - 22, cly); ctx.lineTo(G.master.x + masterR + 4, G.master.y);
+      ctx.stroke(); ctx.setLineDash([]);
+      const nearestSent = G.sentinels.find(s => s.status === 'online');
+      if (nearestSent) {
+        ctx.beginPath(); ctx.setLineDash([2, 4]); ctx.strokeStyle = TC.sentinel + '25';
+        ctx.moveTo(clx, cly - 16); ctx.lineTo(nearestSent.x + 20, nearestSent.y + 16);
+        ctx.stroke(); ctx.setLineDash([]);
+        ctx.font = '7px SF Mono,monospace'; ctx.fillStyle = TC.sentinel + '50'; ctx.textAlign = 'center';
+        ctx.fillText('get-master-addr', (clx + nearestSent.x + 20) / 2, (cly - 16 + nearestSent.y + 16) / 2 - 4);
+      }
+
+      // Legend
+      const ly = H - 25;
+      const legs = [[TC.master, 'Master'], [TC.slave, 'Slave'], [TC.sentinel, 'Sentinel'], [TC.newMaster, '新Master/Leader'], [TC.accent, 'Client']];
+      legs.forEach(([c, l], i) => {
+        const lx = 20 + i * 110;
+        ctx.fillStyle = c; ctx.fillRect(lx, ly, 8, 8);
+        ctx.font = '9px -apple-system,sans-serif'; ctx.fillStyle = TC.textSec; ctx.textAlign = 'left';
+        ctx.fillText(l, lx + 12, ly + 8);
+      });
+    }
+
+    function drawNode(ctx, x, y, r, color, label, portLabel, status, glow) {
+      if (glow && status === 'online') {
+        ctx.beginPath(); ctx.arc(x, y, r + 8, 0, Math.PI * 2);
+        const g = ctx.createRadialGradient(x, y, r, x, y, r + 8);
+        g.addColorStop(0, color + '30'); g.addColorStop(1, 'transparent');
+        ctx.fillStyle = g; ctx.fill();
+      }
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      if (status === 'offline') {
+        ctx.fillStyle = TC.master + '12'; ctx.fill();
+        ctx.strokeStyle = TC.master + '60'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x - r * 0.4, y - r * 0.4); ctx.lineTo(x + r * 0.4, y + r * 0.4);
+        ctx.moveTo(x + r * 0.4, y - r * 0.4); ctx.lineTo(x - r * 0.4, y + r * 0.4);
+        ctx.strokeStyle = TC.master; ctx.lineWidth = 2.5; ctx.stroke();
+      } else {
+        ctx.fillStyle = color + '18'; ctx.fill();
+        ctx.strokeStyle = color; ctx.lineWidth = glow ? 2.5 : 2; ctx.stroke();
+      }
+      ctx.font = `bold ${r > 28 ? 12 : 10}px -apple-system,sans-serif`;
+      ctx.fillStyle = status === 'offline' ? TC.master + '80' : color;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, x, y);
+      ctx.textBaseline = 'alphabetic';
+      ctx.font = '9px SF Mono,monospace'; ctx.fillStyle = TC.textSec + '80';
+      ctx.fillText(portLabel, x, y + r + 12);
+    }
+
+    function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+    function addLog(type, msg) {
+      const el = document.getElementById('log');
+      const t = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+      const colorMap = { grn: 'var(--grn)', red: 'var(--red)', ylw: 'var(--ylw)', org: 'var(--org)', pur: 'var(--pur)', acc: 'var(--acc)', cyn: 'var(--cyn)' };
+      el.innerHTML += `<div><span style="color:var(--tx2)">[${t}]</span> <span style="color:${colorMap[type] || 'var(--tx)'}">${msg}</span></div>`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function updatePrompt() {
+      const parts = [`Redis Sentinel · ${G.sentN} 哨兵 · 1主${G.slaveN}从 · quorum=${G.quorum}`];
+      parts.push(`down-after=${G.downAfter}s`);
+      const phases = ['正常', 'SDOWN', 'ODOWN', '选举中', '故障转移', '已恢复'];
+      parts.push(`状态: ${phases[G.phase]}`);
+      if (G.master.status === 'offline') parts.push('Master 宕机');
+      if (G.leader) parts.push(`Leader: ${G.leader.id}`);
+      document.getElementById('ptx').textContent = parts.join(' · ');
+    }
+
+    function copyP() {
+      navigator.clipboard.writeText(document.getElementById('ptx').textContent).then(() => {
+        const b = event.target; b.textContent = '已复制!'; setTimeout(() => b.textContent = '复制', 1500);
+      });
+    }
+
+    // Init
+    initCluster(); render();
+    window.addEventListener('resize', () => render());
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

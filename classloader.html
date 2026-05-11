@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Java 双亲委派模型</title>
+  <meta name="description" content="交互式可视化 Java 类加载机制，演示双亲委派模型、Bootstrap/Extension/Application 类加载器的委派与加载过程">
+  <meta name="keywords" content="Java, 类加载器, 双亲委派, ClassLoader, Bootstrap, 类加载机制, JVM">
+  <meta property="og:title" content="Java 双亲委派模型">
+  <meta property="og:description" content="交互式可视化 Java 类加载机制，演示双亲委派模型、Bootstrap/Extension/Application 类加载器的委派与加载过程">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      /* Legacy aliases used in JS/inline styles */
+      --bg: #080b12;
+      --s1: #0f1319;
+      --s2: #161c26;
+      --bd: #1e2a3a;
+      --tx: #e8edf5;
+      --tx2: #7d8da0;
+      --acc: #4da3ff;
+      --red: #ff5c6c;
+      --grn: #36d986;
+      --ylw: #ff9f43;
+      --org: #ff9f43;
+      --cyn: #22d3ee;
+      --pur: #b07aff;
+      --r: 8px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .L {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      grid-template-rows: 1fr auto;
+      height: 100vh;
+    }
+
+    .C {
+      grid-row: 1/3;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 18px 16px;
+    }
+
+    .C::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .C::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .C::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .P {
+      grid-column: 2;
+      overflow-y: auto;
+      padding: 18px 22px;
+    }
+
+    .P::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .P::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .P::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .BB {
+      grid-column: 2;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 12px 22px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+      background: linear-gradient(135deg, #fff 0%, #a8c8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .sub {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      font-weight: 400;
+    }
+
+    .sec {
+      margin-bottom: 14px;
+    }
+
+    .sec-t {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sec-t::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    label {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      display: block;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      font-weight: 500;
+    }
+
+    select {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      margin-bottom: 8px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    input[type=text] {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      margin-bottom: 8px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type=text]:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    input[type=range] {
+      width: 100%;
+      -webkit-appearance: none;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      margin-bottom: 8px;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--accent-blue);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 8px var(--glow-blue);
+    }
+
+    .rv {
+      font-size: 0.68rem;
+      color: var(--accent-blue);
+      font-weight: 600;
+      float: right;
+    }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      border-color: var(--border-hover);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-a {
+      background: linear-gradient(135deg, #1a6ff0, #1f6feb);
+      border: none;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .btn-a:hover {
+      background: linear-gradient(135deg, #2d7ff9, #388bfd);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .pbtn {
+      padding: 4px 10px;
+      font-size: 0.65rem;
+      border-radius: 14px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+
+    .pbtn.on {
+      background: linear-gradient(135deg, rgba(77, 163, 255, 0.15), rgba(77, 163, 255, 0.05));
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+      box-shadow: 0 0 12px var(--glow-blue);
+      position: relative;
+    }
+
+    .pbtn.on::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--accent-blue);
+      border-radius: 2px 0 0 2px;
+    }
+
+    .sep {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 14px 0;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.3s;
+    }
+
+    .card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .card h3 {
+      font-size: 0.78rem;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+    }
+
+    .card p {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    .card code {
+      background: var(--bg-elevated);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-size: 0.65rem;
+      color: var(--accent-cyan);
+      border: 1px solid var(--border);
+    }
+
+    .ptx {
+      flex: 1;
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 2px;
+      margin-bottom: 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 4px;
+    }
+
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 8px 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.2s;
+    }
+
+    .tab.on {
+      background: linear-gradient(135deg, rgba(77, 163, 255, 0.15), rgba(77, 163, 255, 0.05));
+      color: var(--accent-blue);
+      border: 1px solid var(--accent-blue);
+      box-shadow: 0 0 16px var(--glow-blue);
+    }
+
+    .tab:hover:not(.on) {
+      color: var(--text-primary);
+      background: var(--bg-elevated);
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.on {
+      display: block;
+    }
+
+    canvas {
+      display: block;
+      border-radius: var(--radius);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+    }
+
+    .log {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.68rem;
+      max-height: 150px;
+      overflow-y: auto;
+      line-height: 1.7;
+    }
+
+    .log::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .log::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .log::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    /* Light mode overrides */
+    [data-theme="light"] {
+      --bg: #f7f8fb;
+      --s1: #ffffff;
+      --s2: #f0f3f8;
+      --bd: #d4dae5;
+      --tx: #111827;
+      --tx2: #4b5563;
+      --acc: #2563eb;
+      --red: #dc2626;
+      --grn: #059669;
+      --ylw: #d97706;
+      --org: #d97706;
+      --cyn: #0891b2;
+      --pur: #7c3aed;
+    }
+
+    [data-theme="light"] canvas {
+      background: #ffffff;
+      border-color: #e5e7eb;
+    }
+
+    [data-theme="light"] .log {
+      background: #f0f3f8;
+      border-color: #d4dae5;
+    }
+
+    [data-theme="light"] h1 {
+      background: linear-gradient(135deg, #1f2937 0%, #2563eb 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    [data-theme="light"] .btn:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    [data-theme="light"] .BB {
+      background: #ffffff;
+      border-top-color: #e5e7eb;
+    }
+
+    [data-theme="light"] .tabs {
+      background: #ffffff;
+      border-color: #e5e7eb;
+    }
+
+    [data-theme="light"] .tab.on {
+      background: rgba(37, 99, 235, 0.06);
+      border-color: #2563eb;
+      color: #2563eb;
+      box-shadow: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="L">
+    <div class="C">
+      <h1>双亲委派模型</h1>
+      <div class="sub">Parent Delegation Model 交互演示</div>
+
+      <div class="sec">
+        <div class="sec-t">快速类名预设</div>
+        <div class="btn-row">
+          <button class="btn pbtn on" onclick="presetCls('java.lang.String')">String</button>
+          <button class="btn pbtn" onclick="presetCls('java.lang.Object')">Object</button>
+          <button class="btn pbtn" onclick="presetCls('javax.crypto.Cipher')">Cipher</button>
+          <button class="btn pbtn" onclick="presetCls('com.mysql.jdbc.Driver')">JDBC</button>
+          <button class="btn pbtn" onclick="presetCls('com.example.MyApp')">自定义类</button>
+          <button class="btn pbtn" onclick="presetCls('org.apache.catalina.WebApp')">Tomcat</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">输入全限定类名</div>
+        <input type="text" id="clsInput" value="java.lang.String" oninput="onClsChange()">
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">委派模式</div>
+        <select id="modeSelect" onchange="onClsChange()">
+          <option value="normal">标准双亲委派</option>
+          <option value="spi">SPI 打破委派 (Thread ContextClassLoader)</option>
+          <option value="tomcat">Tomcat 打破委派 (子优先加载)</option>
+        </select>
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">动画控制</div>
+        <label>速度 <span class="rv" id="spdV">1x</span></label>
+        <input type="range" id="spd" min="0.5" max="4" step="0.5" value="1"
+          oninput="document.getElementById('spdV').textContent=this.value+'x'">
+        <div class="btn-row">
+          <button class="btn btn-a" onclick="runAnimation()" id="runBtn">▶ 加载该类</button>
+          <button class="btn" onclick="resetAnim()">重置</button>
+        </div>
+      </div>
+
+      <div class="sep"></div>
+
+      <div class="card">
+        <h3>加载器层级</h3>
+        <p><code>Bootstrap</code> → <code>JAVA_HOME/lib</code> (rt.jar)<br>
+          <code>Extension</code> → <code>JAVA_HOME/lib/ext</code><br>
+          <code>Application</code> → <code>-classpath</code> / <code>CLASSPATH</code><br>
+          <code>Custom</code> → 自定义路径 / 网络 / 动态生成
+        </p>
+      </div>
+      <div class="card">
+        <h3>核心规则</h3>
+        <p>① 收到加载请求，<strong>先委派给父加载器</strong><br>
+          ② 父加载器递归向上委派直到 Bootstrap<br>
+          ③ 父加载器能加载则返回<br>
+          ④ 父加载器无法加载，才由当前加载器尝试</p>
+      </div>
+    </div>
+
+    <div class="P">
+      <div class="tabs">
+        <div class="tab on" onclick="switchTab('delegation')">委派过程</div>
+        <div class="tab" onclick="switchTab('source')">loadClass 源码</div>
+        <div class="tab" onclick="switchTab('break')">打破双亲委派</div>
+      </div>
+
+      <div class="panel on" id="tab-delegation">
+        <canvas id="cv" width="890" height="490"></canvas>
+        <div class="log" id="log" style="margin-top:8px"></div>
+      </div>
+
+      <div class="panel" id="tab-source">
+        <div id="sourceView"></div>
+      </div>
+
+      <div class="panel" id="tab-break">
+        <div id="breakView"></div>
+      </div>
+    </div>
+
+    <div class="BB">
+      <div class="ptx" id="ptx">输入类名，点击「加载该类」观察双亲委派的完整委派链路。</div>
+      <button class="btn btn-a" onclick="copyP()">复制</button>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════ THEME-AWARE COLORS ═══════════════
+    function isLightMode() { return document.documentElement.getAttribute('data-theme') === 'light'; }
+    function tc() {
+      if (isLightMode()) return {
+        boxBg: '#f0f3f8', boxBorder: '#d4dae5', title: '#1f2937', sub: '#6b7280',
+        pathText: '#9ca3af80', linkStroke: '#c8d0dc60', linkLabel: '#9ca3af40',
+        infoBg: '#f0f3f8', infoStroke: '#d4dae5', reasonDesc: '#6b728080'
+      };
+      return {
+        boxBg: '#1a1d27', boxBorder: '#2e3348', title: '#e2e4ed', sub: '#8b90a5',
+        pathText: '#8b90a560', linkStroke: '#2e334860', linkLabel: '#8b90a540',
+        infoBg: '#1a1d27', infoStroke: '#2e3348', reasonDesc: '#8b90a580'
+      };
+    }
+
+    // ═══════════════ CLASSLOADER DATA ═══════════════
+    const LOADERS = [
+      {
+        id: 'bootstrap', name: 'Bootstrap ClassLoader', sub: 'C++ 实现 · JVM 内置', color: '#ff5f6d',
+        path: 'JAVA_HOME/lib/ (rt.jar, charsets.jar ...)',
+        packages: ['java.', 'javax.swing.', 'javax.net.', 'sun.', 'jdk.']
+      },
+      {
+        id: 'extension', name: 'Extension ClassLoader', sub: 'sun.misc.Launcher$ExtClassLoader', color: '#ffd93d',
+        path: 'JAVA_HOME/lib/ext/ (*.jar)',
+        packages: ['javax.crypto.', 'javax.xml.', 'javax.security.', 'org.w3c.', 'org.xml.']
+      },
+      {
+        id: 'application', name: 'Application ClassLoader', sub: 'sun.misc.Launcher$AppClassLoader', color: '#4ecdc4',
+        path: '-classpath / CLASSPATH 指定的路径',
+        packages: ['com.example.', 'com.mysql.', 'org.springframework.', 'com.google.']
+      },
+      {
+        id: 'custom', name: 'Custom ClassLoader', sub: '用户自定义 (extends ClassLoader)', color: '#b44dff',
+        path: '自定义路径 / 网络 / 动态生成',
+        packages: ['org.apache.catalina.', 'plugin.', 'dynamic.']
+      },
+    ];
+
+    function resolveLoader(className, mode) {
+      // Returns: { loadedBy, chain }
+      // chain: [{loader, action:'delegate'|'try'|'success'|'fail'}]
+      const chain = [];
+
+      if (mode === 'tomcat' && !className.startsWith('java.') && !className.startsWith('javax.') && !className.startsWith('sun.')) {
+        // Tomcat: child-first for webapp classes
+        chain.push({ loader: 3, action: 'receive', msg: `Custom (WebAppClassLoader) 收到加载请求: ${className}` });
+        chain.push({ loader: 3, action: 'try', msg: 'Tomcat 模式: 先自己尝试加载（打破委派！）' });
+        if (matchLoader(className, 3)) {
+          chain.push({ loader: 3, action: 'success', msg: `Custom 在 WEB-INF/classes 中找到 → 加载成功!` });
+          return { loadedBy: 3, chain };
+        }
+        chain.push({ loader: 3, action: 'fail', msg: 'Custom 未找到 → 回退到标准委派' });
+        // Fall through to normal delegation
+      }
+
+      if (mode === 'spi' && className.startsWith('com.mysql.')) {
+        // SPI: Bootstrap loads interface, then uses Thread ContextClassLoader for implementation
+        chain.push({ loader: 0, action: 'receive', msg: `Bootstrap 加载 SPI 接口 (java.sql.Driver)` });
+        chain.push({ loader: 0, action: 'success', msg: 'Bootstrap 成功加载接口' });
+        chain.push({ loader: 0, action: 'spi', msg: '★ SPI: 接口需要加载实现类，但 Bootstrap 看不到 classpath!' });
+        chain.push({ loader: 0, action: 'spi', msg: '★ 通过 Thread.currentThread().getContextClassLoader() 获取 AppClassLoader' });
+        chain.push({ loader: 2, action: 'receive', msg: `AppClassLoader (ContextClassLoader) 加载实现类: ${className}` });
+        chain.push({ loader: 2, action: 'try', msg: 'AppClassLoader 在 classpath 中搜索...' });
+        chain.push({ loader: 2, action: 'success', msg: `找到 ${className} → 加载成功! (打破了委派方向)` });
+        return { loadedBy: 2, chain };
+      }
+
+      // Standard parent delegation
+      const startLoader = (mode === 'tomcat' && !className.startsWith('java.')) ? 2 : getStartLoader(className);
+
+      for (let i = startLoader; i >= 0; i--) {
+        // Receive at start loader, delegate upward
+        if (i === startLoader) {
+          chain.push({ loader: i, action: 'receive', msg: `${LOADERS[i].name} 收到加载请求: ${className}` });
+        }
+        if (i > 0) {
+          chain.push({ loader: i, action: 'delegate', msg: `委派给父加载器: ${LOADERS[i - 1].name}` });
+          chain.push({ loader: i - 1, action: 'receive', msg: `${LOADERS[i - 1].name} 收到委派请求` });
+        }
+      }
+
+      // Try loading from top (Bootstrap) down
+      for (let i = 0; i <= startLoader; i++) {
+        chain.push({ loader: i, action: 'try', msg: `${LOADERS[i].name} 尝试在 ${LOADERS[i].path} 中加载...` });
+        if (matchLoader(className, i)) {
+          chain.push({ loader: i, action: 'success', msg: `✓ ${LOADERS[i].name} 成功加载 ${className}!` });
+          return { loadedBy: i, chain };
+        }
+        chain.push({ loader: i, action: 'fail', msg: `✗ ${LOADERS[i].name} 未找到，回退给子加载器` });
+      }
+
+      chain.push({ loader: startLoader, action: 'error', msg: `ClassNotFoundException: ${className}` });
+      return { loadedBy: -1, chain };
+    }
+
+    function getStartLoader(className) {
+      // Determine which loader receives the initial request
+      for (let i = LOADERS.length - 1; i >= 0; i--) {
+        if (LOADERS[i].packages.some(p => className.startsWith(p))) return Math.min(i + 1, LOADERS.length - 1);
+      }
+      return LOADERS.length - 1; // default: custom/application
+    }
+
+    function matchLoader(className, loaderIdx) {
+      return LOADERS[loaderIdx].packages.some(p => className.startsWith(p));
+    }
+
+    // ═══════════════ STATE ═══════════════
+    let S = { animStep: -1, animSteps: [], result: null, running: false, activeTab: 'delegation' };
+    let animTimer = null;
+
+    function onClsChange() {
+      document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+      resetAnim();
+    }
+
+    function presetCls(cls) {
+      document.querySelectorAll('.pbtn').forEach(b => b.classList.remove('on'));
+      event.target.classList.add('on');
+      document.getElementById('clsInput').value = cls;
+      // Auto-set mode for special presets
+      if (cls === 'com.mysql.jdbc.Driver') document.getElementById('modeSelect').value = 'spi';
+      else if (cls === 'org.apache.catalina.WebApp') document.getElementById('modeSelect').value = 'tomcat';
+      else document.getElementById('modeSelect').value = 'normal';
+      resetAnim();
+    }
+
+    function resetAnim() {
+      if (animTimer) clearTimeout(animTimer);
+      S.animStep = -1; S.running = false; S.animSteps = []; S.result = null;
+      document.getElementById('runBtn').textContent = '▶ 加载该类';
+      document.getElementById('runBtn').disabled = false;
+      document.getElementById('log').innerHTML = '';
+      draw(); updatePrompt();
+    }
+
+    function runAnimation() {
+      if (S.running) return;
+      const cls = document.getElementById('clsInput').value.trim();
+      if (!cls) return;
+      const mode = document.getElementById('modeSelect').value;
+      S.result = resolveLoader(cls, mode);
+      S.animSteps = S.result.chain;
+      S.animStep = -1;
+      S.running = true;
+      document.getElementById('runBtn').textContent = '⏳ 加载中...';
+      document.getElementById('runBtn').disabled = true;
+      document.getElementById('log').innerHTML = '';
+
+      const speed = +document.getElementById('spd').value;
+      const interval = 700 / speed;
+
+      function tick() {
+        S.animStep++;
+        if (S.animStep >= S.animSteps.length) {
+          S.running = false;
+          document.getElementById('runBtn').textContent = '▶ 加载该类';
+          document.getElementById('runBtn').disabled = false;
+          draw(); updatePrompt();
+          return;
+        }
+        const step = S.animSteps[S.animStep];
+        addLog(step);
+        draw();
+        animTimer = setTimeout(tick, interval);
+      }
+      tick();
+    }
+
+    function addLog(step) {
+      const el = document.getElementById('log');
+      const colors = { receive: '#00d2ff', delegate: '#ffd93d', try: '#6c7aff', success: '#4ecdc4', fail: '#ff5f6d', error: '#ff5f6d', spi: '#b44dff' };
+      const col = colors[step.action] || 'var(--text-primary)';
+      const indent = step.action === 'delegate' ? '  ↑ ' : step.action === 'fail' ? '  ↓ ' : '    ';
+      el.innerHTML += `<div style="color:${col}">${indent}${step.msg}</div>`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // ═══════════════ CANVAS DRAWING ═══════════════
+    function draw() {
+      const cv = document.getElementById('cv'), ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
+      ctx.clearRect(0, 0, W, H);
+
+      const boxW = 220, boxH = 72, gap = 18;
+      const startX = 60, totalH = LOADERS.length * (boxH + gap) - gap;
+      const startY = (H - totalH) / 2;
+
+      // Current step info
+      const curStep = S.animStep >= 0 && S.animStep < S.animSteps.length ? S.animSteps[S.animStep] : null;
+
+      // Determine states for each loader
+      const loaderStates = LOADERS.map(() => 'idle'); // idle, active, success, fail, delegate
+      if (S.animSteps.length > 0) {
+        for (let i = 0; i <= Math.min(S.animStep, S.animSteps.length - 1); i++) {
+          const step = S.animSteps[i];
+          if (step.action === 'success') loaderStates[step.loader] = 'success';
+          else if (step.action === 'error') loaderStates[step.loader] = 'fail';
+          else if (step.action === 'fail') loaderStates[step.loader] = 'fail';
+        }
+        if (curStep) {
+          if (curStep.action !== 'fail' && curStep.action !== 'success' && curStep.action !== 'error') {
+            loaderStates[curStep.loader] = 'active';
+          }
+        }
+      }
+
+      // Draw parent links
+      const _tc = tc();
+      for (let i = 1; i < LOADERS.length; i++) {
+        const y1 = startY + (i - 1) * (boxH + gap) + boxH;
+        const y2 = startY + i * (boxH + gap);
+        const x = startX + boxW / 2;
+        ctx.beginPath();
+        ctx.strokeStyle = _tc.linkStroke;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        ctx.moveTo(x, y1); ctx.lineTo(x, y2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // "parent" label
+        ctx.font = '8px -apple-system,sans-serif';
+        ctx.fillStyle = _tc.linkLabel;
+        ctx.textAlign = 'center';
+        ctx.fillText('parent', x + 20, (y1 + y2) / 2 + 3);
+      }
+
+      // Draw animated arrows
+      if (S.animStep >= 0) {
+        for (let i = 0; i <= Math.min(S.animStep, S.animSteps.length - 1); i++) {
+          const step = S.animSteps[i];
+          const isCurrent = i === S.animStep;
+          if (step.action === 'delegate') {
+            // Upward arrow on the left
+            const fromY = startY + step.loader * (boxH + gap) + boxH / 2;
+            const toY = startY + (step.loader - 1) * (boxH + gap) + boxH / 2;
+            const ax = startX - 20;
+            ctx.beginPath();
+            ctx.strokeStyle = isCurrent ? '#ffd93d' : '#ffd93d50';
+            ctx.lineWidth = isCurrent ? 2.5 : 1.5;
+            ctx.moveTo(ax, fromY); ctx.lineTo(ax, toY + 8);
+            ctx.stroke();
+            drawArrow(ctx, ax, toY + 8, 'up', isCurrent ? '#ffd93d' : '#ffd93d50');
+            if (isCurrent) {
+              ctx.font = 'bold 9px SF Mono,monospace';
+              ctx.fillStyle = '#ffd93d';
+              ctx.textAlign = 'right';
+              ctx.fillText('委派 ↑', ax - 5, (fromY + toY) / 2 + 3);
+            }
+          }
+          if (step.action === 'fail' && i < S.animSteps.length - 1) {
+            // Downward arrow on the right (return to child)
+            const fromY = startY + step.loader * (boxH + gap) + boxH / 2;
+            const toY = startY + (step.loader + 1) * (boxH + gap) + boxH / 2;
+            if (step.loader + 1 < LOADERS.length) {
+              const ax = startX + boxW + 20;
+              ctx.beginPath();
+              ctx.strokeStyle = isCurrent ? '#ff5f6d' : '#ff5f6d40';
+              ctx.lineWidth = isCurrent ? 2.5 : 1.5;
+              ctx.moveTo(ax, fromY); ctx.lineTo(ax, toY - 8);
+              ctx.stroke();
+              drawArrow(ctx, ax, toY - 8, 'down', isCurrent ? '#ff5f6d' : '#ff5f6d40');
+              if (isCurrent) {
+                ctx.font = 'bold 9px SF Mono,monospace';
+                ctx.fillStyle = '#ff5f6d';
+                ctx.textAlign = 'left';
+                ctx.fillText('↓ 回退', ax + 5, (fromY + toY) / 2 + 3);
+              }
+            }
+          }
+        }
+      }
+
+      // Draw loader boxes
+      LOADERS.forEach((ld, i) => {
+        const x = startX, y = startY + i * (boxH + gap);
+        const state = loaderStates[i];
+        const isActive = state === 'active';
+        const isSuccess = state === 'success';
+        const isFail = state === 'fail';
+
+        // Glow
+        if (isActive) {
+          ctx.shadowColor = ld.color;
+          ctx.shadowBlur = 15;
+        }
+        if (isSuccess) {
+          ctx.shadowColor = '#4ecdc4';
+          ctx.shadowBlur = 15;
+        }
+
+        // Box
+        ctx.beginPath();
+        rr(ctx, x, y, boxW, boxH, 8);
+        ctx.fillStyle = isSuccess ? '#4ecdc410' : isActive ? ld.color + '15' : isFail ? '#ff5f6d08' : _tc.boxBg;
+        ctx.fill();
+        ctx.strokeStyle = isSuccess ? '#4ecdc4' : isActive ? ld.color : isFail ? '#ff5f6d40' : _tc.boxBorder;
+        ctx.lineWidth = isActive || isSuccess ? 2.5 : 1;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Loader name
+        ctx.font = 'bold 12px -apple-system,sans-serif';
+        ctx.fillStyle = isSuccess ? '#4ecdc4' : isActive ? ld.color : isFail ? '#ff5f6d80' : _tc.title;
+        ctx.textAlign = 'left';
+        ctx.fillText(ld.name, x + 12, y + 20);
+
+        // Sub label
+        ctx.font = '9px SF Mono,monospace';
+        ctx.fillStyle = isActive ? ld.color + 'aa' : _tc.sub;
+        ctx.fillText(ld.sub, x + 12, y + 35);
+
+        // Path
+        ctx.font = '9px -apple-system,sans-serif';
+        ctx.fillStyle = _tc.pathText;
+        ctx.fillText(ld.path.length > 38 ? ld.path.substring(0, 38) + '...' : ld.path, x + 12, y + 52);
+
+        // Status icon
+        if (isSuccess) {
+          ctx.font = 'bold 18px -apple-system,sans-serif';
+          ctx.fillStyle = '#4ecdc4';
+          ctx.textAlign = 'right';
+          ctx.fillText('✓', x + boxW - 12, y + 28);
+        }
+        if (isFail && !isSuccess) {
+          ctx.font = '14px -apple-system,sans-serif';
+          ctx.fillStyle = '#ff5f6d60';
+          ctx.textAlign = 'right';
+          ctx.fillText('✗', x + boxW - 12, y + 28);
+        }
+        if (isActive) {
+          ctx.font = '14px -apple-system,sans-serif';
+          ctx.fillStyle = ld.color;
+          ctx.textAlign = 'right';
+          ctx.fillText('⟳', x + boxW - 12, y + 28);
+        }
+
+        // Level indicator
+        ctx.font = 'bold 9px -apple-system,sans-serif';
+        ctx.fillStyle = ld.color + '60';
+        ctx.textAlign = 'right';
+        ctx.fillText(i === 0 ? '顶层' : i === LOADERS.length - 1 ? '底层' : `L${i}`, x + boxW - 12, y + 52);
+      });
+
+      // Right side: info panel
+      const infoX = startX + boxW + 80;
+      const infoW = W - infoX - 20;
+
+      // Current step description
+      if (curStep) {
+        ctx.fillStyle = _tc.infoBg;
+        ctx.strokeStyle = _tc.infoStroke;
+        ctx.lineWidth = 1;
+        rr(ctx, infoX, 20, infoW, 60, 8);
+        ctx.fill(); ctx.stroke();
+
+        const stepColors = { receive: '#00d2ff', delegate: '#ffd93d', try: '#6c7aff', success: '#4ecdc4', fail: '#ff5f6d', error: '#ff5f6d', spi: '#b44dff' };
+        ctx.font = 'bold 11px -apple-system,sans-serif';
+        ctx.fillStyle = stepColors[curStep.action] || _tc.title;
+        ctx.textAlign = 'left';
+        const labels = { receive: '接收请求', delegate: '向上委派', try: '尝试加载', success: '加载成功', fail: '加载失败', error: '异常', spi: 'SPI 机制' };
+        ctx.fillText(`Step ${S.animStep + 1}: ${labels[curStep.action] || curStep.action}`, infoX + 10, 40);
+        ctx.font = '10px -apple-system,sans-serif';
+        ctx.fillStyle = _tc.sub;
+        wrapText(ctx, curStep.msg, infoX + 10, 56, infoW - 20, 13);
+      }
+
+      // Class info
+      const cls = document.getElementById('clsInput').value.trim();
+      if (cls) {
+        ctx.fillStyle = _tc.infoBg;
+        ctx.strokeStyle = _tc.infoStroke;
+        rr(ctx, infoX, 100, infoW, 50, 8);
+        ctx.fill(); ctx.stroke();
+
+        ctx.font = 'bold 10px -apple-system,sans-serif';
+        ctx.fillStyle = '#00d2ff';
+        ctx.textAlign = 'left';
+        ctx.fillText('加载目标', infoX + 10, 118);
+        ctx.font = '11px SF Mono,monospace';
+        ctx.fillStyle = _tc.title;
+        ctx.fillText(cls.length > 32 ? cls.substring(0, 32) + '...' : cls, infoX + 10, 136);
+      }
+
+      // Result summary
+      if (S.result && !S.running) {
+        const ry = 170;
+        ctx.fillStyle = _tc.infoBg;
+        ctx.strokeStyle = S.result.loadedBy >= 0 ? '#4ecdc430' : '#ff5f6d30';
+        rr(ctx, infoX, ry, infoW, 60, 8);
+        ctx.fill(); ctx.stroke();
+
+        ctx.font = 'bold 10px -apple-system,sans-serif';
+        ctx.textAlign = 'left';
+        if (S.result.loadedBy >= 0) {
+          const ld = LOADERS[S.result.loadedBy];
+          ctx.fillStyle = '#4ecdc4';
+          ctx.fillText('✓ 加载成功', infoX + 10, ry + 18);
+          ctx.font = '10px -apple-system,sans-serif';
+          ctx.fillStyle = ld.color;
+          ctx.fillText(`由 ${ld.name} 加载`, infoX + 10, ry + 34);
+          ctx.fillStyle = _tc.sub;
+          ctx.font = '9px SF Mono,monospace';
+          ctx.fillText(`路径: ${ld.path.substring(0, 35)}`, infoX + 10, ry + 50);
+        } else {
+          ctx.fillStyle = '#ff5f6d';
+          ctx.fillText('✗ ClassNotFoundException', infoX + 10, ry + 18);
+          ctx.font = '10px -apple-system,sans-serif';
+          ctx.fillStyle = _tc.sub;
+          ctx.fillText('所有加载器均无法加载该类', infoX + 10, ry + 34);
+        }
+      }
+
+      // Why delegation - always show
+      const whyY = 260;
+      ctx.fillStyle = _tc.infoBg;
+      ctx.strokeStyle = _tc.infoStroke + '60';
+      rr(ctx, infoX, whyY, infoW, 100, 8);
+      ctx.fill(); ctx.stroke();
+
+      ctx.font = 'bold 10px -apple-system,sans-serif';
+      ctx.fillStyle = '#ffd93d';
+      ctx.textAlign = 'left';
+      ctx.fillText('为什么需要双亲委派？', infoX + 10, whyY + 16);
+
+      ctx.font = '10px -apple-system,sans-serif';
+      const reasons = [
+        ['🔒 安全性', '防止核心类 (如 java.lang.String) 被篡改', '#ff5f6d'],
+        ['🚫 唯一性', '同一个类只被加载一次，避免重复', '#4ecdc4'],
+        ['📦 层级隔离', '不同层级职责清晰，互不干扰', '#6c7aff'],
+      ];
+      reasons.forEach(([title, desc, color], i) => {
+        const ry = whyY + 30 + i * 22;
+        ctx.fillStyle = color;
+        ctx.font = 'bold 10px -apple-system,sans-serif';
+        ctx.fillText(title, infoX + 10, ry);
+        ctx.fillStyle = _tc.reasonDesc;
+        ctx.font = '9px -apple-system,sans-serif';
+        ctx.fillText(desc, infoX + 80, ry);
+      });
+
+      // Mode indicator
+      const mode = document.getElementById('modeSelect').value;
+      if (mode !== 'normal') {
+        ctx.fillStyle = isLightMode() ? '#7c3aed08' : '#b44dff12';
+        ctx.strokeStyle = '#b44dff40';
+        rr(ctx, infoX, whyY + 108, infoW, 28, 6);
+        ctx.fill(); ctx.stroke();
+        ctx.font = 'bold 10px -apple-system,sans-serif';
+        ctx.fillStyle = '#b44dff';
+        ctx.textAlign = 'left';
+        const modeLabels = { spi: '⚡ SPI 模式: 父加载器通过 ContextClassLoader 反向委托子加载器', tomcat: '⚡ Tomcat 模式: WebAppClassLoader 优先加载，打破向上委派' };
+        ctx.fillText(modeLabels[mode] || '', infoX + 10, whyY + 126);
+      }
+    }
+
+    function drawArrow(ctx, x, y, dir, color) {
+      ctx.beginPath();
+      if (dir === 'up') {
+        ctx.moveTo(x, y); ctx.lineTo(x - 4, y + 7); ctx.lineTo(x + 4, y + 7);
+      } else {
+        ctx.moveTo(x, y); ctx.lineTo(x - 4, y - 7); ctx.lineTo(x + 4, y - 7);
+      }
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+
+    function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+    function wrapText(ctx, text, x, y, maxW, lineH) {
+      let line = '';
+      for (let i = 0; i < text.length; i++) {
+        const test = line + text[i];
+        if (ctx.measureText(test).width > maxW && line) {
+          ctx.fillText(line, x, y); line = text[i]; y += lineH;
+        } else line = test;
+      }
+      ctx.fillText(line, x, y);
+    }
+
+    // ═══════════════ SOURCE CODE TAB ═══════════════
+    function renderSource() {
+      document.getElementById('sourceView').innerHTML = `
+  <div class="card"><h3>ClassLoader.loadClass() 源码逻辑</h3>
+  <p style="margin-bottom:8px">这是双亲委派的核心实现，位于 <code>java.lang.ClassLoader</code></p></div>
+  <div style="background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:14px;font-family:'SF Mono','Fira Code',monospace;font-size:11px;line-height:1.8;overflow-x:auto">
+<span style="color:#ff5f6d">protected</span> Class&lt;?&gt; <span style="color:#ffd93d">loadClass</span>(String name, <span style="color:#ff5f6d">boolean</span> resolve)
+    <span style="color:#ff5f6d">throws</span> ClassNotFoundException {
+
+    <span style="color:#8b90a5">// ① 检查该类是否已经被加载过</span>
+    Class&lt;?&gt; c = <span style="color:#6c7aff">findLoadedClass</span>(name);
+
+    <span style="color:#ff5f6d">if</span> (c == <span style="color:#b44dff">null</span>) {
+        <span style="color:#ff5f6d">try</span> {
+            <span style="color:#ff5f6d">if</span> (parent != <span style="color:#b44dff">null</span>) {
+                <span style="color:#8b90a5">// ② 父加载器不为空 → 委派给父加载器</span>
+                c = parent.<span style="color:#ffd93d">loadClass</span>(name, <span style="color:#b44dff">false</span>);  <span style="color:#ffd93d">// 递归向上!</span>
+            } <span style="color:#ff5f6d">else</span> {
+                <span style="color:#8b90a5">// ③ 父加载器为空 → 已到 Bootstrap，由JVM加载</span>
+                c = <span style="color:#6c7aff">findBootstrapClassOrNull</span>(name);
+            }
+        } <span style="color:#ff5f6d">catch</span> (ClassNotFoundException e) {
+            <span style="color:#8b90a5">// 父加载器无法加载，不抛出，继续往下</span>
+        }
+
+        <span style="color:#ff5f6d">if</span> (c == <span style="color:#b44dff">null</span>) {
+            <span style="color:#8b90a5">// ④ 父加载器无法加载 → 自己尝试加载</span>
+            c = <span style="color:#6c7aff">findClass</span>(name);  <span style="color:#4ecdc4">// 子类重写此方法!</span>
+        }
+    }
+    <span style="color:#ff5f6d">return</span> c;
+}
+  </div>
+
+  <div class="card" style="margin-top:10px"><h3>关键方法</h3>
+  <p><code>findLoadedClass()</code> 检查 JVM 缓存，避免重复加载<br>
+     <code>parent.loadClass()</code> 递归委派，这就是"双亲委派"<br>
+     <code>findBootstrapClassOrNull()</code> 到顶了，交给 Bootstrap (C++ 实现)<br>
+     <code>findClass()</code> 子类重写这个方法实现自定义加载逻辑<br><br>
+     <span style="color:var(--ylw)">要打破双亲委派 → 重写 <code>loadClass()</code> 而非 <code>findClass()</code></span></p></div>`;
+    }
+
+    // ═══════════════ BREAK DELEGATION TAB ═══════════════
+    function renderBreak() {
+      document.getElementById('breakView').innerHTML = `
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div class="card">
+      <h3 style="color:var(--pur)">SPI 机制 (JDBC 为例)</h3>
+      <p><code>java.sql.Driver</code> 接口在 rt.jar 中，由 Bootstrap 加载。
+      但实现类 <code>com.mysql.jdbc.Driver</code> 在 classpath 中，Bootstrap 看不到！</p>
+      <p style="margin-top:6px"><strong style="color:var(--ylw)">解决方案：</strong><br>
+      <code>DriverManager</code> 通过 <code>Thread.currentThread().getContextClassLoader()</code>
+      获取线程上下文类加载器 (通常是 AppClassLoader)，用它来加载 SPI 实现类。</p>
+      <p style="margin-top:6px;color:var(--red)">⚠ 这打破了"父加载器不能使用子加载器"的规则</p>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--org)">Tomcat 类加载</h3>
+      <p>Tomcat 的 <code>WebAppClassLoader</code> 打破双亲委派：</p>
+      <p style="margin-top:4px">① 先在 WEB-INF/classes 和 WEB-INF/lib 中查找<br>
+      ② 找不到再委派给父加载器<br><br>
+      <strong style="color:var(--ylw)">目的：</strong>不同 Web 应用可以使用不同版本的同一个库，实现应用间隔离。<br>
+      <span style="color:var(--red)">但 java.* 开头的类仍然强制委派给 Bootstrap，保证安全。</span></p>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--cyn)">OSGi 模块化</h3>
+      <p>OSGi 实现了更复杂的类加载网络：<br>
+      每个 Bundle 有自己的 ClassLoader，可以指定导入/导出哪些包。
+      类加载不再是简单的树形结构，而是网状结构。</p>
+      <p style="margin-top:4px;color:var(--ylw)">典型应用: Eclipse IDE 插件系统</p>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--grn)">热部署 / 热替换</h3>
+      <p>通过自定义 ClassLoader 实现：<br>
+      ① 每次部署创建新的 ClassLoader 实例<br>
+      ② 新 ClassLoader 加载更新后的类<br>
+      ③ 旧 ClassLoader 及其加载的类被 GC 回收</p>
+      <p style="margin-top:4px;color:var(--ylw)">关键: 同一个类被不同 ClassLoader 加载后，JVM 认为是不同的类！</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:10px">
+    <h3>打破委派的方式总结</h3>
+    <table style="width:100%;font-size:11px;border-collapse:collapse;margin-top:6px">
+      <tr style="border-bottom:1px solid var(--bd)"><th style="text-align:left;padding:4px 8px;color:var(--tx2)">场景</th><th style="text-align:left;padding:4px 8px;color:var(--tx2)">方式</th><th style="text-align:left;padding:4px 8px;color:var(--tx2)">目的</th></tr>
+      <tr style="border-bottom:1px solid var(--bd)"><td style="padding:4px 8px;color:var(--pur)">SPI</td><td style="padding:4px 8px">Thread ContextClassLoader</td><td style="padding:4px 8px;color:var(--tx2)">父加载器使用子加载器加载实现类</td></tr>
+      <tr style="border-bottom:1px solid var(--bd)"><td style="padding:4px 8px;color:var(--org)">Tomcat</td><td style="padding:4px 8px">重写 loadClass()，子优先</td><td style="padding:4px 8px;color:var(--tx2)">Web 应用间类隔离</td></tr>
+      <tr style="border-bottom:1px solid var(--bd)"><td style="padding:4px 8px;color:var(--cyn)">OSGi</td><td style="padding:4px 8px">网状类加载拓扑</td><td style="padding:4px 8px;color:var(--tx2)">模块化 + 版本共存</td></tr>
+      <tr><td style="padding:4px 8px;color:var(--grn)">热部署</td><td style="padding:4px 8px">丢弃旧 ClassLoader + 创建新的</td><td style="padding:4px 8px;color:var(--tx2)">不重启更新代码</td></tr>
+    </table>
+  </div>`;
+    }
+
+    // ═══════════════ TAB SWITCHING ═══════════════
+    function switchTab(tab) {
+      S.activeTab = tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('on'));
+      event.target.classList.add('on');
+      document.getElementById('tab-' + tab).classList.add('on');
+      if (tab === 'source') renderSource();
+      if (tab === 'break') renderBreak();
+    }
+
+    function updatePrompt() {
+      const cls = document.getElementById('clsInput').value.trim();
+      const mode = document.getElementById('modeSelect').value;
+      const modeNames = { normal: '标准双亲委派', spi: 'SPI打破委派', tomcat: 'Tomcat打破委派' };
+      const parts = [`双亲委派 · ${modeNames[mode]}`];
+      if (cls) parts.push(`类: ${cls}`);
+      if (S.result && !S.running) {
+        if (S.result.loadedBy >= 0) {
+          parts.push(`由 ${LOADERS[S.result.loadedBy].name} 加载`);
+        } else {
+          parts.push('ClassNotFoundException');
+        }
+        parts.push(`经过 ${S.result.chain.length} 步`);
+      }
+      document.getElementById('ptx').textContent = parts.join(' · ');
+    }
+
+    function copyP() {
+      navigator.clipboard.writeText(document.getElementById('ptx').textContent).then(() => {
+        const b = event.target; b.textContent = '已复制!'; setTimeout(() => b.textContent = '复制', 1500);
+      });
+    }
+
+    // Re-render canvas on theme toggle
+    new MutationObserver(() => draw()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    // Init
+    draw();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

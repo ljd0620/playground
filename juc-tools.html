@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JUC 并发工具</title>
+  <meta name="description" content="交互式演示 Java JUC 并发工具类，包括 CountDownLatch、CyclicBarrier、Semaphore、Phaser 等同步器的工作原理">
+  <meta name="keywords" content="JUC, 并发工具, CountDownLatch, CyclicBarrier, Semaphore, Phaser, Java, 多线程">
+  <meta property="og:title" content="JUC 并发工具">
+  <meta property="og:description"
+    content="交互式演示 Java JUC 并发工具类，包括 CountDownLatch、CyclicBarrier、Semaphore、Phaser 等同步器的工作原理">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .header {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(77, 163, 255, 0.04) 0%, transparent 100%);
+      flex-wrap: wrap;
+    }
+
+    .header h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      white-space: nowrap;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 0%, #a8c8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+    }
+
+    .tab {
+      padding: 7px 14px;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: all 0.25s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .tab:hover {
+      color: var(--text-primary);
+      background: var(--bg-elevated);
+      border-color: var(--border);
+    }
+
+    .tab.active {
+      background: linear-gradient(135deg, rgba(77, 163, 255, 0.15), rgba(77, 163, 255, 0.05));
+      color: var(--accent-blue);
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 12px var(--glow-blue);
+    }
+
+    .presets {
+      display: flex;
+      gap: 6px;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+
+    .preset {
+      padding: 5px 12px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 0.68rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      transition: all 0.25s;
+    }
+
+    .preset:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
+
+    .preset.active {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+      box-shadow: 0 0 10px var(--glow-blue);
+    }
+
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+      z-index: 1;
+    }
+
+    .canvas-wrap {
+      flex: 1;
+      position: relative;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .sidebar {
+      width: 300px;
+      border-left: 1px solid var(--border);
+      background: var(--bg-card);
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      backdrop-filter: blur(8px);
+    }
+
+    .sidebar::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .sidebar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .sidebar::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .sidebar h3 {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar h3::before {
+      content: '';
+      width: 3px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    .ctrl {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .row label {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .row span {
+      font-size: 0.72rem;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      color: var(--accent-blue);
+      font-weight: 600;
+    }
+
+    select,
+    input[type=range] {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      border-radius: var(--radius-sm);
+      padding: 7px 12px;
+      font-size: 0.78rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    select:focus,
+    input:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--glow-blue);
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      height: 4px;
+      border: none;
+      padding: 0;
+      border-radius: 2px;
+      background: var(--bg-elevated);
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: linear-gradient(135deg, var(--accent-blue), #3b8aed);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 6px var(--glow-blue);
+    }
+
+    .btn {
+      padding: 8px 14px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: linear-gradient(135deg, #1a6ff0, #1f6feb);
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 600;
+      transition: all 0.2s;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn.running {
+      background: linear-gradient(135deg, var(--accent-pink), #d946a8);
+      box-shadow: 0 0 16px rgba(244, 114, 182, 0.3);
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .info {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      font-size: 0.72rem;
+      line-height: 1.8;
+      backdrop-filter: blur(4px);
+      transition: border-color 0.3s;
+    }
+
+    .info:hover {
+      border-color: var(--border-hover);
+    }
+
+    .info h4 {
+      color: var(--accent-blue);
+      margin-bottom: 6px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .info h4::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-purple);
+    }
+
+    .info code {
+      background: var(--bg-primary);
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-size: 0.68rem;
+      color: var(--accent-orange);
+      border: 1px solid var(--border);
+    }
+
+    .log-box {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      max-height: 180px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.68rem;
+      line-height: 1.7;
+      color: var(--text-secondary);
+    }
+
+    .log-box::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .log-box::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .log-box::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .log-box .log-t {
+      color: var(--accent-cyan);
+    }
+
+    .log-box .log-w {
+      color: var(--accent-orange);
+    }
+
+    .log-box .log-s {
+      color: var(--accent-green);
+    }
+
+    .log-box .log-b {
+      color: var(--accent-pink);
+    }
+
+    .prompt-bar {
+      position: relative;
+      z-index: 1;
+      border-top: 1px solid var(--border);
+      background: var(--bg-card);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      backdrop-filter: blur(8px);
+    }
+
+    .prompt-bar .pt {
+      flex: 1;
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      max-height: 60px;
+      overflow-y: auto;
+    }
+
+    .copy-btn {
+      padding: 8px 18px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, #1a6ff0, #1f6feb);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 600;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .copy-btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .copy-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .copy-btn:active {
+      transform: translateY(0);
+    }
+
+    /* Light mode overrides */
+    [data-theme="light"] .header {
+      background: linear-gradient(180deg, rgba(37, 99, 235, 0.03) 0%, transparent 100%);
+      border-bottom-color: #e5e7eb;
+    }
+
+    [data-theme="light"] .header h1 {
+      background: linear-gradient(135deg, #1f2937 0%, #2563eb 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    [data-theme="light"] .tab.active {
+      background: rgba(37, 99, 235, 0.08);
+      border-color: #2563eb;
+      color: #2563eb;
+      box-shadow: none;
+    }
+
+    [data-theme="light"] .preset.active {
+      border-color: #2563eb;
+      color: #2563eb;
+      box-shadow: none;
+    }
+
+    [data-theme="light"] .sidebar {
+      background: #ffffff;
+      border-left-color: #e5e7eb;
+    }
+
+    [data-theme="light"] .info {
+      background: #f0f3f8;
+      border-color: #d4dae5;
+    }
+
+    [data-theme="light"] .log-box {
+      background: #f0f3f8;
+      border-color: #d4dae5;
+    }
+
+    [data-theme="light"] .prompt-bar {
+      background: #ffffff;
+      border-top-color: #e5e7eb;
+    }
+
+    [data-theme="light"] .btn:hover,
+    [data-theme="light"] .copy-btn:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    [data-theme="light"] canvas {
+      background: #ffffff;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="header">
+    <h1>JUC 并发工具</h1>
+    <div class="tabs">
+      <div class="tab active" data-tab="countdown">CountDownLatch</div>
+      <div class="tab" data-tab="barrier">CyclicBarrier</div>
+      <div class="tab" data-tab="semaphore">Semaphore</div>
+      <div class="tab" data-tab="exchanger">Exchanger</div>
+      <div class="tab" data-tab="phaser">Phaser</div>
+    </div>
+    <div class="presets">
+      <div class="preset active" data-p="p1">赛跑起跑</div>
+      <div class="preset" data-p="p2">并行加载</div>
+      <div class="preset" data-p="p3">限流3并发</div>
+      <div class="preset" data-p="p4">分阶段任务</div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="canvas-wrap"><canvas id="cv"></canvas></div>
+    <div class="sidebar" id="sb"></div>
+  </div>
+  <div class="prompt-bar">
+    <div class="pt" id="pt">选择工具和场景，点击 Run 观看并发执行过程...</div>
+    <button class="copy-btn" id="cpBtn">Copy</button>
+  </div>
+  <script>
+    const $ = s => document.querySelector(s), $$ = s => document.querySelectorAll(s);
+    const cv = $('#cv'), ctx = cv.getContext('2d');
+    let W, H, dpr, raf;
+
+    // ── palette (theme-aware) ──
+    function isLightMode() { return document.documentElement.getAttribute('data-theme') === 'light'; }
+    const DARK_C = {
+      bg: '#0f1117', surface: '#1a1d27', surface2: '#232633', border: '#2d3148', grid: '#1a1d2760',
+      text: '#e2e4f0', dim: '#8b8fa8', accent: '#6c7aff', green: '#22c55e', red: '#ef4444',
+      yellow: '#eab308', orange: '#ffa94d', pink: '#ff6b8a', purple: '#a78bfa', cyan: '#00c9a7',
+      threads: ['#6c7aff', '#00c9a7', '#ffa94d', '#ff6b8a', '#a78bfa', '#22c55e', '#eab308', '#ef4444', '#38bdf8', '#f472b6']
+    };
+    const LIGHT_C = {
+      bg: '#f7f8fb', surface: '#f0f3f8', surface2: '#e8ecf2', border: '#d4dae5', grid: '#d4dae530',
+      text: '#1f2937', dim: '#6b7280', accent: '#4f46e5', green: '#059669', red: '#dc2626',
+      yellow: '#ca8a04', orange: '#d97706', pink: '#db2777', purple: '#7c3aed', cyan: '#0891b2',
+      threads: ['#4f46e5', '#0891b2', '#d97706', '#db2777', '#7c3aed', '#059669', '#ca8a04', '#dc2626', '#0284c7', '#be185d']
+    };
+    let C = DARK_C;
+    function syncPalette() { C = isLightMode() ? LIGHT_C : DARK_C; }
+
+    // ── state ──
+    const DEFAULTS = { tab: 'countdown', preset: 'p1', speed: 1, threadCount: 5, permits: 3, countDown: 5, barrierParties: 4, phases: 3 };
+    const state = { ...DEFAULTS };
+    let logs = [];
+    let tick = 0, running = false, timer = null;
+
+    // ── simulation models ──
+    let sim = { threads: [], latchCount: 0, barrierWaiting: 0, barrierGeneration: 0, semPermits: 0, exchangerSlot: null, phaserPhase: 0, phaserArrived: 0, done: false };
+
+    function resetSim() {
+      clearInterval(timer); running = false; tick = 0; logs = []; sim.done = false;
+      syncPalette();
+      const n = state.threadCount;
+      sim.threads = [];
+      for (let i = 0; i < n; i++) sim.threads.push({
+        id: i, name: `T-${i}`, color: C.threads[i % C.threads.length],
+        state: 'created', progress: 0, waitStart: -1, runStart: -1, doneAt: -1, value: null, phase: 0
+      });
+      if (state.tab === 'countdown') { sim.latchCount = state.countDown; }
+      else if (state.tab === 'barrier') { sim.barrierWaiting = 0; sim.barrierGeneration = 0; }
+      else if (state.tab === 'semaphore') { sim.semPermits = state.permits; }
+      else if (state.tab === 'exchanger') { sim.exchangerSlot = null; }
+      else if (state.tab === 'phaser') { sim.phaserPhase = 0; sim.phaserArrived = 0; }
+      updateSidebar();
+    }
+
+    // ── countdown latch logic ──
+    function tickCountdown() {
+      const threads = sim.threads;
+      // main thread is last one, workers are 0..n-2
+      const workers = threads.slice(0, threads.length - 1);
+      const main = threads[threads.length - 1];
+      main.name = 'Main';
+
+      workers.forEach((t, i) => {
+        if (t.state === 'created') { t.state = 'running'; t.runStart = tick; log(`${t.name} 开始执行任务...`, 't'); }
+        if (t.state === 'running') {
+          t.progress += 0.008 * state.speed * (1 + Math.random() * 0.5);
+          if (t.progress >= 1) {
+            t.state = 'done'; t.doneAt = tick;
+            sim.latchCount = Math.max(0, sim.latchCount - 1);
+            log(`${t.name} 完成! countDown() → count=${sim.latchCount}`, 's');
+          }
+        }
+      });
+      if (main.state === 'created') { main.state = 'waiting'; main.waitStart = tick; log('Main 调用 await()，等待 count 降为 0...', 'w'); }
+      if (main.state === 'waiting' && sim.latchCount === 0) {
+        main.state = 'running'; main.runStart = tick; log('count=0，Main 线程被唤醒!', 's');
+      }
+      if (main.state === 'running') {
+        main.progress += 0.03 * state.speed;
+        if (main.progress >= 1) { main.state = 'done'; main.doneAt = tick; sim.done = true; log('Main 完成汇总，所有任务结束', 's'); }
+      }
+    }
+
+    // ── cyclic barrier logic ──
+    function tickBarrier() {
+      const parties = state.barrierParties;
+      const threads = sim.threads.slice(0, parties);
+      sim.threads = threads;
+
+      threads.forEach(t => {
+        if (t.state === 'created') { t.state = 'running'; t.runStart = tick; log(`${t.name} 开始第 ${sim.barrierGeneration + 1} 阶段...`, 't'); }
+        if (t.state === 'running') {
+          t.progress += 0.006 * state.speed * (0.8 + Math.random() * 0.8);
+          if (t.progress >= 1) {
+            t.state = 'barrier_wait'; t.waitStart = tick;
+            sim.barrierWaiting++;
+            log(`${t.name} 到达屏障 await(), waiting=${sim.barrierWaiting}/${parties}`, 'w');
+            if (sim.barrierWaiting >= parties) {
+              log(`所有线程到齐! 屏障打开 (generation ${sim.barrierGeneration + 1})`, 's');
+              sim.barrierWaiting = 0; sim.barrierGeneration++;
+              threads.forEach(tt => {
+                if (tt.state === 'barrier_wait') {
+                  if (sim.barrierGeneration >= 2) { tt.state = 'done'; tt.doneAt = tick; }
+                  else { tt.state = 'running'; tt.progress = 0; tt.runStart = tick; }
+                }
+              });
+              if (sim.barrierGeneration >= 2) { sim.done = true; log('所有阶段完成! CyclicBarrier 可重复使用', 's'); }
+            }
+          }
+        }
+      });
+    }
+
+    // ── semaphore logic ──
+    function tickSemaphore() {
+      const threads = sim.threads;
+      const maxP = state.permits;
+
+      threads.forEach(t => {
+        if (t.state === 'created') {
+          if (sim.semPermits < maxP) {
+            sim.semPermits++; t.state = 'acquired'; t.runStart = tick;
+            log(`${t.name} acquire() 成功, permits剩余=${maxP - sim.semPermits}`, 's');
+          } else {
+            t.state = 'sem_wait'; t.waitStart = tick;
+            log(`${t.name} acquire() 阻塞, 无可用permit`, 'w');
+          }
+        }
+        if (t.state === 'acquired') {
+          t.progress += 0.008 * state.speed * (0.5 + Math.random() * 0.8);
+          if (t.progress >= 1) {
+            t.state = 'done'; t.doneAt = tick; sim.semPermits--;
+            log(`${t.name} 完成, release() → permits剩余=${maxP - sim.semPermits}`, 's');
+            // wake up one waiter
+            const waiter = threads.find(w => w.state === 'sem_wait');
+            if (waiter) {
+              sim.semPermits++; waiter.state = 'acquired'; waiter.runStart = tick;
+              log(`${waiter.name} 被唤醒 acquire() 成功, permits剩余=${maxP - sim.semPermits}`, 't');
+            }
+          }
+        }
+      });
+      if (threads.every(t => t.state === 'done')) { sim.done = true; log('所有线程执行完毕', 's'); }
+    }
+
+    // ── exchanger logic ──
+    function tickExchanger() {
+      const threads = sim.threads.slice(0, 2);
+      sim.threads = threads;
+      threads[0].name = 'Producer'; threads[1].name = 'Consumer';
+
+      threads.forEach((t, i) => {
+        if (t.state === 'created') { t.state = 'running'; t.runStart = tick; t.value = i === 0 ? 'DataA' : 'DataB'; log(`${t.name} 准备数据: "${t.value}"`, 't'); }
+        if (t.state === 'running') {
+          t.progress += 0.007 * state.speed * (i === 0 ? 1 : 0.6);
+          if (t.progress >= 1) {
+            if (sim.exchangerSlot === null) {
+              sim.exchangerSlot = t; t.state = 'exch_wait'; t.waitStart = tick;
+              log(`${t.name} 调用 exchange("${t.value}"), 等待对方...`, 'w');
+            } else {
+              const other = sim.exchangerSlot;
+              const v1 = t.value, v2 = other.value;
+              t.value = v2; other.value = v1;
+              t.state = 'done'; t.doneAt = tick; other.state = 'done'; other.doneAt = tick;
+              sim.exchangerSlot = null; sim.done = true;
+              log(`${t.name} 也调用 exchange("${v1}"), 交换完成!`, 's');
+              log(`${other.name} 收到 "${other.value}", ${t.name} 收到 "${t.value}"`, 's');
+            }
+          }
+        }
+      });
+    }
+
+    // ── phaser logic ──
+    function tickPhaser() {
+      const threads = sim.threads.slice(0, state.barrierParties);
+      sim.threads = threads;
+      const total = threads.length;
+      const maxPhases = state.phases;
+
+      threads.forEach(t => {
+        if (t.state === 'created') { t.state = 'running'; t.runStart = tick; t.phase = 0; log(`${t.name} 注册并开始 Phase 0`, 't'); }
+        if (t.state === 'running' && t.phase === sim.phaserPhase) {
+          t.progress += 0.007 * state.speed * (0.6 + Math.random() * 0.8);
+          if (t.progress >= 1) {
+            t.state = 'phase_wait'; t.waitStart = tick; sim.phaserArrived++;
+            log(`${t.name} arriveAndAwaitAdvance() phase=${sim.phaserPhase}, arrived=${sim.phaserArrived}/${total}`, 'w');
+            if (sim.phaserArrived >= total) {
+              sim.phaserPhase++; sim.phaserArrived = 0;
+              log(`Phase ${sim.phaserPhase - 1} 完成! 推进到 Phase ${sim.phaserPhase}`, 's');
+              threads.forEach(tt => {
+                if (tt.state === 'phase_wait') {
+                  if (sim.phaserPhase >= maxPhases) { tt.state = 'done'; tt.doneAt = tick; }
+                  else { tt.state = 'running'; tt.progress = 0; tt.phase = sim.phaserPhase; tt.runStart = tick; }
+                }
+              });
+              if (sim.phaserPhase >= maxPhases) { sim.done = true; log(`所有 ${maxPhases} 个阶段完成!`, 's'); }
+            }
+          }
+        }
+      });
+    }
+
+    function doTick() {
+      tick++;
+      if (sim.done) { clearInterval(timer); running = false; updateSidebar(); return; }
+      switch (state.tab) {
+        case 'countdown': tickCountdown(); break;
+        case 'barrier': tickBarrier(); break;
+        case 'semaphore': tickSemaphore(); break;
+        case 'exchanger': tickExchanger(); break;
+        case 'phaser': tickPhaser(); break;
+      }
+      updateLogBox();
+    }
+
+    function log(msg, type) { logs.push({ msg, type, tick }); }
+
+    function startSim() {
+      if (running) return;
+      resetSim(); running = true;
+      timer = setInterval(doTick, 30);
+      updateSidebar();
+    }
+
+    // ── resize ──
+    function resize() {
+      const r = cv.parentElement.getBoundingClientRect();
+      dpr = devicePixelRatio || 1; W = r.width; H = r.height;
+      cv.width = W * dpr; cv.height = H * dpr;
+      cv.style.width = W + 'px'; cv.style.height = H + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    addEventListener('resize', resize);
+
+    // ── draw helpers ──
+    function rr(x, y, w, h, r, fill, stroke) {
+      ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+      if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
+    }
+    function txt(s, x, y, sz, color, align = 'center') { ctx.font = `${sz}px system-ui,sans-serif`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(s, x, y); }
+    function mono(s, x, y, sz, color, align = 'center', mw) { ctx.font = `${sz}px 'Cascadia Code','Fira Code',monospace`; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'middle'; if (mw) ctx.fillText(s, x, y, mw); else ctx.fillText(s, x, y); }
+    function arrow(x1, y1, x2, y2, col, w = 1.5) {
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.strokeStyle = col; ctx.lineWidth = w; ctx.stroke();
+      const a = Math.atan2(y2 - y1, x2 - x1), h = 7;
+      ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2 - h * Math.cos(a - .35), y2 - h * Math.sin(a - .35)); ctx.lineTo(x2 - h * Math.cos(a + .35), y2 - h * Math.sin(a + .35)); ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+    }
+    function pulse(x, y, r, col, t) {
+      ctx.beginPath(); ctx.arc(x, y, r + t * 15, 0, Math.PI * 2); ctx.strokeStyle = col + Math.round((1 - t) * 80).toString(16).padStart(2, '0'); ctx.lineWidth = 2; ctx.stroke();
+    }
+
+    // ── draw thread as capsule ──
+    function drawThread(t, x, y, w, h) {
+      const s = t.state;
+      let bg = C.surface, border = t.color + '60', glow = false;
+      if (s === 'running' || s === 'acquired') { bg = t.color + '18'; border = t.color; glow = true; }
+      else if (s === 'waiting' || s === 'barrier_wait' || s === 'sem_wait' || s === 'exch_wait' || s === 'phase_wait') { bg = '#eab30810'; border = '#eab308'; }
+      else if (s === 'done') { bg = C.green + '12'; border = C.green + '80'; }
+
+      if (glow) { ctx.save(); ctx.shadowColor = t.color; ctx.shadowBlur = 10; rr(x, y, w, h, 8, bg, border); ctx.restore(); }
+      else rr(x, y, w, h, 8, bg, border);
+
+      txt(t.name, x + w / 2, y + 14, 11, t.color);
+
+      // progress bar
+      const pw = w - 16, px = x + 8, py = y + 28;
+      rr(px, py, pw, 6, 3, C.bg, null);
+      if (t.progress > 0) rr(px, py, pw * Math.min(t.progress, 1), 6, 3, t.color, null);
+
+      // state label
+      const labels = { created: 'CREATED', running: 'RUNNING', waiting: 'AWAIT', barrier_wait: 'AWAIT', sem_wait: 'BLOCKED', acquired: 'ACQUIRED', exch_wait: 'EXCHANGE WAIT', phase_wait: 'AWAIT', done: 'DONE' };
+      const lc = { created: C.dim, running: t.color, waiting: C.yellow, barrier_wait: C.yellow, sem_wait: C.yellow, acquired: C.green, exch_wait: C.yellow, phase_wait: C.yellow, done: C.green };
+      mono(labels[s] || s, x + w / 2, y + h - 10, 9, lc[s] || C.dim);
+
+      // value badge for exchanger
+      if (t.value !== null && t.value !== undefined && state.tab === 'exchanger') {
+        rr(x + w - 38, y + 2, 36, 16, 4, C.purple + '30', C.purple);
+        mono(t.value, x + w - 20, y + 10, 8, C.purple);
+      }
+    }
+
+    // ── main renders ──
+    function renderCountdown() {
+      const threads = sim.threads;
+      const mainT = threads[threads.length - 1];
+      const workers = threads.slice(0, threads.length - 1);
+      const n = workers.length;
+
+      // latch counter display
+      const lcx = W / 2, lcy = 50;
+      rr(lcx - 70, lcy - 18, 140, 36, 10, C.surface, C.accent);
+      txt(`CountDownLatch( ${sim.latchCount} )`, lcx, lcy, 13, sim.latchCount === 0 ? C.green : C.accent);
+
+      // count segments
+      const segW = 120 / state.countDown;
+      for (let i = 0; i < state.countDown; i++) {
+        const sx = lcx - 60 + i * segW;
+        const filled = i >= sim.latchCount;
+        rr(sx + 1, lcy + 22, segW - 2, 8, 2, filled ? C.green : C.surface2, filled ? C.green + '80' : C.border);
+      }
+
+      // workers on left
+      const colW = 120, colH = 56, gap = 8;
+      const totalH = n * (colH + gap) - gap;
+      const startY = Math.max(90, (H - totalH) / 2 - 10);
+      const wx = 40;
+      workers.forEach((t, i) => {
+        drawThread(t, wx, startY + i * (colH + gap), colW, colH);
+        // arrow to latch
+        if (t.state === 'done') {
+          arrow(wx + colW + 4, startY + i * (colH + gap) + colH / 2, lcx - 74, lcy, C.green + '60');
+        }
+      });
+
+      // label
+      txt('Worker Threads', wx + colW / 2, startY - 16, 11, C.dim);
+      txt('countDown()', lcx, lcy + 42, 10, C.orange);
+
+      // main thread on right
+      const mx = W - 180;
+      drawThread(mainT || { id: 99, name: 'Main', color: C.pink, state: 'created', progress: 0 }, mx, H / 2 - 28, 120, 56);
+      txt('Main Thread', mx + 60, H / 2 - 44, 11, C.dim);
+      // arrow from latch to main
+      arrow(lcx + 74, lcy, mx - 4, H / 2, sim.latchCount === 0 ? C.green + '80' : C.yellow + '40');
+      txt('await()', lcx + 90, lcy - 12, 10, C.yellow);
+
+      // AQS state box
+      const ay = H - 100;
+      rr(30, ay, W - 60, 55, 8, C.surface2 + '80', C.border);
+      mono('AQS.state', 60, ay + 14, 10, C.purple, 'left');
+      mono(`= ${sim.latchCount}`, 140, ay + 14, 10, C.accent, 'left');
+      mono('await() → state==0 时 unpark Main', 60, ay + 36, 10, C.dim, 'left');
+      mono('countDown() → CAS(state, state-1)', W / 2 + 20, ay + 14, 10, C.dim, 'left');
+    }
+
+    function renderBarrier() {
+      const threads = sim.threads;
+      const n = threads.length;
+      const parties = state.barrierParties;
+
+      // barrier wall
+      const bx = W / 2, wallW = 8;
+      const wallTop = 50, wallBot = H - 40;
+
+      // generation label
+      txt(`CyclicBarrier( parties=${parties} )`, bx, 30, 13, C.accent);
+      txt(`generation: ${sim.barrierGeneration}  |  waiting: ${sim.barrierWaiting}/${parties}`, bx, wallBot + 16, 10, C.dim);
+
+      // phases columns
+      const phaseW = (W - 80) / 3;
+      const labels = ['Phase 1 (执行中)', 'Barrier 🚧', 'Phase 2 (执行中)'];
+      labels.forEach((l, i) => {
+        const px = 40 + i * phaseW;
+        txt(l, px + phaseW / 2, 52, 11, i === 1 ? C.yellow : C.cyan);
+        if (i === 1) {
+          // draw barrier wall
+          for (let yy = 65; yy < wallBot - 10; yy += 12) {
+            rr(bx - 3, yy, 6, 8, 2, sim.barrierWaiting >= parties ? C.green : C.yellow, null);
+          }
+        }
+      });
+
+      // threads
+      const thH = 50, gap = 10;
+      const totalH = n * (thH + gap) - gap;
+      const startY = Math.max(70, (H - totalH) / 2);
+
+      threads.forEach((t, i) => {
+        const ty = startY + i * (thH + gap);
+        let tx;
+        if (t.state === 'running' && t.phase === 0) tx = 40 + t.progress * (phaseW - 140) + 10;
+        else if (t.state === 'barrier_wait' && sim.barrierGeneration === 0) tx = bx - 70;
+        else if (t.state === 'running' && t.phase >= 1) tx = bx + 20 + t.progress * (phaseW - 140);
+        else if (t.state === 'barrier_wait' && sim.barrierGeneration === 1) tx = 40 + 2 * phaseW - 60;
+        else if (t.state === 'done') tx = W - 160;
+        else tx = 30;
+        drawThread(t, tx, ty, 120, thH);
+
+        // waiting pulse
+        if (t.state === 'barrier_wait') {
+          const pt = (tick % 60) / 60;
+          pulse(tx + 60, ty + thH / 2, 30, C.yellow, pt);
+        }
+      });
+
+      // cyclic arrow hint
+      if (sim.barrierGeneration >= 1 && !sim.done) {
+        rr(bx - 55, wallBot - 28, 110, 20, 4, C.green + '15', C.green + '60');
+        mono('barrier tripped → reset', bx, wallBot - 18, 9, C.green);
+      }
+    }
+
+    function renderSemaphore() {
+      const threads = sim.threads;
+      const maxP = state.permits;
+
+      // semaphore box
+      const sx = W / 2, sy = 40;
+      rr(sx - 90, sy - 16, 180, 32, 10, C.surface, C.purple);
+      txt(`Semaphore( permits=${maxP} )`, sx, sy, 13, C.purple);
+
+      // permit slots
+      const slotW = 30, totalSW = maxP * slotW + (maxP - 1) * 6;
+      const slotX0 = sx - totalSW / 2;
+      const usedPermits = threads.filter(t => t.state === 'acquired').length;
+      for (let i = 0; i < maxP; i++) {
+        const px = slotX0 + i * (slotW + 6);
+        const used = i < usedPermits;
+        rr(px, sy + 22, slotW, 20, 5, used ? C.pink + '30' : C.green + '20', used ? C.pink : C.green);
+        mono(used ? 'busy' : 'free', px + slotW / 2, sy + 32, 8, used ? C.pink : C.green);
+      }
+      mono(`available = ${maxP - usedPermits}`, sx, sy + 52, 10, C.dim);
+
+      // thread lanes
+      const laneH = 46, gap = 6;
+      const totalH = threads.length * (laneH + gap);
+      const startY = sy + 72;
+      const queueX = 40, runX = W / 2 - 60, doneX = W - 160;
+
+      txt('等待队列', queueX + 50, startY - 12, 10, C.yellow);
+      txt('执行区域 (临界区)', runX + 60, startY - 12, 10, C.green);
+      txt('已完成', doneX + 50, startY - 12, 10, C.dim);
+
+      // dotted boundary
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = C.border; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(runX - 20, startY - 6); ctx.lineTo(runX - 20, startY + totalH); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(doneX - 20, startY - 6); ctx.lineTo(doneX - 20, startY + totalH); ctx.stroke();
+      ctx.setLineDash([]);
+
+      threads.forEach((t, i) => {
+        const ty = startY + i * (laneH + gap);
+        let tx;
+        if (t.state === 'created') tx = queueX;
+        else if (t.state === 'sem_wait') tx = queueX;
+        else if (t.state === 'acquired') tx = runX + t.progress * 100;
+        else if (t.state === 'done') tx = doneX;
+        else tx = queueX;
+        drawThread(t, tx, ty, 110, laneH);
+
+        if (t.state === 'sem_wait') {
+          const pt = (tick % 50) / 50;
+          pulse(tx + 55, ty + laneH / 2, 28, C.yellow, pt);
+        }
+        if (t.state === 'acquired') {
+          arrow(tx + 55, ty - 2, sx, sy + 46, t.color + '30', 1);
+        }
+      });
+
+      // AQS
+      const ay = Math.min(startY + totalH + 20, H - 50);
+      rr(30, ay, W - 60, 30, 6, C.surface2 + '80', C.border);
+      mono(`AQS.state = ${maxP - usedPermits} (available permits)    acquire(): CAS(s, s-1)    release(): CAS(s, s+1)`, sx, ay + 15, 10, C.dim);
+    }
+
+    function renderExchanger() {
+      const threads = sim.threads;
+      if (threads.length < 2) return;
+      const t0 = threads[0], t1 = threads[1];
+      const cx = W / 2, cy = H / 2;
+
+      txt('Exchanger<String>', cx, 40, 14, C.accent);
+      mono('两个线程在交换点交换数据', cx, 60, 11, C.dim);
+
+      // exchange point
+      const epR = 30;
+      ctx.beginPath(); ctx.arc(cx, cy, epR, 0, Math.PI * 2);
+      ctx.fillStyle = sim.exchangerSlot ? C.yellow + '20' : C.accent + '15';
+      ctx.fill(); ctx.strokeStyle = sim.exchangerSlot ? C.yellow : C.accent + '60'; ctx.lineWidth = 2; ctx.stroke();
+      txt('Exchange', cx, cy - 6, 10, sim.exchangerSlot ? C.yellow : C.accent);
+      txt('Point', cx, cy + 8, 10, sim.exchangerSlot ? C.yellow : C.accent);
+
+      // thread 0 left
+      const lx = 80, ly = cy - 30;
+      drawThread(t0, lx, ly, 130, 60);
+      const t0endX = lx + 130;
+      if (t0.state !== 'created') {
+        const prog = t0.state === 'done' ? 1 : t0.progress;
+        arrow(t0endX + 10, cy, cx - epR - 6, cy, t0.color + '60');
+        // moving data
+        if (t0.state === 'running') {
+          const dx = t0endX + 10 + (cx - epR - 6 - t0endX - 10) * prog;
+          rr(dx - 16, cy - 20, 32, 14, 4, C.purple + '40', C.purple);
+          mono(t0.value || '', dx, cy - 13, 8, C.purple);
+        }
+      }
+
+      // thread 1 right
+      const rx = W - 210, ry = cy - 30;
+      drawThread(t1, rx, ry, 130, 60);
+      if (t1.state !== 'created') {
+        const prog = t1.state === 'done' ? 1 : t1.progress;
+        arrow(rx - 10, cy, cx + epR + 6, cy, t1.color + '60');
+        if (t1.state === 'running') {
+          const dx = rx - 10 - (rx - 10 - cx - epR - 6) * prog;
+          rr(dx - 16, cy - 20, 32, 14, 4, C.orange + '40', C.orange);
+          mono(t1.value || '', dx, cy - 13, 8, C.orange);
+        }
+      }
+
+      // exchange animation
+      if (t0.state === 'done' && t1.state === 'done') {
+        const swapT = (tick % 80) / 80;
+        // crossed arrows
+        ctx.save(); ctx.globalAlpha = 0.6;
+        const topY = cy - 50, botY = cy + 50;
+        // arrow from left to right (data going right)
+        drawCurveArrow(cx - 40, topY, cx + 40, topY, C.purple, swapT, '→ ' + t1.value);
+        drawCurveArrow(cx + 40, botY, cx - 40, botY, C.orange, swapT, '← ' + t0.value);
+        ctx.restore();
+      }
+
+      // waiting pulse
+      if (sim.exchangerSlot) {
+        const pt = (tick % 50) / 50;
+        pulse(cx, cy, epR, C.yellow, pt);
+      }
+    }
+
+    function drawCurveArrow(x1, y1, x2, y2, col, t, label) {
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+      arrow(x1, y1, x2, y2, col, 2);
+      mono(label, (x1 + x2) / 2, y1 - 10, 9, col);
+    }
+
+    function renderPhaser() {
+      const threads = sim.threads;
+      const n = threads.length;
+      const maxPhases = state.phases;
+      const cx = W / 2;
+
+      txt(`Phaser( parties=${n}, phases=${maxPhases} )`, cx, 30, 13, C.accent);
+      txt(`current phase: ${sim.phaserPhase}  |  arrived: ${sim.phaserArrived}/${n}`, cx, 50, 10, C.dim);
+
+      // phase columns
+      const colW = (W - 60) / (maxPhases + 0.5);
+      for (let p = 0; p < maxPhases; p++) {
+        const px = 30 + p * colW;
+        const isCurrent = p === sim.phaserPhase && !sim.done;
+        const isDone = p < sim.phaserPhase || sim.done;
+        rr(px, 65, colW - 10, H - 110, 8, isCurrent ? C.accent + '08' : C.surface + '40', isCurrent ? C.accent + '40' : C.border + '40');
+        txt(`Phase ${p}`, px + (colW - 10) / 2, 80, 12, isDone ? C.green : isCurrent ? C.accent : C.dim);
+
+        // barrier line at end of phase
+        if (p < maxPhases - 1) {
+          const bx2 = px + colW - 5;
+          ctx.setLineDash([3, 3]); ctx.strokeStyle = isDone ? C.green + '40' : C.yellow + '60'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(bx2, 90); ctx.lineTo(bx2, H - 50); ctx.stroke();
+          ctx.setLineDash([]);
+          mono('barrier', bx2, H - 44, 8, C.yellow + '80');
+        }
+      }
+
+      // threads
+      const thH = 42, gap = 6;
+      const startY = 95;
+      threads.forEach((t, i) => {
+        const ty = startY + i * (thH + gap);
+        const phase = t.phase || 0;
+        const colX = 30 + phase * colW + 10;
+        let tx;
+        if (t.state === 'running') tx = colX + t.progress * (colW - 140);
+        else if (t.state === 'phase_wait') tx = 30 + (phase + 1) * colW - 130;
+        else if (t.state === 'done') tx = 30 + (maxPhases - 1) * colW + colW - 140;
+        else tx = colX;
+        drawThread(t, tx, ty, 110, thH);
+
+        if (t.state === 'phase_wait') {
+          const pt = (tick % 50) / 50;
+          pulse(tx + 55, ty + thH / 2, 25, C.yellow, pt);
+        }
+      });
+    }
+
+    // ── main render loop ──
+    function render() {
+      syncPalette();
+      ctx.clearRect(0, 0, W, H);
+      // grid
+      ctx.strokeStyle = C.grid; ctx.lineWidth = .5;
+      for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+      for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+      switch (state.tab) {
+        case 'countdown': renderCountdown(); break;
+        case 'barrier': renderBarrier(); break;
+        case 'semaphore': renderSemaphore(); break;
+        case 'exchanger': renderExchanger(); break;
+        case 'phaser': renderPhaser(); break;
+      }
+      raf = requestAnimationFrame(render);
+    }
+
+    // ── sidebar ──
+    function updateSidebar() {
+      const sb = $('#sb');
+      let h = '';
+      h += `<div class="ctrl"><h3>Controls</h3>
+    <div class="btn-row">
+      <button class="btn ${running ? 'running' : ''}" onclick="startSim()">${running ? 'Running...' : '▶ Run'}</button>
+      <button class="btn" onclick="resetSim();updateSidebar()">↺ Reset</button>
+    </div>
+    <div class="row"><label>Speed</label><span>${state.speed}x</span></div>
+    <input type="range" min="0.5" max="3" step="0.5" value="${state.speed}" oninput="state.speed=+this.value;updateSidebar();updatePrompt()">
+  </div>`;
+
+      if (state.tab === 'countdown') {
+        h += `<div class="ctrl"><h3>CountDownLatch Config</h3>
+      <div class="row"><label>Worker数量</label><span>${state.threadCount - 1}</span></div>
+      <input type="range" min="2" max="8" step="1" value="${state.threadCount}" oninput="state.threadCount=+this.value;resetSim();updatePrompt()">
+      <div class="row"><label>count (初始值)</label><span>${state.countDown}</span></div>
+      <input type="range" min="1" max="8" step="1" value="${state.countDown}" oninput="state.countDown=+this.value;resetSim();updatePrompt()">
+    </div>`;
+      } else if (state.tab === 'barrier') {
+        h += `<div class="ctrl"><h3>CyclicBarrier Config</h3>
+      <div class="row"><label>parties</label><span>${state.barrierParties}</span></div>
+      <input type="range" min="2" max="8" step="1" value="${state.barrierParties}" oninput="state.barrierParties=+this.value;resetSim();updatePrompt()">
+    </div>`;
+      } else if (state.tab === 'semaphore') {
+        h += `<div class="ctrl"><h3>Semaphore Config</h3>
+      <div class="row"><label>线程数</label><span>${state.threadCount}</span></div>
+      <input type="range" min="3" max="10" step="1" value="${state.threadCount}" oninput="state.threadCount=+this.value;resetSim();updatePrompt()">
+      <div class="row"><label>permits</label><span>${state.permits}</span></div>
+      <input type="range" min="1" max="6" step="1" value="${state.permits}" oninput="state.permits=+this.value;resetSim();updatePrompt()">
+    </div>`;
+      } else if (state.tab === 'exchanger') {
+        h += `<div class="ctrl"><h3>Exchanger</h3><p style="font-size:11px;color:${C.dim}">固定2个线程进行数据交换</p></div>`;
+      } else if (state.tab === 'phaser') {
+        h += `<div class="ctrl"><h3>Phaser Config</h3>
+      <div class="row"><label>parties</label><span>${state.barrierParties}</span></div>
+      <input type="range" min="2" max="6" step="1" value="${state.barrierParties}" oninput="state.barrierParties=+this.value;resetSim();updatePrompt()">
+      <div class="row"><label>phases</label><span>${state.phases}</span></div>
+      <input type="range" min="2" max="5" step="1" value="${state.phases}" oninput="state.phases=+this.value;resetSim();updatePrompt()">
+    </div>`;
+      }
+
+      // info card
+      h += getInfoCard();
+
+      // log
+      h += `<div class="ctrl"><h3>Event Log</h3><div class="log-box" id="logBox"></div></div>`;
+
+      sb.innerHTML = h;
+      updateLogBox();
+      updatePrompt();
+    }
+
+    function updateLogBox() {
+      const box = $('#logBox');
+      if (!box) return;
+      const recent = logs.slice(-30);
+      box.innerHTML = recent.map(l => `<div class="log-${l.type}"><span style="color:${C.dim}">[${l.tick}]</span> ${l.msg}</div>`).join('');
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function getInfoCard() {
+      if (state.tab === 'countdown') return `<div class="info"><h4>CountDownLatch</h4>
+    <p>一次性门闩：count 降到 0 后打开，不可重置</p><br>
+    <p><code>new CountDownLatch(N)</code></p>
+    <p><code>latch.countDown()</code> — count 减 1</p>
+    <p><code>latch.await()</code> — 阻塞直到 count=0</p><br>
+    <p><b>底层:</b> AQS 共享模式, state=count</p>
+    <p><b>场景:</b> 主线程等待N个子任务完成</p></div>`;
+      if (state.tab === 'barrier') return `<div class="info"><h4>CyclicBarrier</h4>
+    <p>可重用屏障：所有线程到齐后一起放行</p><br>
+    <p><code>new CyclicBarrier(N, action)</code></p>
+    <p><code>barrier.await()</code> — 等待其他线程</p><br>
+    <p><b>底层:</b> ReentrantLock + Condition</p>
+    <p><b>vs Latch:</b> 可重置(Cyclic)，线程互相等待</p>
+    <p><b>场景:</b> 多线程分阶段并行计算</p></div>`;
+      if (state.tab === 'semaphore') return `<div class="info"><h4>Semaphore</h4>
+    <p>信号量：控制同时访问资源的线程数</p><br>
+    <p><code>new Semaphore(permits)</code></p>
+    <p><code>sem.acquire()</code> — 获取许可(阻塞)</p>
+    <p><code>sem.release()</code> — 释放许可</p><br>
+    <p><b>底层:</b> AQS 共享模式, state=permits</p>
+    <p><b>场景:</b> 限流、连接池、资源配额</p></div>`;
+      if (state.tab === 'exchanger') return `<div class="info"><h4>Exchanger</h4>
+    <p>双线程数据交换点</p><br>
+    <p><code>exchanger.exchange(data)</code></p>
+    <p>两个线程各自调用 exchange，阻塞直到</p>
+    <p>对方也调用，然后互换数据返回</p><br>
+    <p><b>底层:</b> CAS + park/unpark</p>
+    <p><b>场景:</b> 生产者-消费者双缓冲</p></div>`;
+      if (state.tab === 'phaser') return `<div class="info"><h4>Phaser</h4>
+    <p>可动态注册的分阶段同步器</p><br>
+    <p><code>new Phaser(parties)</code></p>
+    <p><code>phaser.arriveAndAwaitAdvance()</code></p>
+    <p><code>phaser.register() / deregister()</code></p><br>
+    <p><b>vs CyclicBarrier:</b></p>
+    <p>• 动态调整 parties 数</p>
+    <p>• 支持多阶段 + onAdvance 回调</p>
+    <p><b>场景:</b> 多阶段并行迭代算法</p></div>`;
+      return '';
+    }
+
+    // ── prompt ──
+    function updatePrompt() {
+      const parts = [];
+      parts.push(`JUC并发工具: ${state.tab === 'countdown' ? 'CountDownLatch' : state.tab === 'barrier' ? 'CyclicBarrier' : state.tab === 'semaphore' ? 'Semaphore' : state.tab === 'exchanger' ? 'Exchanger' : 'Phaser'}`);
+      if (state.tab === 'countdown') {
+        if (state.threadCount !== DEFAULTS.threadCount) parts.push(`${state.threadCount - 1}个Worker线程`);
+        if (state.countDown !== DEFAULTS.countDown) parts.push(`count初始值=${state.countDown}`);
+        parts.push('主线程await()等待所有Worker countDown()完成后继续');
+      } else if (state.tab === 'barrier') {
+        parts.push(`${state.barrierParties}个线程互相等待到齐后统一放行，可循环使用`);
+      } else if (state.tab === 'semaphore') {
+        if (state.permits !== DEFAULTS.permits) parts.push(`permits=${state.permits}`);
+        parts.push(`${state.threadCount}个线程竞争${state.permits}个许可，超出的排队等待release()`);
+      } else if (state.tab === 'exchanger') {
+        parts.push('两个线程在交换点交换数据，先到的阻塞等待对方');
+      } else if (state.tab === 'phaser') {
+        parts.push(`${state.barrierParties}个线程分${state.phases}阶段同步执行，每阶段结束等齐后推进`);
+      }
+      $('#pt').textContent = parts.join('。') + '。';
+    }
+
+    // ── events ──
+    $$('.tab').forEach(t => t.addEventListener('click', () => {
+      $$('.tab').forEach(x => x.classList.remove('active')); t.classList.add('active');
+      state.tab = t.dataset.tab; resetSim(); updateSidebar();
+    }));
+
+    $$('.preset').forEach(p => p.addEventListener('click', () => {
+      $$('.preset').forEach(x => x.classList.remove('active')); p.classList.add('active');
+      state.preset = p.dataset.p;
+      if (p.dataset.p === 'p1') { state.tab = 'countdown'; state.threadCount = 6; state.countDown = 5; }
+      if (p.dataset.p === 'p2') { state.tab = 'barrier'; state.barrierParties = 4; }
+      if (p.dataset.p === 'p3') { state.tab = 'semaphore'; state.threadCount = 8; state.permits = 3; }
+      if (p.dataset.p === 'p4') { state.tab = 'phaser'; state.barrierParties = 4; state.phases = 3; }
+      $$('.tab').forEach(x => { x.classList.remove('active'); if (x.dataset.tab === state.tab) x.classList.add('active'); });
+      resetSim(); updateSidebar();
+    }));
+
+    $('#cpBtn').addEventListener('click', () => {
+      navigator.clipboard.writeText($('#pt').textContent);
+      const b = $('#cpBtn'); b.textContent = 'Copied!'; setTimeout(() => b.textContent = 'Copy', 1200);
+    });
+
+    // ── theme toggle observer ──
+    new MutationObserver(() => { syncPalette(); updateSidebar(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    // ── init ──
+    resize(); resetSim(); render();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

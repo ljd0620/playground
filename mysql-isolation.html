@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MySQL 事务隔离级别</title>
+  <meta name="description" content="交互式演示 MySQL 四种事务隔离级别（读未提交、读已提交、可重复读、串行化）及脏读、幻读等并发问题">
+  <meta name="keywords" content="MySQL, 事务隔离级别, MVCC, 脏读, 幻读, 可重复读, 交互式演示">
+  <meta property="og:title" content="MySQL 事务隔离级别">
+  <meta property="og:description" content="交互式演示 MySQL 四种事务隔离级别（读未提交、读已提交、可重复读、串行化）及脏读、幻读等并发问题">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      grid-template-rows: 1fr 160px;
+      height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      grid-row: 1/3;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 18px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .sidebar::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .sidebar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .sidebar::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .sidebar h2 {
+      font-size: 0.82rem;
+      color: var(--accent-blue);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sidebar h2::before {
+      content: '';
+      width: 3px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    .sidebar h3 {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 500;
+    }
+
+    .sidebar p.sub {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .level-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .level-card {
+      padding: 10px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .level-card::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: transparent;
+      border-radius: 0 2px 2px 0;
+      transition: background 0.2s;
+    }
+
+    .level-card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .level-card.active {
+      border-color: var(--accent);
+      background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--bg-input)), var(--bg-input));
+      box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+
+    .level-card.active::before {
+      background: var(--accent);
+    }
+
+    .level-card .lc-name {
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .level-card .lc-desc {
+      font-size: 0.65rem;
+      color: var(--text-secondary);
+      margin-top: 3px;
+    }
+
+    .level-card .lc-badges {
+      display: flex;
+      gap: 4px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      font-size: 0.6rem;
+      padding: 2px 6px;
+      border-radius: 6px;
+      border: 1px solid;
+      font-weight: 500;
+    }
+
+    .badge.yes {
+      color: var(--accent-red);
+      border-color: rgba(255, 92, 108, 0.3);
+      background: rgba(255, 92, 108, 0.08);
+    }
+
+    .badge.no {
+      color: var(--accent-green);
+      border-color: rgba(54, 217, 134, 0.3);
+      background: rgba(54, 217, 134, 0.08);
+    }
+
+    .scenario-cards {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .scenario-card {
+      padding: 9px 12px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.72rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .scenario-card::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: transparent;
+      border-radius: 0 2px 2px 0;
+      transition: background 0.2s;
+    }
+
+    .scenario-card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .scenario-card.active {
+      border-color: var(--accent-purple);
+      background: linear-gradient(135deg, rgba(176, 122, 255, 0.08), rgba(176, 122, 255, 0.02));
+      box-shadow: 0 0 16px var(--glow-purple);
+    }
+
+    .scenario-card.active::before {
+      background: var(--accent-purple);
+    }
+
+    .scenario-card .sc-name {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .scenario-card .sc-desc {
+      color: var(--text-secondary);
+      font-size: 0.65rem;
+      margin-top: 3px;
+    }
+
+    .speed-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .speed-row input {
+      flex: 1;
+      accent-color: var(--accent-blue);
+    }
+
+    .speed-row span {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      min-width: 30px;
+    }
+
+    .play-btn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 600;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .play-btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .play-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .play-btn:active {
+      transform: translateY(0);
+    }
+
+    .play-btn.go {
+      background: linear-gradient(135deg, #1a9f4a, #238636);
+      color: #fff;
+    }
+
+    .play-btn.stop {
+      background: linear-gradient(135deg, #d32f2f, var(--accent-red));
+      color: #fff;
+    }
+
+    .reset-btn {
+      width: 100%;
+      padding: 8px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.72rem;
+      margin-top: 6px;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+
+    .reset-btn:hover {
+      background: #1e2a3a;
+      color: var(--text-primary);
+      border-color: var(--border-hover);
+    }
+
+    /* Main area */
+    .main {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .main-header {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(180deg, rgba(77, 163, 255, 0.04) 0%, transparent 100%);
+    }
+
+    .main-header h3 {
+      font-size: 0.82rem;
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .main-header .tag {
+      font-size: 0.65rem;
+      padding: 4px 10px;
+      border-radius: 10px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .sim-area {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 280px 1fr;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    /* Transaction panels */
+    .tx-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .tx-header {
+      padding: 10px 16px;
+      font-size: 0.74rem;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-primary);
+    }
+
+    .tx-header .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .tx-ops {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .tx-ops::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .tx-ops::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .tx-ops::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .tx-op {
+      padding: 9px 12px;
+      border-radius: var(--radius-sm);
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.68rem;
+      border-left: 3px solid transparent;
+      opacity: 0.3;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+
+    .tx-op.done {
+      opacity: 1;
+    }
+
+    .tx-op.current {
+      opacity: 1;
+      background: linear-gradient(135deg, rgba(77, 163, 255, 0.1), rgba(77, 163, 255, 0.03));
+      border-left-color: var(--accent-blue);
+      box-shadow: 0 0 16px var(--glow-blue);
+    }
+
+    .tx-op.problem {
+      opacity: 1;
+      background: rgba(255, 92, 108, 0.08);
+      border-left-color: var(--accent-red);
+      box-shadow: 0 0 12px rgba(255, 92, 108, 0.1);
+    }
+
+    .tx-op .op-sql {
+      color: var(--text-primary);
+      line-height: 1.5;
+    }
+
+    .tx-op .op-result {
+      color: var(--accent-green);
+      font-size: 0.65rem;
+      margin-top: 4px;
+      display: none;
+    }
+
+    .tx-op.done .op-result,
+    .tx-op.current .op-result,
+    .tx-op.problem .op-result {
+      display: block;
+    }
+
+    .tx-op .op-note {
+      color: var(--accent-orange);
+      font-size: 0.65rem;
+      margin-top: 3px;
+      font-style: italic;
+      display: none;
+    }
+
+    .tx-op.problem .op-note {
+      display: block;
+    }
+
+    /* Data view */
+    .data-panel {
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-primary);
+    }
+
+    .data-header {
+      padding: 10px 12px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .data-table-wrap {
+      flex: 1;
+      overflow: hidden;
+      padding: 8px;
+    }
+
+    table.dt {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.65rem;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+    }
+
+    table.dt th {
+      color: var(--text-secondary);
+      text-align: left;
+      padding: 5px 6px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      font-size: 0.6rem;
+    }
+
+    table.dt td {
+      padding: 5px 6px;
+      border-bottom: 1px solid rgba(30, 42, 58, 0.5);
+      color: var(--text-primary);
+      transition: all 0.3s;
+    }
+
+    table.dt tr.highlight td {
+      background: rgba(255, 159, 67, 0.08);
+      color: var(--accent-orange);
+    }
+
+    table.dt tr.inserted td {
+      background: rgba(54, 217, 134, 0.08);
+      color: var(--accent-green);
+    }
+
+    table.dt tr.deleted td {
+      background: rgba(255, 92, 108, 0.08);
+      color: var(--accent-red);
+      text-decoration: line-through;
+    }
+
+    .data-section {
+      margin-top: 8px;
+      padding: 10px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+
+    .data-section h4 {
+      font-size: 0.65rem;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .lock-list {
+      font-size: 0.65rem;
+      color: var(--accent-purple);
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+    }
+
+    .lock-list div {
+      padding: 2px 0;
+    }
+
+    .undo-log {
+      font-size: 0.65rem;
+      color: var(--accent-orange);
+      font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
+    }
+
+    .undo-log div {
+      padding: 2px 0;
+    }
+
+    /* Timeline */
+    .timeline {
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-card);
+    }
+
+    .timeline-bar {
+      position: relative;
+      height: 40px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+
+    .tl-progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background: var(--glow-blue);
+      transition: width 0.3s;
+    }
+
+    .tl-markers {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+    }
+
+    .tl-marker {
+      position: absolute;
+      width: 2px;
+      height: 24px;
+      border-radius: 1px;
+      top: 8px;
+      transition: left 0.3s;
+    }
+
+    .tl-marker.txA {
+      background: var(--accent-blue);
+    }
+
+    .tl-marker.txB {
+      background: var(--accent-orange);
+    }
+
+    .tl-label {
+      position: absolute;
+      font-size: 0.56rem;
+      bottom: 2px;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .tl-label.txA {
+      color: var(--accent-blue);
+    }
+
+    .tl-label.txB {
+      color: var(--accent-orange);
+    }
+
+    /* Prompt */
+    .prompt-area {
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .prompt-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .prompt-header h3 {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 500;
+    }
+
+    .copy-btn {
+      padding: 5px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.7rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: #1e2a3a;
+      color: var(--text-primary);
+      border-color: var(--border-hover);
+    }
+
+    .copy-btn.copied {
+      background: var(--accent-green);
+      border-color: var(--accent-green);
+      color: #fff;
+    }
+
+    .prompt-text {
+      flex: 1;
+      font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.68rem;
+      color: #c0cad8;
+      line-height: 1.7;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    .prompt-text::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .prompt-text::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .prompt-text::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <div class="sidebar">
+      <div>
+        <h2>MySQL 事务隔离级别</h2>
+        <p class="sub">交互式演示 · 观察并发事务行为差异</p>
+      </div>
+
+      <div>
+        <h3>选择隔离级别</h3>
+        <div class="level-cards" id="levelCards"></div>
+      </div>
+
+      <div>
+        <h3>并发场景</h3>
+        <div class="scenario-cards" id="scenarioCards"></div>
+      </div>
+
+      <div>
+        <h3>动画速度</h3>
+        <div class="speed-row">
+          <span>慢</span>
+          <input type="range" min="0.5" max="3" step="0.5" value="1" id="speedSlider"
+            oninput="state.speed=+this.value;document.getElementById('speedVal').textContent=this.value+'x'">
+          <span id="speedVal">1x</span>
+        </div>
+      </div>
+
+      <div>
+        <button class="play-btn go" id="playBtn" onclick="togglePlay()">▶ 运行演示</button>
+        <button class="reset-btn" onclick="resetSim()">重置</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="main-header">
+        <h3 id="headerTitle">READ COMMITTED — 脏读演示</h3>
+        <span class="tag" id="headerTag" style="background:#f8514930;color:#f85149">可能发生</span>
+      </div>
+      <div class="sim-area">
+        <div class="tx-panel" id="txAPanel">
+          <div class="tx-header">
+            <div class="dot" style="background:#58a6ff"></div>事务 A
+          </div>
+          <div class="tx-ops" id="txAOps"></div>
+        </div>
+        <div class="data-panel">
+          <div class="data-header">数据库状态</div>
+          <div class="data-table-wrap" id="dataView"></div>
+        </div>
+        <div class="tx-panel" id="txBPanel">
+          <div class="tx-header">
+            <div class="dot" style="background:#f0b849"></div>事务 B
+          </div>
+          <div class="tx-ops" id="txBOps"></div>
+        </div>
+      </div>
+      <div class="timeline">
+        <div class="timeline-bar" id="timelineBar">
+          <div class="tl-progress" id="tlProgress"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="prompt-area">
+      <div class="prompt-header">
+        <h3>生成的学习提示词</h3>
+        <button class="copy-btn" id="copyBtn" onclick="copyPrompt()">复制</button>
+      </div>
+      <div class="prompt-text" id="promptText"></div>
+    </div>
+  </div>
+
+  <script>
+    // ============ DATA MODEL ============
+    const LEVELS = [
+      {
+        id: 'ru', name: 'READ UNCOMMITTED', short: '读未提交', color: '#f85149',
+        desc: '最低隔离，可读到未提交数据',
+        dirty: true, nonrepeat: true, phantom: true
+      },
+      {
+        id: 'rc', name: 'READ COMMITTED', short: '读已提交', color: '#f0b849',
+        desc: '只能读到已提交数据（Oracle 默认）',
+        dirty: false, nonrepeat: true, phantom: true
+      },
+      {
+        id: 'rr', name: 'REPEATABLE READ', short: '可重复读', color: '#58a6ff',
+        desc: '同一事务内多次读结果一致（MySQL 默认）',
+        dirty: false, nonrepeat: false, phantom: true
+      },
+      {
+        id: 'se', name: 'SERIALIZABLE', short: '串行化', color: '#7ee787',
+        desc: '完全串行执行，最高隔离',
+        dirty: false, nonrepeat: false, phantom: false
+      },
+    ];
+
+    const SCENARIOS = [
+      {
+        id: 'dirty', name: '脏读 (Dirty Read)',
+        desc: '读到另一事务未提交的修改',
+        problems: { ru: true, rc: false, rr: false, se: false }
+      },
+      {
+        id: 'nonrepeat', name: '不可重复读 (Non-Repeatable Read)',
+        desc: '同一事务内两次读同一行结果不同',
+        problems: { ru: true, rc: true, rr: false, se: false }
+      },
+      {
+        id: 'phantom', name: '幻读 (Phantom Read)',
+        desc: '同一事务内两次范围查询，行数不同',
+        problems: { ru: true, rc: true, rr: true, se: false }
+      },
+      {
+        id: 'lost', name: '丢失更新 (Lost Update)',
+        desc: '两个事务同时修改同一行，一个覆盖另一个',
+        problems: { ru: true, rc: true, rr: false, se: false }
+      },
+    ];
+
+    // Initial table data
+    const BASE_TABLE = [
+      { id: 1, name: 'Alice', balance: 1000, dept: 'Engineering' },
+      { id: 2, name: 'Bob', balance: 2000, dept: 'Engineering' },
+      { id: 3, name: 'Carol', balance: 1500, dept: 'Marketing' },
+    ];
+
+    // ============ SCENARIO STEP GENERATORS ============
+    function buildSteps(levelId, scenarioId) {
+      const hasProblem = SCENARIOS.find(s => s.id === scenarioId).problems[levelId];
+      const steps = [];
+
+      if (scenarioId === 'dirty') {
+        steps.push(
+          { tx: 'A', sql: 'BEGIN;', result: '开启事务 A', type: 'begin' },
+          { tx: 'B', sql: 'BEGIN;', result: '开启事务 B', type: 'begin' },
+          { tx: 'A', sql: "UPDATE accounts SET balance=500\nWHERE id=1;", result: 'Alice: 1000 → 500 (未提交)', type: 'write', row: 0, field: 'balance', val: 500 },
+          {
+            tx: 'B', sql: "SELECT balance FROM accounts\nWHERE id=1;", result: hasProblem ? 'balance = 500 ⚠️ 读到未提交数据!' : 'balance = 1000 ✓ 读到的是提交前的值',
+            type: 'read', row: 0, field: 'balance', problem: hasProblem,
+            note: hasProblem ? '脏读！如果事务A回滚，这个值就是无效的' : 'MVCC 快照读，看到的是已提交版本'
+          },
+          { tx: 'A', sql: 'ROLLBACK;', result: '事务 A 回滚，Alice 恢复为 1000', type: 'rollback' },
+          { tx: 'B', sql: "SELECT balance FROM accounts\nWHERE id=1;", result: 'balance = 1000', type: 'read', row: 0, field: 'balance' },
+          { tx: 'B', sql: 'COMMIT;', result: '事务 B 提交', type: 'commit' },
+        );
+      } else if (scenarioId === 'nonrepeat') {
+        steps.push(
+          { tx: 'A', sql: 'BEGIN;', result: '开启事务 A', type: 'begin' },
+          { tx: 'B', sql: 'BEGIN;', result: '开启事务 B', type: 'begin' },
+          { tx: 'A', sql: "SELECT balance FROM accounts\nWHERE id=1;", result: 'balance = 1000 (第一次读)', type: 'read', row: 0, field: 'balance' },
+          { tx: 'B', sql: "UPDATE accounts SET balance=2000\nWHERE id=1;", result: 'Alice: 1000 → 2000', type: 'write', row: 0, field: 'balance', val: 2000 },
+          { tx: 'B', sql: 'COMMIT;', result: '事务 B 已提交', type: 'commit' },
+          {
+            tx: 'A', sql: "SELECT balance FROM accounts\nWHERE id=1;", result: hasProblem ? 'balance = 2000 ⚠️ 与第一次读不同!' : 'balance = 1000 ✓ 与第一次读一致',
+            type: 'read', row: 0, field: 'balance', problem: hasProblem,
+            note: hasProblem ? '不可重复读！同一事务内两次读到不同值' : 'MVCC 保证了快照一致性，始终读到事务开始时的版本'
+          },
+          { tx: 'A', sql: 'COMMIT;', result: '事务 A 提交', type: 'commit' },
+        );
+      } else if (scenarioId === 'phantom') {
+        const isRR = levelId === 'rr';
+        const blocked = levelId === 'se';
+        steps.push(
+          { tx: 'A', sql: 'BEGIN;', result: '开启事务 A', type: 'begin' },
+          { tx: 'B', sql: 'BEGIN;', result: '开启事务 B', type: 'begin' },
+          { tx: 'A', sql: "SELECT * FROM accounts\nWHERE dept='Engineering';", result: '返回 2 行: Alice, Bob', type: 'read_range', field: 'dept', val: 'Engineering' },
+          {
+            tx: 'B', sql: "INSERT INTO accounts VALUES\n(4,'Dave',3000,'Engineering');", result: blocked ? '⏳ 被阻塞！等待事务 A 释放锁...' : '插入成功: Dave (Engineering)',
+            type: 'insert', newRow: { id: 4, name: 'Dave', balance: 3000, dept: 'Engineering' },
+            problem: blocked, note: blocked ? 'SERIALIZABLE 对范围查询加间隙锁，阻止插入' : null
+          },
+          { tx: 'B', sql: 'COMMIT;', result: blocked ? '等待中...' : '事务 B 已提交', type: blocked ? 'wait' : 'commit' },
+          {
+            tx: 'A', sql: "SELECT * FROM accounts\nWHERE dept='Engineering';",
+            result: hasProblem && !isRR ? '返回 3 行 ⚠️ 多了 Dave!' : isRR ? '返回 2 行 ✓ MVCC 快照一致（但间隙锁场景下行为不同）' : blocked ? '返回 2 行 ✓ Dave 的插入被阻塞了' : '返回 2 行 ✓ 一致',
+            type: 'read_range', field: 'dept', val: 'Engineering', problem: hasProblem && !isRR && !blocked,
+            note: hasProblem && !isRR ? '幻读！范围查询结果集多出了新行' : isRR ? 'InnoDB 的 MVCC + Next-Key Lock 在多数场景下可避免幻读' : blocked ? 'SERIALIZABLE 通过锁完全避免幻读' : null
+          },
+          { tx: 'A', sql: 'COMMIT;', result: '事务 A 提交', type: 'commit' },
+        );
+      } else if (scenarioId === 'lost') {
+        steps.push(
+          { tx: 'A', sql: 'BEGIN;', result: '开启事务 A', type: 'begin' },
+          { tx: 'B', sql: 'BEGIN;', result: '开启事务 B', type: 'begin' },
+          { tx: 'A', sql: "SELECT balance FROM accounts\nWHERE id=1;\n-- 读到 1000，准备 +200", result: 'balance = 1000', type: 'read', row: 0, field: 'balance' },
+          { tx: 'B', sql: "SELECT balance FROM accounts\nWHERE id=1;\n-- 读到 1000，准备 +300", result: 'balance = 1000', type: 'read', row: 0, field: 'balance' },
+          { tx: 'A', sql: "UPDATE accounts SET balance=1200\nWHERE id=1; -- 1000+200", result: 'Alice: 1000 → 1200', type: 'write', row: 0, field: 'balance', val: 1200 },
+          { tx: 'A', sql: 'COMMIT;', result: '事务 A 提交', type: 'commit' },
+          {
+            tx: 'B', sql: "UPDATE accounts SET balance=1300\nWHERE id=1; -- 1000+300",
+            result: hasProblem ? 'Alice: 1200 → 1300 ⚠️ A的+200被覆盖!' : '⏳ 检测到冲突，事务回滚',
+            type: 'write', row: 0, field: 'balance', val: hasProblem ? 1300 : 1200, problem: hasProblem,
+            note: hasProblem ? '丢失更新！事务A的修改被事务B覆盖了' : 'MVCC 检测到版本冲突，防止丢失更新'
+          },
+          { tx: 'B', sql: hasProblem ? 'COMMIT;' : 'ROLLBACK; -- 需要重试', result: hasProblem ? '事务 B 提交，最终 balance=1300' : '事务 B 回滚，应使用 SELECT ... FOR UPDATE', type: hasProblem ? 'commit' : 'rollback' },
+        );
+      }
+      return steps;
+    }
+
+    // ============ STATE ============
+    const state = {
+      level: 'rc',
+      scenario: 'dirty',
+      speed: 1,
+      playing: false,
+      step: -1,
+      tableData: JSON.parse(JSON.stringify(BASE_TABLE)),
+      locks: [],
+      undoLog: [],
+    };
+
+    // ============ RENDER ============
+    function renderLevelCards() {
+      const el = document.getElementById('levelCards');
+      el.innerHTML = LEVELS.map(l => `
+    <div class="level-card ${state.level === l.id ? 'active' : ''}" style="--accent:${l.color}" onclick="selectLevel('${l.id}')">
+      <div class="lc-name" style="color:${l.color}">${l.name}</div>
+      <div class="lc-desc">${l.desc}</div>
+      <div class="lc-badges">
+        <span class="badge ${l.dirty ? 'yes' : 'no'}">脏读 ${l.dirty ? '✗' : '✓'}</span>
+        <span class="badge ${l.nonrepeat ? 'yes' : 'no'}">不可重复读 ${l.nonrepeat ? '✗' : '✓'}</span>
+        <span class="badge ${l.phantom ? 'yes' : 'no'}">幻读 ${l.phantom ? '✗' : '✓'}</span>
+      </div>
+    </div>
+  `).join('');
+    }
+
+    function renderScenarioCards() {
+      const el = document.getElementById('scenarioCards');
+      el.innerHTML = SCENARIOS.map(s => {
+        const hasProblem = s.problems[state.level];
+        return `
+    <div class="scenario-card ${state.scenario === s.id ? 'active' : ''}" onclick="selectScenario('${s.id}')">
+      <div class="sc-name">${s.name} ${hasProblem ? '⚠️' : '✅'}</div>
+      <div class="sc-desc">${s.desc}</div>
+    </div>`;
+      }).join('');
+    }
+
+    function renderOps() {
+      const steps = buildSteps(state.level, state.scenario);
+      const aOps = document.getElementById('txAOps');
+      const bOps = document.getElementById('txBOps');
+      aOps.innerHTML = ''; bOps.innerHTML = '';
+
+      steps.forEach((s, i) => {
+        const cls = i < state.step ? 'done' : i === state.step ? (s.problem ? 'problem current' : 'current') : '';
+        const html = `
+      <div class="tx-op ${cls}" id="op-${i}">
+        <div class="op-sql">${s.sql.replace(/\n/g, '<br>')}</div>
+        <div class="op-result">${s.result}</div>
+        ${s.note ? `<div class="op-note">${s.note}</div>` : ''}
+      </div>`;
+        if (s.tx === 'A') aOps.innerHTML += html;
+        else bOps.innerHTML += html;
+      });
+    }
+
+    function renderDataView() {
+      const dv = document.getElementById('dataView');
+      const steps = buildSteps(state.level, state.scenario);
+      const curStep = steps[state.step];
+
+      // Rebuild table state by replaying steps
+      const table = JSON.parse(JSON.stringify(BASE_TABLE));
+      const highlightRows = new Set();
+      const insertedRows = new Set();
+      let showPhantom = false;
+
+      for (let i = 0; i <= state.step && i < steps.length; i++) {
+        const s = steps[i];
+        if (s.type === 'write' && s.row !== undefined) {
+          // Check if this write should be visible
+          const isCommitted = steps.slice(0, i).some(prev => prev.tx === s.tx && prev.type === 'commit');
+          // In dirty read scenario with RU, show uncommitted writes
+          if (state.level === 'ru' || isCommitted || s.tx === steps[i]?.tx) {
+            table[s.row][s.field] = s.val;
+            if (i === state.step) highlightRows.add(s.row);
+          }
+        }
+        if (s.type === 'rollback') {
+          // Revert to base for that tx's changes
+          const txSteps = steps.slice(0, i).filter(p => p.tx === s.tx && p.type === 'write');
+          txSteps.forEach(ts => {
+            if (ts.row !== undefined) table[ts.row] = { ...BASE_TABLE[ts.row] };
+          });
+        }
+        if (s.type === 'insert' && !s.problem) {
+          const exists = table.find(r => r.id === s.newRow.id);
+          if (!exists) {
+            table.push({ ...s.newRow });
+            if (i === state.step) insertedRows.add(table.length - 1);
+          }
+        }
+      }
+
+      let html = `<table class="dt"><thead><tr><th>id</th><th>name</th><th>balance</th><th>dept</th></tr></thead><tbody>`;
+      table.forEach((r, i) => {
+        const hl = highlightRows.has(i) ? ' highlight' : insertedRows.has(i) ? ' inserted' : '';
+        html += `<tr class="${hl}"><td>${r.id}</td><td>${r.name}</td><td>${r.balance}</td><td>${r.dept}</td></tr>`;
+      });
+      html += '</tbody></table>';
+
+      // MVCC / Lock info
+      const level = LEVELS.find(l => l.id === state.level);
+      html += `<div class="data-section"><h4>隔离级别: ${level.name}</h4>`;
+
+      if (state.step >= 0) {
+        const activeA = steps.slice(0, state.step + 1).some(s => s.tx === 'A' && s.type === 'begin') && !steps.slice(0, state.step + 1).some(s => s.tx === 'A' && (s.type === 'commit' || s.type === 'rollback'));
+        const activeB = steps.slice(0, state.step + 1).some(s => s.tx === 'B' && s.type === 'begin') && !steps.slice(0, state.step + 1).some(s => s.tx === 'B' && (s.type === 'commit' || s.type === 'rollback'));
+
+        if (activeA || activeB) {
+          html += '<div class="lock-list">';
+          if (activeA) html += '<div>🔒 事务 A: 活跃</div>';
+          if (activeB) html += '<div>🔒 事务 B: 活跃</div>';
+
+          if (state.level === 'rr' || state.level === 'se') {
+            html += '<div style="margin-top:4px;color:var(--text-secondary);">MVCC 快照版本已创建</div>';
+          }
+          if (state.level === 'se') {
+            html += '<div style="color:#7ee787;">范围锁 + 间隙锁启用</div>';
+          }
+          html += '</div>';
+        }
+      }
+      html += '</div>';
+      dv.innerHTML = html;
+    }
+
+    function renderTimeline() {
+      const steps = buildSteps(state.level, state.scenario);
+      const total = steps.length;
+      const bar = document.getElementById('timelineBar');
+      const progress = document.getElementById('tlProgress');
+      progress.style.width = total > 0 ? ((state.step + 1) / total * 100) + '%' : '0';
+
+      // Remove old markers
+      bar.querySelectorAll('.tl-marker,.tl-label').forEach(e => e.remove());
+
+      steps.forEach((s, i) => {
+        const pct = ((i + 0.5) / total * 100);
+        const done = i <= state.step;
+        const isCurrent = i === state.step;
+        const cls = s.tx === 'A' ? 'txA' : 'txB';
+
+        const marker = document.createElement('div');
+        marker.className = `tl-marker ${cls}`;
+        marker.style.left = pct + '%';
+        marker.style.opacity = done ? 1 : 0.25;
+        marker.style.height = isCurrent ? '30px' : '16px';
+        marker.style.top = isCurrent ? '5px' : '12px';
+        bar.appendChild(marker);
+
+        if (isCurrent) {
+          const label = document.createElement('div');
+          label.className = `tl-label ${cls}`;
+          label.style.left = pct + '%';
+          label.textContent = s.sql.split('\n')[0].substring(0, 20);
+          bar.appendChild(label);
+        }
+      });
+    }
+
+    function renderHeader() {
+      const level = LEVELS.find(l => l.id === state.level);
+      const scenario = SCENARIOS.find(s => s.id === state.scenario);
+      const hasProblem = scenario.problems[state.level];
+      document.getElementById('headerTitle').textContent = `${level.name} — ${scenario.name}`;
+      const tag = document.getElementById('headerTag');
+      tag.textContent = hasProblem ? '⚠️ 会发生' : '✅ 已防护';
+      tag.style.background = hasProblem ? '#f8514930' : '#7ee78730';
+      tag.style.color = hasProblem ? '#f85149' : '#7ee787';
+    }
+
+    function renderAll() {
+      renderLevelCards();
+      renderScenarioCards();
+      renderHeader();
+      renderOps();
+      renderDataView();
+      renderTimeline();
+      updatePrompt();
+    }
+
+    // ============ INTERACTIONS ============
+    function selectLevel(id) {
+      if (state.playing) stopPlay();
+      state.level = id;
+      state.step = -1;
+      renderAll();
+    }
+
+    function selectScenario(id) {
+      if (state.playing) stopPlay();
+      state.scenario = id;
+      state.step = -1;
+      renderAll();
+    }
+
+    let playTimer = null;
+    function togglePlay() {
+      if (state.playing) { stopPlay(); return; }
+      state.playing = true;
+      state.step = -1;
+      document.getElementById('playBtn').textContent = '■ 停止';
+      document.getElementById('playBtn').className = 'play-btn stop';
+      advanceStep();
+    }
+
+    function stopPlay() {
+      state.playing = false;
+      clearTimeout(playTimer);
+      document.getElementById('playBtn').textContent = '▶ 运行演示';
+      document.getElementById('playBtn').className = 'play-btn go';
+    }
+
+    function advanceStep() {
+      if (!state.playing) return;
+      const steps = buildSteps(state.level, state.scenario);
+      state.step++;
+      if (state.step >= steps.length) {
+        stopPlay();
+        state.step = steps.length - 1;
+        renderAll();
+        return;
+      }
+      renderOps();
+      renderDataView();
+      renderTimeline();
+      updatePrompt();
+
+      // Auto-scroll current op into view
+      const curEl = document.querySelector('.tx-op.current');
+      if (curEl) curEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      const s = steps[state.step];
+      const delay = s.problem ? 2000 : s.type === 'begin' || s.type === 'commit' || s.type === 'rollback' ? 600 : 1200;
+      playTimer = setTimeout(advanceStep, delay / state.speed);
+    }
+
+    function resetSim() {
+      stopPlay();
+      state.step = -1;
+      renderAll();
+    }
+
+    // ============ PROMPT ============
+    function updatePrompt() {
+      const level = LEVELS.find(l => l.id === state.level);
+      const scenario = SCENARIOS.find(s => s.id === state.scenario);
+      const hasProblem = scenario.problems[state.level];
+
+      const parts = [`我正在学习 MySQL 事务隔离级别。`];
+      parts.push(`\n\n当前选择的隔离级别是 ${level.name}（${level.short}），`);
+      parts.push(`正在演示的并发场景是「${scenario.name}」。`);
+
+      if (hasProblem) {
+        parts.push(`\n\n在 ${level.name} 下，${scenario.name}会发生。`);
+        parts.push(`请详细解释：`);
+        parts.push(`1. 为什么这个隔离级别无法防止${scenario.name.split('(')[0].trim()}？`);
+        parts.push(`2. InnoDB 引擎在这个隔离级别下的具体实现机制（锁、MVCC 快照等）。`);
+        parts.push(`3. 在实际业务中，这个问题可能造成什么后果？如何在应用层规避？`);
+      } else {
+        parts.push(`\n\n在 ${level.name} 下，${scenario.name}被成功防护。`);
+        parts.push(`请详细解释：`);
+        parts.push(`1. InnoDB 如何在 ${level.name} 下防止${scenario.name.split('(')[0].trim()}？`);
+        parts.push(`2. 具体使用了哪些技术（MVCC / Undo Log / 行锁 / 间隙锁 / Next-Key Lock）？`);
+        parts.push(`3. 这种防护机制的性能开销是什么？在高并发下有什么需要注意的？`);
+      }
+
+      // Add comparison context
+      const canPrevent = LEVELS.filter(l => !scenario.problems[l.id]);
+      const cannotPrevent = LEVELS.filter(l => scenario.problems[l.id]);
+      if (canPrevent.length > 0 && cannotPrevent.length > 0) {
+        parts.push(`\n\n对比参考：能防止该问题的级别有 ${canPrevent.map(l => l.short).join('、')}；不能防止的有 ${cannotPrevent.map(l => l.short).join('、')}。`);
+        parts.push(`请用对比的方式帮助我理解不同隔离级别在这个场景下的行为差异。`);
+      }
+
+      document.getElementById('promptText').textContent = parts.join('');
+    }
+
+    function copyPrompt() {
+      const text = document.getElementById('promptText').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = '已复制!'; btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('copied'); }, 1500);
+      });
+    }
+
+    // ============ INIT ============
+    renderAll();
+  </script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script src="shared/analytics.js"></script>
+</body>
+
+</html>

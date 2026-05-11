@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RabbitMQ 运行原理与死信队列</title>
+  <meta name="description" content="交互式演示 RabbitMQ 核心运行原理，包括 Exchange 类型、消息路由、死信队列(DLX)、TTL、消息确认机制">
+  <meta name="keywords" content="RabbitMQ, 死信队列, DLX, Exchange, 消息队列, AMQP">
+  <meta property="og:title" content="RabbitMQ 运行原理与死信队列">
+  <meta property="og:description" content="交互式演示 RabbitMQ 核心运行原理，包括 Exchange 类型、消息路由、死信队列(DLX)、TTL、消息确认机制">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(77, 163, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(176, 122, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(54, 217, 134, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    header {
+      position: relative;
+      z-index: 1;
+      padding: 14px 24px;
+      background: linear-gradient(180deg, rgba(77, 163, 255, 0.04) 0%, transparent 100%);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fff 0%, #a8c8ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    header h1 span {
+      background: linear-gradient(135deg, var(--accent-orange) 0%, var(--accent-pink) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    header .tag {
+      font-size: 0.68rem;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      z-index: 1;
+    }
+
+    .controls {
+      width: 320px;
+      min-width: 320px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .sec-title {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sec-title::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-blue);
+    }
+
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .preset-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 11px 14px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.75rem;
+      text-align: left;
+      transition: all 0.2s;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .preset-btn::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--accent-blue);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .preset-btn:hover {
+      border-color: var(--border-hover);
+      background: rgba(77, 163, 255, 0.05);
+    }
+
+    .preset-btn.active {
+      border-color: rgba(77, 163, 255, 0.3);
+      background: rgba(77, 163, 255, 0.08);
+    }
+
+    .preset-btn.active::before {
+      opacity: 1;
+    }
+
+    .preset-icon {
+      font-size: 1.1rem;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .preset-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .preset-name {
+      font-weight: 600;
+      font-size: 0.78rem;
+    }
+
+    .preset-desc {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .ctrl-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .ctrl-label {
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      min-width: 70px;
+    }
+
+    .ctrl-btn {
+      flex: 1;
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      font-size: 0.72rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .ctrl-btn:hover {
+      border-color: var(--border-hover);
+      background: rgba(77, 163, 255, 0.08);
+    }
+
+    .ctrl-btn.primary {
+      background: rgba(77, 163, 255, 0.15);
+      border-color: rgba(77, 163, 255, 0.3);
+      color: var(--accent-blue);
+    }
+
+    .ctrl-btn.danger {
+      background: rgba(255, 92, 108, 0.1);
+      border-color: rgba(255, 92, 108, 0.3);
+      color: var(--accent-red);
+    }
+
+    select {
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      font-size: 0.72rem;
+      font-family: inherit;
+      cursor: pointer;
+      outline: none;
+      flex: 1;
+    }
+
+    select:focus {
+      border-color: var(--accent-blue);
+    }
+
+    .canvas-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .viz-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: var(--bg-primary);
+    }
+
+    .viz-container canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .log-panel {
+      height: 180px;
+      min-height: 100px;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 12px 18px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.7rem;
+      line-height: 1.7;
+    }
+
+    .log-entry {
+      display: flex;
+      gap: 10px;
+      padding: 2px 0;
+      animation: fadeIn 0.3s;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .log-time {
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .log-msg {
+      color: var(--text-secondary);
+    }
+
+    .log-msg.info {
+      color: var(--accent-blue);
+    }
+
+    .log-msg.success {
+      color: var(--accent-green);
+    }
+
+    .log-msg.warn {
+      color: var(--accent-orange);
+    }
+
+    .log-msg.error {
+      color: var(--accent-red);
+    }
+
+    .log-msg.dlx {
+      color: var(--accent-purple);
+    }
+
+    .stats-bar {
+      display: flex;
+      gap: 16px;
+      padding: 10px 18px;
+      background: var(--bg-elevated);
+      border-top: 1px solid var(--border);
+      font-size: 0.7rem;
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-secondary);
+    }
+
+    .stat-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .stat-value {
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    [data-theme="light"] header h1 {
+      background: linear-gradient(135deg, #111827 0%, #2563eb 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    [data-theme="light"] header h1 span {
+      background: linear-gradient(135deg, #d97706 0%, #db2777 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    [data-theme="light"] .stats-bar {
+      background: var(--bg-card);
+    }
+
+    [data-theme="light"] .log-panel {
+      background: var(--bg-primary);
+    }
+
+    [data-theme="light"] .stat-dot {
+      opacity: 0.85;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>RabbitMQ <span>运行原理与死信队列</span></h1>
+    <span class="tag">Interactive</span>
+  </header>
+
+  <div class="main">
+    <aside class="controls">
+      <div>
+        <div class="sec-title">场景预设</div>
+        <div class="preset-list">
+          <button class="preset-btn active" data-preset="direct">
+            <span class="preset-icon">📨</span>
+            <div class="preset-info">
+              <div class="preset-name">Direct Exchange</div>
+              <div class="preset-desc">精确匹配 routing key，点对点投递</div>
+            </div>
+          </button>
+          <button class="preset-btn" data-preset="fanout">
+            <span class="preset-icon">📡</span>
+            <div class="preset-info">
+              <div class="preset-name">Fanout Exchange</div>
+              <div class="preset-desc">广播到所有绑定队列，忽略 routing key</div>
+            </div>
+          </button>
+          <button class="preset-btn" data-preset="topic">
+            <span class="preset-icon">🏷️</span>
+            <div class="preset-info">
+              <div class="preset-name">Topic Exchange</div>
+              <div class="preset-desc">模式匹配 routing key，支持 * 和 # 通配符</div>
+            </div>
+          </button>
+          <button class="preset-btn" data-preset="dlx">
+            <span class="preset-icon">💀</span>
+            <div class="preset-info">
+              <div class="preset-name">死信队列 (DLX)</div>
+              <div class="preset-desc">消息被拒绝/TTL 过期/队列满时转入死信交换机</div>
+            </div>
+          </button>
+          <button class="preset-btn" data-preset="ttl">
+            <span class="preset-icon">⏱️</span>
+            <div class="preset-info">
+              <div class="preset-name">TTL + 延迟队列</div>
+              <div class="preset-desc">利用 TTL + DLX 实现延迟消息投递</div>
+            </div>
+          </button>
+          <button class="preset-btn" data-preset="confirm">
+            <span class="preset-icon">✅</span>
+            <div class="preset-info">
+              <div class="preset-name">消息确认机制</div>
+              <div class="preset-desc">Publisher Confirm + Consumer Ack/Nack</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <div class="sec-title">操作</div>
+        <div class="ctrl-row">
+          <button class="ctrl-btn primary" id="btnPublish">发送消息</button>
+          <button class="ctrl-btn" id="btnBatch">批量发送(5)</button>
+        </div>
+        <div class="ctrl-row">
+          <span class="ctrl-label">Routing Key</span>
+          <select id="selRoutingKey">
+            <option value="order.create">order.create</option>
+            <option value="order.pay">order.pay</option>
+            <option value="user.register">user.register</option>
+            <option value="log.error">log.error</option>
+          </select>
+        </div>
+        <div class="ctrl-row">
+          <button class="ctrl-btn danger" id="btnReject">拒绝消息(Nack)</button>
+          <button class="ctrl-btn" id="btnReset">重置</button>
+        </div>
+      </div>
+    </aside>
+
+    <div class="canvas-area">
+      <div class="viz-container">
+        <canvas id="vizCanvas"></canvas>
+      </div>
+      <div class="stats-bar">
+        <div class="stat-item"><span class="stat-dot" style="background:var(--accent-green)"></span>已投递 <span
+            class="stat-value" id="statDelivered">0</span></div>
+        <div class="stat-item"><span class="stat-dot" style="background:var(--accent-blue)"></span>队列中 <span
+            class="stat-value" id="statQueued">0</span></div>
+        <div class="stat-item"><span class="stat-dot" style="background:var(--accent-purple)"></span>死信 <span
+            class="stat-value" id="statDead">0</span></div>
+        <div class="stat-item"><span class="stat-dot" style="background:var(--accent-red)"></span>丢弃 <span
+            class="stat-value" id="statDropped">0</span></div>
+        <div class="stat-item"><span class="stat-dot" style="background:var(--accent-orange)"></span>TTL过期 <span
+            class="stat-value" id="statExpired">0</span></div>
+      </div>
+      <div class="log-panel" id="logPanel"></div>
+    </div>
+  </div>
+
+  <script src="shared/nav.js"></script>
+  <script src="shared/theme.js"></script>
+  <script>
+    (function () {
+      const canvas = document.getElementById('vizCanvas');
+      const ctx = canvas.getContext('2d');
+      const logPanel = document.getElementById('logPanel');
+      let W, H, dpr;
+      let animId;
+      let currentPreset = 'direct';
+      let msgIdCounter = 0;
+      let stats = { delivered: 0, queued: 0, dead: 0, dropped: 0, expired: 0 };
+
+      let COLORS = {};
+      function updateColors() {
+        const s = getComputedStyle(document.documentElement);
+        COLORS = {
+          blue: s.getPropertyValue('--accent-blue').trim() || '#4da3ff',
+          green: s.getPropertyValue('--accent-green').trim() || '#36d986',
+          purple: s.getPropertyValue('--accent-purple').trim() || '#b07aff',
+          orange: s.getPropertyValue('--accent-orange').trim() || '#ff9f43',
+          red: s.getPropertyValue('--accent-red').trim() || '#ff5c6c',
+          cyan: s.getPropertyValue('--accent-cyan').trim() || '#22d3ee',
+          pink: s.getPropertyValue('--accent-pink').trim() || '#f472b6',
+          text: s.getPropertyValue('--text-primary').trim() || '#e8edf5',
+          textSec: s.getPropertyValue('--text-secondary').trim() || '#7d8da0',
+          muted: s.getPropertyValue('--text-muted').trim() || '#4a5568',
+          border: s.getPropertyValue('--border').trim() || '#1e2a3a',
+          bg: s.getPropertyValue('--bg-card').trim() || '#0f1319',
+          bgEl: s.getPropertyValue('--bg-elevated').trim() || '#161c26'
+        };
+      }
+      updateColors();
+      new MutationObserver(updateColors).observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'data-theme'] });
+
+      function resize() {
+        dpr = window.devicePixelRatio || 1;
+        const rect = canvas.parentElement.getBoundingClientRect();
+        W = rect.width;
+        H = rect.height;
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        canvas.style.width = W + 'px';
+        canvas.style.height = H + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      window.addEventListener('resize', resize);
+      resize();
+
+      // --- Topology definition ---
+      let topology = {};
+      let messages = [];
+      let particles = [];
+      let queues = {};
+
+      function buildTopology() {
+        messages = [];
+        particles = [];
+        queues = {};
+        stats = { delivered: 0, queued: 0, dead: 0, dropped: 0, expired: 0 };
+        updateStats();
+
+        const cx = W / 2;
+        const cy = H / 2;
+
+        if (currentPreset === 'direct') {
+          topology = {
+            producer: { x: 80, y: cy, label: 'Producer' },
+            exchange: { x: cx - 60, y: cy, label: 'Direct Exchange', type: 'direct' },
+            queues: [
+              { id: 'q1', x: cx + 140, y: cy - 80, label: 'order-queue', bindings: ['order.create', 'order.pay'] },
+              { id: 'q2', x: cx + 140, y: cy + 80, label: 'user-queue', bindings: ['user.register'] }
+            ],
+            consumers: [
+              { x: W - 100, y: cy - 80, label: 'Consumer A', queue: 'q1' },
+              { x: W - 100, y: cy + 80, label: 'Consumer B', queue: 'q2' }
+            ],
+            dlx: null
+          };
+        } else if (currentPreset === 'fanout') {
+          topology = {
+            producer: { x: 80, y: cy, label: 'Producer' },
+            exchange: { x: cx - 60, y: cy, label: 'Fanout Exchange', type: 'fanout' },
+            queues: [
+              { id: 'q1', x: cx + 140, y: cy - 100, label: 'notify-queue', bindings: ['*'] },
+              { id: 'q2', x: cx + 140, y: cy, label: 'log-queue', bindings: ['*'] },
+              { id: 'q3', x: cx + 140, y: cy + 100, label: 'analytics-queue', bindings: ['*'] }
+            ],
+            consumers: [
+              { x: W - 100, y: cy - 100, label: '通知服务', queue: 'q1' },
+              { x: W - 100, y: cy, label: '日志服务', queue: 'q2' },
+              { x: W - 100, y: cy + 100, label: '分析服务', queue: 'q3' }
+            ],
+            dlx: null
+          };
+        } else if (currentPreset === 'topic') {
+          topology = {
+            producer: { x: 80, y: cy, label: 'Producer' },
+            exchange: { x: cx - 60, y: cy, label: 'Topic Exchange', type: 'topic' },
+            queues: [
+              { id: 'q1', x: cx + 140, y: cy - 100, label: 'order-all', bindings: ['order.*'] },
+              { id: 'q2', x: cx + 140, y: cy, label: 'all-errors', bindings: ['*.error', '#.error'] },
+              { id: 'q3', x: cx + 140, y: cy + 100, label: 'everything', bindings: ['#'] }
+            ],
+            consumers: [
+              { x: W - 100, y: cy - 100, label: '订单处理', queue: 'q1' },
+              { x: W - 100, y: cy, label: '错误告警', queue: 'q2' },
+              { x: W - 100, y: cy + 100, label: '全量归档', queue: 'q3' }
+            ],
+            dlx: null
+          };
+        } else if (currentPreset === 'dlx') {
+          topology = {
+            producer: { x: 80, y: cy - 40, label: 'Producer' },
+            exchange: { x: cx - 80, y: cy - 40, label: 'Main Exchange', type: 'direct' },
+            queues: [
+              { id: 'q1', x: cx + 100, y: cy - 40, label: 'work-queue', bindings: ['order.create'], maxLen: 5, dlx: 'dlx-exchange' }
+            ],
+            consumers: [
+              { x: W - 100, y: cy - 40, label: 'Worker', queue: 'q1' }
+            ],
+            dlx: {
+              exchange: { x: cx - 80, y: cy + 100, label: 'DLX Exchange', type: 'fanout' },
+              queue: { id: 'dlq', x: cx + 100, y: cy + 100, label: 'dead-letter-queue', bindings: ['*'] },
+              consumer: { x: W - 100, y: cy + 100, label: '死信处理', queue: 'dlq' }
+            }
+          };
+        } else if (currentPreset === 'ttl') {
+          topology = {
+            producer: { x: 80, y: cy - 40, label: 'Producer' },
+            exchange: { x: cx - 80, y: cy - 40, label: 'Delay Exchange', type: 'direct' },
+            queues: [
+              { id: 'q1', x: cx + 100, y: cy - 40, label: 'delay-queue (TTL=5s)', bindings: ['delay'], ttl: 5000, dlx: 'target-exchange', noConsumer: true }
+            ],
+            consumers: [],
+            dlx: {
+              exchange: { x: cx - 80, y: cy + 100, label: 'Target Exchange', type: 'direct' },
+              queue: { id: 'target', x: cx + 100, y: cy + 100, label: 'target-queue', bindings: ['*'] },
+              consumer: { x: W - 100, y: cy + 100, label: '延迟消费者', queue: 'target' }
+            }
+          };
+        } else if (currentPreset === 'confirm') {
+          topology = {
+            producer: { x: 80, y: cy, label: 'Producer' },
+            exchange: { x: cx - 60, y: cy, label: 'Direct Exchange', type: 'direct' },
+            queues: [
+              { id: 'q1', x: cx + 140, y: cy, label: 'confirm-queue', bindings: ['order.create', 'order.pay'] }
+            ],
+            consumers: [
+              { x: W - 100, y: cy, label: 'Consumer', queue: 'q1' }
+            ],
+            dlx: null,
+            confirmMode: true
+          };
+        }
+
+        topology.queues.forEach(q => {
+          queues[q.id] = { msgs: [], processing: false };
+        });
+        if (topology.dlx) {
+          queues[topology.dlx.queue.id] = { msgs: [], processing: false };
+        }
+      }
+
+      // --- Drawing ---
+      function drawRoundRect(x, y, w, h, r, fill, stroke) {
+        ctx.beginPath();
+        ctx.roundRect(x - w / 2, y - h / 2, w, h, r);
+        if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+      }
+
+      function drawNode(x, y, w, h, label, color, icon) {
+        drawRoundRect(x, y, w, h, 8, COLORS.bg, color);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.08;
+        ctx.beginPath();
+        ctx.roundRect(x - w / 2, y - h / 2, w, h, 8);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        ctx.fillStyle = COLORS.text;
+        ctx.font = '600 11px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        if (icon) {
+          ctx.font = '16px sans-serif';
+          ctx.fillText(icon, x, y - 8);
+          ctx.font = '600 10px Inter, sans-serif';
+          ctx.fillStyle = color;
+          ctx.fillText(label, x, y + 10);
+        } else {
+          ctx.fillStyle = color;
+          ctx.fillText(label, x, y);
+        }
+      }
+
+      function drawExchange(ex) {
+        const w = 130, h = 54;
+        ctx.save();
+        ctx.translate(ex.x, ex.y);
+        ctx.rotate(Math.PI / 4 * 0);
+
+        ctx.beginPath();
+        ctx.moveTo(0, -h / 2);
+        ctx.lineTo(w / 2, 0);
+        ctx.lineTo(0, h / 2);
+        ctx.lineTo(-w / 2, 0);
+        ctx.closePath();
+        ctx.fillStyle = COLORS.bg;
+        ctx.fill();
+        ctx.strokeStyle = COLORS.orange;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = COLORS.orange;
+        ctx.globalAlpha = 0.06;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        ctx.fillStyle = COLORS.orange;
+        ctx.font = '600 10px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(ex.label, 0, -4);
+        ctx.font = '500 9px Inter, sans-serif';
+        ctx.fillStyle = COLORS.textSec;
+        ctx.fillText(ex.type, 0, 10);
+        ctx.restore();
+      }
+
+      function drawQueue(q) {
+        const w = 130, h = 48;
+        const count = queues[q.id] ? queues[q.id].msgs.length : 0;
+        const color = q.id === 'dlq' || q.id === 'target' ? COLORS.purple : COLORS.cyan;
+
+        drawRoundRect(q.x, q.y, w, h, 6, COLORS.bg, color);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.06;
+        ctx.beginPath();
+        ctx.roundRect(q.x - w / 2, q.y - h / 2, w, h, 6);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        ctx.fillStyle = color;
+        ctx.font = '600 10px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(q.label, q.x, q.y - 6);
+
+        ctx.font = '500 9px JetBrains Mono, monospace';
+        ctx.fillStyle = COLORS.textSec;
+        ctx.fillText('msgs: ' + count, q.x, q.y + 10);
+
+        if (count > 0) {
+          const barW = Math.min(count * 8, w - 20);
+          ctx.fillStyle = color;
+          ctx.globalAlpha = 0.3;
+          ctx.fillRect(q.x - barW / 2, q.y + 18, barW, 3);
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      function drawConsumer(c) {
+        drawNode(c.x, c.y, 90, 44, c.label, COLORS.green, '🖥️');
+      }
+
+      function drawProducer(p) {
+        drawNode(p.x, p.y, 90, 44, p.label, COLORS.blue, '📤');
+      }
+
+      function drawArrow(x1, y1, x2, y2, color, dashed) {
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.5;
+        if (dashed) ctx.setLineDash([4, 4]);
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+
+        const angle = Math.atan2(y2 - y1, x2 - x1);
+        const sz = 6;
+        ctx.beginPath();
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.6;
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - sz * Math.cos(angle - 0.4), y2 - sz * Math.sin(angle - 0.4));
+        ctx.lineTo(x2 - sz * Math.cos(angle + 0.4), y2 - sz * Math.sin(angle + 0.4));
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      function drawBindingLabel(x1, y1, x2, y2, text) {
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2 - 10;
+        ctx.fillStyle = COLORS.muted;
+        ctx.font = '500 8px JetBrains Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, mx, my);
+      }
+
+      function drawMessage(msg) {
+        const x = msg.x, y = msg.y;
+        const color = msg.dead ? COLORS.purple : msg.rejected ? COLORS.red : COLORS.green;
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.9;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        ctx.beginPath();
+        ctx.arc(x, y, 10, 0, Math.PI * 2);
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = 0.3;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        if (msg.label) {
+          ctx.fillStyle = COLORS.text;
+          ctx.font = '500 8px JetBrains Mono, monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(msg.label, x, y - 14);
+        }
+      }
+
+      function drawConfirmArrow(x1, y1, x2, y2, label, color) {
+        drawArrow(x2, y2, x1, y1, color, true);
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2 + 14;
+        ctx.fillStyle = color;
+        ctx.font = '600 8px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, mx, my);
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+
+        // Draw connections
+        const ex = topology.exchange;
+        const prod = topology.producer;
+
+        drawArrow(prod.x + 45, prod.y, ex.x - 65, ex.y, COLORS.blue);
+
+        topology.queues.forEach(q => {
+          drawArrow(ex.x + 65, ex.y, q.x - 65, q.y, COLORS.orange);
+          const bindText = q.bindings.join(', ');
+          drawBindingLabel(ex.x + 65, ex.y, q.x - 65, q.y, bindText);
+        });
+
+        topology.consumers.forEach(c => {
+          const q = topology.queues.find(qq => qq.id === c.queue);
+          if (q) drawArrow(q.x + 65, q.y, c.x - 45, c.y, COLORS.green);
+        });
+
+        if (topology.dlx) {
+          const dlxEx = topology.dlx.exchange;
+          const dlxQ = topology.dlx.queue;
+          const dlxC = topology.dlx.consumer;
+          const srcQ = topology.queues.find(q => q.dlx);
+
+          if (srcQ) {
+            drawArrow(srcQ.x, srcQ.y + 24, dlxEx.x, dlxEx.y - 27, COLORS.purple, true);
+            const mx = (srcQ.x + dlxEx.x) / 2;
+            const my = (srcQ.y + 24 + dlxEx.y - 27) / 2;
+            ctx.fillStyle = COLORS.purple;
+            ctx.font = '600 8px Inter, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('DLX', mx + 15, my);
+          }
+
+          drawArrow(dlxEx.x + 65, dlxEx.y, dlxQ.x - 65, dlxQ.y, COLORS.purple);
+          drawArrow(dlxQ.x + 65, dlxQ.y, dlxC.x - 45, dlxC.y, COLORS.purple);
+
+          drawExchange(dlxEx);
+          drawQueue(dlxQ);
+          drawConsumer(dlxC);
+        }
+
+        // Draw confirm arrows
+        if (topology.confirmMode) {
+          drawConfirmArrow(prod.x + 45, prod.y + 16, ex.x - 65, ex.y + 16, 'confirm/nack', COLORS.orange);
+          topology.consumers.forEach(c => {
+            const q = topology.queues.find(qq => qq.id === c.queue);
+            if (q) drawConfirmArrow(q.x + 65, q.y + 16, c.x - 45, c.y + 16, 'ack/nack', COLORS.green);
+          });
+        }
+
+        // Draw nodes
+        drawProducer(prod);
+        drawExchange(ex);
+        topology.queues.forEach(drawQueue);
+        topology.consumers.forEach(drawConsumer);
+
+        // Draw messages
+        messages.forEach(drawMessage);
+      }
+
+      // --- Animation ---
+      function lerp(a, b, t) { return a + (b - a) * t; }
+
+      function animateMessages() {
+        const toRemove = [];
+        messages.forEach((msg, i) => {
+          if (msg.done) return;
+          msg.progress += msg.speed;
+          if (msg.progress >= 1) {
+            msg.progress = 1;
+            if (msg.phase === 'to-exchange') {
+              routeMessage(msg);
+            } else if (msg.phase === 'to-queue') {
+              arriveAtQueue(msg);
+              toRemove.push(i);
+            } else if (msg.phase === 'to-consumer') {
+              deliverMessage(msg);
+              toRemove.push(i);
+            } else if (msg.phase === 'to-dlx') {
+              arriveAtDLX(msg);
+              toRemove.push(i);
+            } else if (msg.phase === 'to-dlq') {
+              arriveAtDLQ(msg);
+              toRemove.push(i);
+            } else if (msg.phase === 'to-dlx-consumer') {
+              deliverDLXMessage(msg);
+              toRemove.push(i);
+            }
+          } else {
+            msg.x = lerp(msg.sx, msg.tx, msg.progress);
+            msg.y = lerp(msg.sy, msg.ty, msg.progress);
+          }
+        });
+
+        for (let i = toRemove.length - 1; i >= 0; i--) {
+          messages.splice(toRemove[i], 1);
+        }
+      }
+
+      function routeMessage(msg) {
+        const ex = topology.exchange;
+        const rk = msg.routingKey;
+        let matched = [];
+
+        if (ex.type === 'fanout') {
+          matched = topology.queues.slice();
+        } else if (ex.type === 'direct') {
+          matched = topology.queues.filter(q => q.bindings.includes(rk));
+        } else if (ex.type === 'topic') {
+          matched = topology.queues.filter(q => {
+            return q.bindings.some(b => {
+              if (b === '#') return true;
+              const bParts = b.split('.');
+              const rkParts = rk.split('.');
+              if (b.includes('#')) {
+                const prefix = b.replace('.#', '').replace('#.', '').replace('#', '');
+                return rk.startsWith(prefix) || prefix === '';
+              }
+              if (bParts.length !== rkParts.length) return false;
+              return bParts.every((bp, i) => bp === '*' || bp === rkParts[i]);
+            });
+          });
+        }
+
+        if (matched.length === 0) {
+          stats.dropped++;
+          updateStats();
+          addLog('消息 [' + msg.routingKey + '] 无匹配队列，已丢弃', 'warn');
+          messages.splice(messages.indexOf(msg), 1);
+          return;
+        }
+
+        messages.splice(messages.indexOf(msg), 1);
+        matched.forEach(q => {
+          if (q.maxLen && queues[q.id].msgs.length >= q.maxLen) {
+            sendToDLX(msg, '队列已满');
+            return;
+          }
+          const newMsg = {
+            id: msg.id + '-' + q.id,
+            routingKey: msg.routingKey,
+            label: msg.label,
+            sx: ex.x + 65, sy: ex.y,
+            tx: q.x - 65, ty: q.y,
+            x: ex.x + 65, y: ex.y,
+            progress: 0, speed: 0.025,
+            phase: 'to-queue', targetQueue: q.id,
+            dead: false, rejected: false
+          };
+          messages.push(newMsg);
+        });
+
+        if (topology.confirmMode) {
+          setTimeout(() => addLog('Broker → Producer: confirm (ack)', 'success'), 400);
+        }
+      }
+
+      function arriveAtQueue(msg) {
+        const qId = msg.targetQueue;
+        const q = topology.queues.find(qq => qq.id === qId) || (topology.dlx && topology.dlx.queue);
+        queues[qId].msgs.push({ id: msg.id, routingKey: msg.routingKey, arrivedAt: Date.now(), ttl: q && q.ttl });
+        stats.queued++;
+        updateStats();
+        addLog('消息 [' + msg.routingKey + '] 进入队列 ' + (q ? q.label : qId), 'info');
+
+        if (q && !q.noConsumer) {
+          setTimeout(() => consumeFromQueue(qId), 800 + Math.random() * 500);
+        }
+      }
+
+      function consumeFromQueue(qId) {
+        if (!queues[qId] || queues[qId].msgs.length === 0) return;
+        const m = queues[qId].msgs.shift();
+        stats.queued--;
+
+        const q = topology.queues.find(qq => qq.id === qId);
+        const consumer = topology.consumers.find(c => c.queue === qId);
+        if (!q || !consumer) return;
+
+        const newMsg = {
+          id: m.id, routingKey: m.routingKey, label: '',
+          sx: q.x + 65, sy: q.y,
+          tx: consumer.x - 45, ty: consumer.y,
+          x: q.x + 65, y: q.y,
+          progress: 0, speed: 0.02,
+          phase: 'to-consumer', dead: false, rejected: false
+        };
+        messages.push(newMsg);
+        updateStats();
+      }
+
+      function deliverMessage(msg) {
+        stats.delivered++;
+        updateStats();
+        addLog('消息 [' + msg.routingKey + '] 投递成功 ✓', 'success');
+        if (topology.confirmMode) {
+          setTimeout(() => addLog('Consumer → Broker: ack', 'success'), 300);
+        }
+      }
+
+      function sendToDLX(msg, reason) {
+        if (!topology.dlx) {
+          stats.dropped++;
+          updateStats();
+          addLog('消息 [' + msg.routingKey + '] ' + reason + '，无 DLX 配置，已丢弃', 'error');
+          return;
+        }
+
+        const dlxEx = topology.dlx.exchange;
+        const srcQ = topology.queues.find(q => q.dlx);
+
+        const newMsg = {
+          id: msg.id + '-dlx', routingKey: msg.routingKey, label: '💀',
+          sx: srcQ ? srcQ.x : topology.exchange.x,
+          sy: srcQ ? srcQ.y + 24 : topology.exchange.y,
+          tx: dlxEx.x, ty: dlxEx.y - 27,
+          x: srcQ ? srcQ.x : topology.exchange.x,
+          y: srcQ ? srcQ.y + 24 : topology.exchange.y,
+          progress: 0, speed: 0.02,
+          phase: 'to-dlx', dead: true, rejected: false
+        };
+        messages.push(newMsg);
+        addLog('消息 [' + msg.routingKey + '] ' + reason + '，转入死信交换机', 'dlx');
+      }
+
+      function arriveAtDLX(msg) {
+        const dlxEx = topology.dlx.exchange;
+        const dlxQ = topology.dlx.queue;
+
+        const newMsg = {
+          id: msg.id + '-dlq', routingKey: msg.routingKey, label: '💀',
+          sx: dlxEx.x + 65, sy: dlxEx.y,
+          tx: dlxQ.x - 65, ty: dlxQ.y,
+          x: dlxEx.x + 65, y: dlxEx.y,
+          progress: 0, speed: 0.025,
+          phase: 'to-dlq', dead: true, rejected: false
+        };
+        messages.push(newMsg);
+      }
+
+      function arriveAtDLQ(msg) {
+        const dlxQ = topology.dlx.queue;
+        queues[dlxQ.id].msgs.push({ id: msg.id, routingKey: msg.routingKey, arrivedAt: Date.now() });
+        stats.dead++;
+        stats.queued++;
+        updateStats();
+        addLog('消息 [' + msg.routingKey + '] 进入死信队列 ' + dlxQ.label, 'dlx');
+
+        setTimeout(() => consumeFromDLQ(), 1000);
+      }
+
+      function consumeFromDLQ() {
+        const dlxQ = topology.dlx.queue;
+        const dlxC = topology.dlx.consumer;
+        if (!queues[dlxQ.id] || queues[dlxQ.id].msgs.length === 0) return;
+
+        const m = queues[dlxQ.id].msgs.shift();
+        stats.queued--;
+
+        const newMsg = {
+          id: m.id, routingKey: m.routingKey, label: '',
+          sx: dlxQ.x + 65, sy: dlxQ.y,
+          tx: dlxC.x - 45, ty: dlxC.y,
+          x: dlxQ.x + 65, y: dlxQ.y,
+          progress: 0, speed: 0.02,
+          phase: 'to-dlx-consumer', dead: true, rejected: false
+        };
+        messages.push(newMsg);
+        updateStats();
+      }
+
+      function deliverDLXMessage(msg) {
+        stats.delivered++;
+        updateStats();
+        addLog('死信消息 [' + msg.routingKey + '] 被处理 ✓', 'dlx');
+      }
+
+      // TTL expiry check
+      function checkTTL() {
+        topology.queues.forEach(q => {
+          if (!q.ttl) return;
+          const qData = queues[q.id];
+          if (!qData) return;
+          const now = Date.now();
+          const expired = [];
+          qData.msgs = qData.msgs.filter(m => {
+            if (now - m.arrivedAt >= q.ttl) {
+              expired.push(m);
+              return false;
+            }
+            return true;
+          });
+          expired.forEach(m => {
+            stats.queued--;
+            stats.expired++;
+            updateStats();
+            addLog('消息 [' + m.routingKey + '] TTL 过期', 'warn');
+            sendToDLX(m, 'TTL 过期');
+          });
+        });
+      }
+
+      // --- Publishing ---
+      function publishMessage(routingKey) {
+        msgIdCounter++;
+        const prod = topology.producer;
+        const ex = topology.exchange;
+        const msg = {
+          id: 'msg-' + msgIdCounter,
+          routingKey: routingKey,
+          label: routingKey,
+          sx: prod.x + 45, sy: prod.y,
+          tx: ex.x - 65, ty: ex.y,
+          x: prod.x + 45, y: prod.y,
+          progress: 0,
+          speed: 0.02,
+          phase: 'to-exchange',
+          dead: false, rejected: false
+        };
+        messages.push(msg);
+        addLog('Producer 发送消息 [' + routingKey + ']', 'info');
+      }
+
+      function rejectNextMessage() {
+        const q = topology.queues[0];
+        if (!q) return;
+        const qData = queues[q.id];
+        if (!qData || qData.msgs.length === 0) {
+          addLog('队列为空，无消息可拒绝', 'warn');
+          return;
+        }
+        const m = qData.msgs.shift();
+        stats.queued--;
+        updateStats();
+        addLog('Consumer 拒绝消息 [' + m.routingKey + '] (basic.nack, requeue=false)', 'error');
+        sendToDLX(m, '被消费者拒绝');
+      }
+
+      // --- UI ---
+      function updateStats() {
+        document.getElementById('statDelivered').textContent = stats.delivered;
+        document.getElementById('statQueued').textContent = stats.queued;
+        document.getElementById('statDead').textContent = stats.dead;
+        document.getElementById('statDropped').textContent = stats.dropped;
+        document.getElementById('statExpired').textContent = stats.expired;
+      }
+
+      function addLog(msg, type) {
+        const now = new Date();
+        const time = now.toTimeString().split(' ')[0];
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+        entry.innerHTML = '<span class="log-time">' + time + '</span><span class="log-msg ' + (type || '') + '">' + msg + '</span>';
+        logPanel.appendChild(entry);
+        logPanel.scrollTop = logPanel.scrollHeight;
+      }
+
+      // --- Main loop ---
+      let lastTTLCheck = 0;
+      function loop(timestamp) {
+        animateMessages();
+        if (timestamp - lastTTLCheck > 1000) {
+          checkTTL();
+          lastTTLCheck = timestamp;
+        }
+        draw();
+        animId = requestAnimationFrame(loop);
+      }
+
+      // --- Events ---
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentPreset = btn.dataset.preset;
+          logPanel.innerHTML = '';
+          buildTopology();
+          addLog('切换场景: ' + btn.querySelector('.preset-name').textContent, 'info');
+        });
+      });
+
+      document.getElementById('btnPublish').addEventListener('click', () => {
+        const rk = document.getElementById('selRoutingKey').value;
+        publishMessage(rk);
+      });
+
+      document.getElementById('btnBatch').addEventListener('click', () => {
+        const rk = document.getElementById('selRoutingKey').value;
+        for (let i = 0; i < 5; i++) {
+          setTimeout(() => publishMessage(rk), i * 300);
+        }
+      });
+
+      document.getElementById('btnReject').addEventListener('click', () => {
+        rejectNextMessage();
+      });
+
+      document.getElementById('btnReset').addEventListener('click', () => {
+        logPanel.innerHTML = '';
+        buildTopology();
+        addLog('已重置', 'info');
+      });
+
+      // Init
+      buildTopology();
+      addLog('RabbitMQ 运行原理演示 — 选择场景开始探索', 'info');
+      addLog('Direct Exchange: 根据 routing key 精确匹配队列绑定', 'info');
+      animId = requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+
+</html>
