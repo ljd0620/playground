@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>二叉树遍历可视化</title>
+  <meta name="description" content="交互式二叉树遍历可视化，演示前序、中序、后序、层序遍历的节点访问过程">
+  <meta name="keywords" content="二叉树, 遍历, 前序遍历, 中序遍历, 后序遍历, 层序遍历, BFS, DFS, 算法可视化">
+  <meta property="og:title" content="二叉树遍历可视化">
+  <meta property="og:description" content="交互式二叉树遍历可视化，演示前序、中序、后序、层序遍历的节点访问过程">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --mono: 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 13px;
+      position: relative
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(54, 217, 134, 0.04), transparent 70%);
+      pointer-events: none;
+      z-index: 0
+    }
+
+    header {
+      padding: 12px 20px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1
+    }
+
+    header h1 {
+      font-size: 17px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text
+    }
+
+    .tag {
+      font-size: 0.68rem;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      padding: 3px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      letter-spacing: 0.3px
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      z-index: 1
+    }
+
+    .left {
+      width: 280px;
+      min-width: 280px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px
+    }
+
+    .sec {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      backdrop-filter: blur(8px);
+      transition: border-color .2s
+    }
+
+    .sec:hover {
+      border-color: var(--border-hover)
+    }
+
+    .sec-t {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .sec-t::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-green)
+    }
+
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px
+    }
+
+    .pbtn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      text-align: left;
+      transition: all .15s;
+      display: flex;
+      gap: 8px;
+      align-items: center
+    }
+
+    .pbtn:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-elevated)
+    }
+
+    .pbtn.active {
+      border-color: var(--accent-green);
+      background: rgba(54, 217, 134, 0.06);
+      box-shadow: inset 3px 0 0 var(--accent-green), 0 0 12px rgba(54, 217, 134, 0.1)
+    }
+
+    .pbtn .pi {
+      font-size: 15px;
+      width: 20px;
+      text-align: center;
+      flex-shrink: 0
+    }
+
+    .pbtn .pn {
+      font-weight: 600;
+      display: block;
+      font-size: 11px
+    }
+
+    .pbtn .pd {
+      color: var(--text-muted);
+      font-size: 9px;
+      line-height: 1.3;
+      margin-top: 1px
+    }
+
+    .btns {
+      display: flex;
+      gap: 5px;
+      margin-top: 4px
+    }
+
+    .btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 0;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 11px;
+      transition: all .15s;
+      flex: 1;
+      text-align: center
+    }
+
+    .btn:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3)
+    }
+
+    .btn.pri {
+      background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+      color: #000;
+      font-weight: 600;
+      border-color: var(--accent-green);
+      box-shadow: 0 2px 10px rgba(54, 217, 134, 0.2)
+    }
+
+    .btn.pri:hover {
+      box-shadow: 0 4px 16px rgba(54, 217, 134, 0.35);
+      transform: translateY(-1px)
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      outline: none;
+      margin: 4px 0
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      cursor: pointer;
+      border: 2px solid var(--bg-card)
+    }
+
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-secondary)
+    }
+
+    .right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 16px;
+      gap: 12px
+    }
+
+    .tree-area {
+      flex: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center
+    }
+
+    .tree-svg {
+      width: 100%;
+      height: 100%;
+      max-width: 700px;
+      max-height: 420px
+    }
+
+    .tedge {
+      stroke: var(--border);
+      stroke-width: 2;
+      stroke-linecap: round
+    }
+
+    .tedge.active {
+      stroke: var(--accent-orange);
+      stroke-width: 2.5
+    }
+
+    .tnode circle {
+      fill: var(--bg-card);
+      stroke: var(--border);
+      stroke-width: 2;
+      transition: fill .25s ease, stroke .25s ease, r .25s ease
+    }
+
+    .tnode.active circle {
+      fill: var(--accent-orange);
+      stroke: var(--accent-orange);
+      r: 26
+    }
+
+    .tnode.visited circle {
+      fill: var(--glow-green);
+      stroke: var(--accent-green)
+    }
+
+    .tnode .tnode-label {
+      fill: var(--text-secondary);
+      font-size: 14px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      text-anchor: middle;
+      dominant-baseline: central;
+      transition: fill .25s ease;
+      pointer-events: none
+    }
+
+    .tnode.active .tnode-label {
+      fill: #000
+    }
+
+    .tnode.visited .tnode-label {
+      fill: var(--accent-green);
+      font-size: 11px
+    }
+
+    .tnode .tnode-order {
+      fill: var(--accent-green);
+      font-size: 16px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      text-anchor: middle;
+      dominant-baseline: central;
+      opacity: 0;
+      transition: opacity .25s ease;
+      pointer-events: none
+    }
+
+    .tnode.visited .tnode-order {
+      opacity: 1
+    }
+
+    .info-row {
+      display: flex;
+      gap: 10px;
+      flex-shrink: 0
+    }
+
+    .info-card {
+      flex: 1;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      min-width: 0
+    }
+
+    .info-card .ic-t {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 4px
+    }
+
+    .info-card .ic-v {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent-green)
+    }
+
+    .legend {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 10px;
+      color: var(--text-secondary)
+    }
+
+    .legend span {
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .legend .dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0
+    }
+
+    .legend .dot-uv {
+      background: var(--bg-card);
+      border: 2px solid var(--border)
+    }
+
+    .legend .dot-act {
+      background: var(--accent-orange);
+      border: 2px solid var(--accent-orange)
+    }
+
+    .legend .dot-vis {
+      background: var(--glow-green);
+      border: 2px solid var(--accent-green)
+    }
+
+    .stat-cards {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0
+    }
+
+    .stc {
+      flex: 1;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px;
+      text-align: center
+    }
+
+    .stc .sv {
+      font-family: var(--mono);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent-green)
+    }
+
+    .stc .sl {
+      font-size: 9px;
+      color: var(--text-muted);
+      margin-top: 2px
+    }
+
+    @media (max-width: 900px) {
+      .main {
+        flex-direction: column
+      }
+
+      .left {
+        width: 100%;
+        min-width: 0;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 8px;
+        max-height: 150px
+      }
+
+      .left .sec {
+        flex: 1;
+        min-width: 130px;
+        padding: 8px
+      }
+
+      .tree-svg {
+        max-height: 300px
+      }
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.14)
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>二叉树遍历可视化</h1>
+    <span class="tag">算法</span>
+  </header>
+  <div class="main">
+    <div class="left">
+      <div class="sec">
+        <div class="sec-t">遍历方式</div>
+        <div class="preset-list" id="presetList">
+          <button class="pbtn active" data-id="preorder">
+            <span class="pi">&#9651;</span>
+            <span><span class="pn">前序遍历</span><span class="pd">根 → 左 → 右</span></span>
+          </button>
+          <button class="pbtn" data-id="inorder">
+            <span class="pi">&#9633;</span>
+            <span><span class="pn">中序遍历</span><span class="pd">左 → 根 → 右</span></span>
+          </button>
+          <button class="pbtn" data-id="postorder">
+            <span class="pi">&#9661;</span>
+            <span><span class="pn">后序遍历</span><span class="pd">左 → 右 → 根</span></span>
+          </button>
+          <button class="pbtn" data-id="levelorder">
+            <span class="pi">&#8595;</span>
+            <span><span class="pn">层序遍历</span><span class="pd">逐层从左到右</span></span>
+          </button>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-t">控制</div>
+        <div class="btns">
+          <button class="btn pri" id="btnPlay">&#9654; 开始</button>
+          <button class="btn" id="btnPause">&#9208; 暂停</button>
+        </div>
+        <div class="btns" style="margin-top:5px">
+          <button class="btn" id="btnStep">&#9194; 单步</button>
+          <button class="btn" id="btnReset">&#8634; 重置</button>
+        </div>
+        <div class="slider-label" style="margin-top:8px"><span>速度</span><span id="speedVal">快速</span></div>
+        <input type="range" id="speedSlider" min="1" max="4" value="3">
+      </div>
+      <div class="sec">
+        <div class="sec-t">图例</div>
+        <div class="legend">
+          <span><span class="dot dot-uv"></span> 未访问</span>
+          <span><span class="dot dot-act"></span> 访问中</span>
+          <span><span class="dot dot-vis"></span> 已访问</span>
+        </div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="tree-area" id="treeArea">
+        <svg class="tree-svg" id="treeSvg" viewBox="0 0 600 340" preserveAspectRatio="xMidYMid meet">
+          <g id="edgesGroup">
+            <line id="e1-2" class="tedge" x1="300" y1="74" x2="150" y2="136" />
+            <line id="e1-3" class="tedge" x1="300" y1="74" x2="450" y2="136" />
+            <line id="e2-4" class="tedge" x1="150" y1="184" x2="75" y2="246" />
+            <line id="e2-5" class="tedge" x1="150" y1="184" x2="225" y2="246" />
+            <line id="e3-6" class="tedge" x1="450" y1="184" x2="375" y2="246" />
+            <line id="e3-7" class="tedge" x1="450" y1="184" x2="525" y2="246" />
+          </g>
+          <g id="nodesGroup">
+            <g class="tnode" id="tnode-1" data-id="1">
+              <circle cx="300" cy="50" r="24" />
+              <text class="tnode-label" x="300" y="50">1</text>
+              <text class="tnode-order" x="300" y="50"></text>
+            </g>
+            <g class="tnode" id="tnode-2" data-id="2">
+              <circle cx="150" cy="160" r="24" />
+              <text class="tnode-label" x="150" y="160">2</text>
+              <text class="tnode-order" x="150" y="160"></text>
+            </g>
+            <g class="tnode" id="tnode-3" data-id="3">
+              <circle cx="450" cy="160" r="24" />
+              <text class="tnode-label" x="450" y="160">3</text>
+              <text class="tnode-order" x="450" y="160"></text>
+            </g>
+            <g class="tnode" id="tnode-4" data-id="4">
+              <circle cx="75" cy="270" r="24" />
+              <text class="tnode-label" x="75" y="270">4</text>
+              <text class="tnode-order" x="75" y="270"></text>
+            </g>
+            <g class="tnode" id="tnode-5" data-id="5">
+              <circle cx="225" cy="270" r="24" />
+              <text class="tnode-label" x="225" y="270">5</text>
+              <text class="tnode-order" x="225" y="270"></text>
+            </g>
+            <g class="tnode" id="tnode-6" data-id="6">
+              <circle cx="375" cy="270" r="24" />
+              <text class="tnode-label" x="375" y="270">6</text>
+              <text class="tnode-order" x="375" y="270"></text>
+            </g>
+            <g class="tnode" id="tnode-7" data-id="7">
+              <circle cx="525" cy="270" r="24" />
+              <text class="tnode-label" x="525" y="270">7</text>
+              <text class="tnode-order" x="525" y="270"></text>
+            </g>
+          </g>
+        </svg>
+      </div>
+      <div class="stat-cards">
+        <div class="stc"><div class="sv" id="stepCounter">0 / 0</div><div class="sl">步骤</div></div>
+        <div class="stc"><div class="sv" id="visitedCounter">0</div><div class="sl">已访问节点</div></div>
+        <div class="stc"><div class="sv" id="resultSeq">-</div><div class="sl">遍历结果</div></div>
+      </div>
+      <div class="info-row">
+        <div class="info-card"><div class="ic-t">当前节点</div><div class="ic-v" id="infoCurr">-</div></div>
+        <div class="info-card"><div class="ic-t">时间复杂度</div><div class="ic-v" id="infoTime">O(n)</div></div>
+        <div class="info-card"><div class="ic-t">空间复杂度</div><div class="ic-v" id="infoSpace">O(h)</div></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="shared/theme.js"></script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/analytics.js"></script>
+  <script>
+    (function () {
+      var presetList = document.getElementById('presetList');
+      var btnPlay = document.getElementById('btnPlay');
+      var btnPause = document.getElementById('btnPause');
+      var btnStep = document.getElementById('btnStep');
+      var btnReset = document.getElementById('btnReset');
+      var speedSlider = document.getElementById('speedSlider');
+      var speedVal = document.getElementById('speedVal');
+      var stepCounter = document.getElementById('stepCounter');
+      var visitedCounter = document.getElementById('visitedCounter');
+      var resultSeq = document.getElementById('resultSeq');
+      var infoCurr = document.getElementById('infoCurr');
+      var infoTime = document.getElementById('infoTime');
+      var infoSpace = document.getElementById('infoSpace');
+
+      var currentAlgo = 'preorder';
+      var steps = [];
+      var stepIdx = 0;
+      var playing = false;
+      var timer = null;
+      var visitSeq = [];
+
+      // Tree structure
+      var TREE = {
+        1: { left: 2, right: 3, parent: null, edgeToParent: null },
+        2: { left: 4, right: 5, parent: 1, edgeToParent: 'e1-2' },
+        3: { left: 6, right: 7, parent: 1, edgeToParent: 'e1-3' },
+        4: { left: null, right: null, parent: 2, edgeToParent: 'e2-4' },
+        5: { left: null, right: null, parent: 2, edgeToParent: 'e2-5' },
+        6: { left: null, right: null, parent: 3, edgeToParent: 'e3-6' },
+        7: { left: null, right: null, parent: 3, edgeToParent: 'e3-7' }
+      };
+
+      // ── Step generators ──
+      function preorderSteps() {
+        var s = [];
+        var order = 0;
+        function walk(id) {
+          s.push({ type: 'active', nodeId: id });
+          order++;
+          s.push({ type: 'visit', nodeId: id, order: order });
+          var node = TREE[id];
+          if (node.left) walk(node.left);
+          if (node.right) walk(node.right);
+        }
+        walk(1);
+        return s;
+      }
+
+      function inorderSteps() {
+        var s = [];
+        var order = 0;
+        function walk(id) {
+          var node = TREE[id];
+          if (node.left) walk(node.left);
+          s.push({ type: 'active', nodeId: id });
+          order++;
+          s.push({ type: 'visit', nodeId: id, order: order });
+          if (node.right) walk(node.right);
+        }
+        walk(1);
+        return s;
+      }
+
+      function postorderSteps() {
+        var s = [];
+        var order = 0;
+        function walk(id) {
+          var node = TREE[id];
+          if (node.left) walk(node.left);
+          if (node.right) walk(node.right);
+          s.push({ type: 'active', nodeId: id });
+          order++;
+          s.push({ type: 'visit', nodeId: id, order: order });
+        }
+        walk(1);
+        return s;
+      }
+
+      function levelorderSteps() {
+        var s = [];
+        var order = 0;
+        var queue = [1];
+        while (queue.length > 0) {
+          var id = queue.shift();
+          s.push({ type: 'active', nodeId: id });
+          order++;
+          s.push({ type: 'visit', nodeId: id, order: order });
+          var node = TREE[id];
+          if (node.left) queue.push(node.left);
+          if (node.right) queue.push(node.right);
+        }
+        return s;
+      }
+
+      var algoFns = {
+        preorder: preorderSteps,
+        inorder: inorderSteps,
+        postorder: postorderSteps,
+        levelorder: levelorderSteps
+      };
+
+      // ── Rendering ──
+      function clearHighlights() {
+        var allNodes = document.querySelectorAll('.tnode');
+        for (var i = 0; i < allNodes.length; i++) {
+          allNodes[i].classList.remove('active', 'visited');
+        }
+        var allEdges = document.querySelectorAll('.tedge');
+        for (var j = 0; j < allEdges.length; j++) {
+          allEdges[j].classList.remove('active');
+        }
+        var orders = document.querySelectorAll('.tnode-order');
+        for (var k = 0; k < orders.length; k++) {
+          orders[k].textContent = '';
+        }
+        var labels = document.querySelectorAll('.tnode-label');
+        for (var m = 0; m < labels.length; m++) {
+          labels[m].setAttribute('y', labels[m].getAttribute('data-orig-y') || labels[m].getAttribute('y'));
+        }
+      }
+
+      function applyStep(step) {
+        if (!step) return;
+
+        // Clear previous active state (keep visited)
+        var activeNode = document.querySelector('.tnode.active');
+        if (activeNode) activeNode.classList.remove('active');
+        var activeEdge = document.querySelector('.tedge.active');
+        if (activeEdge) activeEdge.classList.remove('active');
+
+        if (step.type === 'active') {
+          var nodeEl = document.getElementById('tnode-' + step.nodeId);
+          if (nodeEl) {
+            nodeEl.classList.add('active');
+            // Highlight edge from parent
+            var tn = TREE[step.nodeId];
+            if (tn && tn.edgeToParent) {
+              var edgeEl = document.getElementById(tn.edgeToParent);
+              if (edgeEl) edgeEl.classList.add('active');
+            }
+            infoCurr.textContent = '节点 ' + step.nodeId;
+          }
+        } else if (step.type === 'visit') {
+          var nodeEl2 = document.getElementById('tnode-' + step.nodeId);
+          if (nodeEl2) {
+            nodeEl2.classList.remove('active');
+            nodeEl2.classList.add('visited');
+            var orderEl = nodeEl2.querySelector('.tnode-order');
+            if (orderEl) orderEl.textContent = step.order;
+            // Update label position for visited state
+            var labelEl = nodeEl2.querySelector('.tnode-label');
+            if (labelEl) {
+              if (!labelEl.getAttribute('data-orig-y')) {
+                labelEl.setAttribute('data-orig-y', labelEl.getAttribute('y'));
+              }
+              labelEl.setAttribute('y', parseFloat(labelEl.getAttribute('data-orig-y')) - 8);
+            }
+            // Clear edge highlight
+            var tn2 = TREE[step.nodeId];
+            if (tn2 && tn2.edgeToParent) {
+              var edgeEl2 = document.getElementById(tn2.edgeToParent);
+              if (edgeEl2) edgeEl2.classList.remove('active');
+            }
+            visitSeq.push(step.nodeId);
+            visitedCounter.textContent = visitSeq.length;
+            resultSeq.textContent = visitSeq.join(' → ');
+            infoCurr.textContent = '节点 ' + step.nodeId + ' (第 ' + step.order + ' 个)';
+          }
+        }
+
+        stepIdx++;
+        stepCounter.textContent = stepIdx + ' / ' + steps.length;
+      }
+
+      // ── Playback ──
+      function pause() {
+        playing = false;
+        if (timer) { clearTimeout(timer); timer = null; }
+        btnPlay.textContent = '▶ 继续';
+      }
+
+      function play() {
+        if (playing) return;
+        if (stepIdx >= steps.length) return;
+        playing = true;
+        btnPlay.textContent = '▶ 运行中';
+        scheduleNext();
+      }
+
+      function scheduleNext() {
+        if (!playing || stepIdx >= steps.length) {
+          playing = false;
+          btnPlay.textContent = '✓ 完成';
+          return;
+        }
+        applyStep(steps[stepIdx]);
+        if (stepIdx >= steps.length) {
+          playing = false;
+          btnPlay.textContent = '✓ 完成';
+          return;
+        }
+        var v = parseInt(speedSlider.value);
+        var delays = [500, 250, 120, 40];
+        timer = setTimeout(scheduleNext, delays[v - 1]);
+      }
+
+      function doStep() {
+        if (playing) { pause(); return; }
+        if (stepIdx < steps.length) {
+          applyStep(steps[stepIdx]);
+        }
+        if (stepIdx >= steps.length) {
+          btnPlay.textContent = '✓ 完成';
+        }
+      }
+
+      function resetAll() {
+        pause();
+        btnPlay.textContent = '▶ 开始';
+        clearHighlights();
+        steps = algoFns[currentAlgo]();
+        stepIdx = 0;
+        visitSeq = [];
+        stepCounter.textContent = '0 / ' + steps.length;
+        visitedCounter.textContent = '0';
+        resultSeq.textContent = '-';
+        infoCurr.textContent = '-';
+      }
+
+      function loadAlgo(id) {
+        currentAlgo = id;
+        resetAll();
+        if (id === 'levelorder') {
+          infoSpace.textContent = 'O(w)';
+        } else {
+          infoSpace.textContent = 'O(h)';
+        }
+      }
+
+      // ── Events ──
+      presetList.addEventListener('click', function (e) {
+        var btn = e.target.closest('.pbtn');
+        if (!btn) return;
+        var id = btn.getAttribute('data-id');
+        if (id === currentAlgo) return;
+        presetList.querySelectorAll('.pbtn').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        loadAlgo(id);
+      });
+
+      btnPlay.addEventListener('click', function () {
+        if (stepIdx >= steps.length) { resetAll(); }
+        play();
+      });
+
+      btnPause.addEventListener('click', function () { pause(); });
+
+      btnStep.addEventListener('click', function () { doStep(); });
+
+      btnReset.addEventListener('click', function () { resetAll(); });
+
+      speedSlider.addEventListener('input', function () {
+        var labels = ['慢速', '中速', '快速', '极快'];
+        speedVal.textContent = labels[parseInt(speedSlider.value) - 1];
+      });
+
+      // ── Init ──
+      speedVal.textContent = '快速';
+      loadAlgo('preorder');
+    })();
+  </script>
+</body>
+
+</html>

@@ -28,13 +28,14 @@
     { file: 'distributed-tx.html', title: '分布式事务方案' },
     { file: 'xss-csrf.html', title: 'XSS & CSRF' },
     { file: 'sorting.html', title: '排序算法' },
-    { file: 'dp.html', title: '动态规划' }
+    { file: 'dp.html', title: '动态规划' },
+    { file: 'binary-tree.html', title: '二叉树遍历' }
   ];
 
   var SIDEBAR_PAGES = [
     'rag.html', 'redis-cluster.html', 'mysql-isolation.html',
     'xss-csrf.html', 'juc-tools.html', 'spring-boot-startup.html',
-    'classloader.html', 'threadpool.html'
+    'classloader.html', 'threadpool.html', 'binary-tree.html'
   ];
 
   var pathParts = location.pathname.replace(/\/+$/, '').split('/');

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A collection of self-contained, single-file HTML playgrounds for interactive visualization of technical concepts. Each file is a standalone educational tool — no build system, no server required. Currently contains 29 topic playgrounds plus an index navigation page.
+A collection of self-contained, single-file HTML playgrounds for interactive visualization of technical concepts. Each file is a standalone educational tool — no build system, no server required. Currently contains 30 topic playgrounds plus an index navigation page.
 
 ## Topics Covered
 
@@ -14,13 +14,13 @@ A collection of self-contained, single-file HTML playgrounds for interactive vis
 | Spring | `spring-boot-startup.html`, `spring-circular-dep.html`, `spring-tx.html`, `feign.html`, `ribbon.html` |
 | Redis | `redis-cluster.html`, `redis-sentinel.html`, `redis-db-consistency.html` |
 | MySQL | `mysql-explain.html`, `mysql-isolation.html` |
-| Kafka/MQ | `kafka.html`, `kafka-offset.html`, `rabbitmq-ordering.html` |
+| Kafka/MQ | `kafka.html`, `kafka-offset.html`, `rabbitmq.html`, `rabbitmq-ordering.html` |
 | Java 并发 | `threadpool.html`, `juc-tools.html` |
 | 架构/高可用 | `ha-architecture.html`, `hystrix.html`, `rate-limiter.html`, `distributed-tx.html`, `dubbo.html` |
 | JVM | `classloader.html` |
 | 搜索引擎 | `es-inverted-index.html` |
 | 安全 | `xss-csrf.html` |
-| 算法 | `sorting.html`, `dp.html` |
+| 算法 | `sorting.html`, `dp.html`, `binary-tree.html` |
 
 ## How to Run
 
@@ -37,7 +37,7 @@ Open any `.html` file directly in a browser. No build step or dev server needed.
 │   ├── nav.js              # Navigation bar component
 │   ├── theme.js            # Dark/light theme toggle
 │   └── analytics.js        # Analytics integration
-├── *.html                  # Individual topic playgrounds (29 files)
+├── *.html                  # Individual topic playgrounds (30 files)
 └── CLAUDE.md               # This file
 ```
 
