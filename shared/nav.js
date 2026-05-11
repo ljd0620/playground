@@ -8,6 +8,7 @@
     { file: 'spring-tx.html', title: 'Spring 事务管理' },
     { file: 'feign.html', title: 'Feign 声明式调用' },
     { file: 'ribbon.html', title: 'Ribbon 负载均衡' },
+    { file: 'dubbo.html', title: 'Dubbo RPC 框架' },
     { file: 'redis-cluster.html', title: 'Redis Cluster' },
     { file: 'redis-sentinel.html', title: 'Redis Sentinel' },
     { file: 'redis-db-consistency.html', title: 'Redis 与数据库一致性' },
