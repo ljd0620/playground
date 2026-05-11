@@ -5,10 +5,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Playground 导航 — 交互式技术概念可视化</title>
-  <meta name="description" content="交互式技术概念可视化工具集，涵盖 AI、Spring、Redis、MySQL、Kafka、Java 并发、高可用架构、安全等 27 个主题的 Playground。">
+  <meta name="description" content="交互式技术概念可视化工具集，涵盖 AI、Spring、Redis、MySQL、Kafka、Java 并发、高可用架构、安全等 29 个主题的 Playground。">
   <meta name="keywords" content="playground,交互式学习,RAG,Kafka,Redis,MySQL,Spring Boot,Java并发,高可用,AI Agent">
   <meta property="og:title" content="Playground 导航 — 交互式技术概念可视化">
-  <meta property="og:description" content="27 个交互式技术概念可视化 Playground，涵盖 AI、中间件、数据库、架构等核心主题。">
+  <meta property="og:description" content="29 个交互式技术概念可视化 Playground，涵盖 AI、中间件、数据库、架构等核心主题。">
   <meta property="og:type" content="website">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -489,6 +489,12 @@
       border-color: rgba(244, 114, 182, 0.2)
     }
 
+    .tag-algo {
+      background: rgba(54, 217, 134, 0.1);
+      color: var(--accent-green);
+      border-color: rgba(54, 217, 134, 0.2)
+    }
+
     footer {
       text-align: center;
       color: var(--text-muted);
@@ -736,8 +742,8 @@
       </div>
       <p>交互式技术概念可视化工具集，通过动画与模拟深入理解核心原理</p>
       <div class="hero-stats">
-        <div class="hero-stat"><span class="hero-stat-num">27</span>个主题</div>
-        <div class="hero-stat"><span class="hero-stat-num">8</span>个类目</div>
+        <div class="hero-stat"><span class="hero-stat-num">29</span>个主题</div>
+        <div class="hero-stat"><span class="hero-stat-num">9</span>个类目</div>
         <div class="hero-stat"><span class="hero-stat-num">0</span>依赖</div>
       </div>
     </header>
@@ -758,6 +764,7 @@
         <span class="filter-tag" data-tag="java">Java</span>
         <span class="filter-tag" data-tag="arch">架构</span>
         <span class="filter-tag" data-tag="sec">安全</span>
+        <span class="filter-tag" data-tag="algo">算法</span>
       </div>
     </div>
 
@@ -941,6 +948,21 @@
             <div class="card-name">XSS & CSRF</div>
             <div class="card-desc">跨站脚本攻击与跨站请求伪造的原理与防御</div>
             <span class="card-tag tag-sec">安全</span>
+          </a>
+        </div>
+      </div>
+      <div class="group" data-group="algo">
+        <div class="group-title"><span class="group-icon">&#128214;</span> 算法</div>
+        <div class="cards">
+          <a class="card" href="sorting.html" data-tag="algo">
+            <div class="card-name">排序算法可视化</div>
+            <div class="card-desc">冒泡、选择、插入、快速、归并、堆、希尔排序的动画演示与复杂度对比</div>
+            <span class="card-tag tag-algo">算法</span>
+          </a>
+          <a class="card" href="dp.html" data-tag="algo">
+            <div class="card-name">动态规划算法</div>
+            <div class="card-desc">0/1 背包、LCS、LIS、硬币找零的 DP 表格填充与状态转移推导</div>
+            <span class="card-tag tag-algo">算法</span>
           </a>
         </div>
       </div>

@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>排序算法可视化</title>
+  <meta name="description" content="交互式排序算法可视化，演示冒泡、选择、插入、快速、归并、堆、希尔排序的完整过程">
+  <meta name="keywords" content="排序算法, 冒泡排序, 快速排序, 归并排序, 堆排序, 算法可视化, Java">
+  <meta property="og:title" content="排序算法可视化">
+  <meta property="og:description" content="交互式排序算法可视化，演示冒泡、选择、插入、快速、归并、堆、希尔排序的完整过程">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --mono: 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 13px;
+      position: relative
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(54, 217, 134, 0.06), transparent 70%);
+      pointer-events: none;
+      z-index: 0
+    }
+
+    header {
+      padding: 12px 20px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1
+    }
+
+    header h1 {
+      font-size: 17px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text
+    }
+
+    .tag {
+      font-size: 0.68rem;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      padding: 3px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      letter-spacing: 0.3px
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      z-index: 1
+    }
+
+    .left {
+      width: 280px;
+      min-width: 280px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px
+    }
+
+    .sec {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      backdrop-filter: blur(8px);
+      transition: border-color .2s
+    }
+
+    .sec:hover {
+      border-color: var(--border-hover)
+    }
+
+    .sec-t {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .sec-t::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-green)
+    }
+
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px
+    }
+
+    .pbtn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      text-align: left;
+      transition: all .15s;
+      display: flex;
+      gap: 8px;
+      align-items: center
+    }
+
+    .pbtn:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-elevated)
+    }
+
+    .pbtn.active {
+      border-color: var(--accent-green);
+      background: rgba(54, 217, 134, 0.06);
+      box-shadow: inset 3px 0 0 var(--accent-green), 0 0 12px var(--glow-green)
+    }
+
+    .pbtn .pi {
+      font-size: 14px;
+      width: 20px;
+      text-align: center;
+      flex-shrink: 0
+    }
+
+    .pbtn .pn {
+      font-weight: 600;
+      display: block;
+      font-size: 11px
+    }
+
+    .pbtn .pd {
+      color: var(--text-muted);
+      font-size: 9px;
+      line-height: 1.3;
+      margin-top: 1px
+    }
+
+    .btns {
+      display: flex;
+      gap: 5px;
+      margin-top: 4px
+    }
+
+    .btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 0;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 11px;
+      transition: all .15s;
+      flex: 1;
+      text-align: center
+    }
+
+    .btn:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3)
+    }
+
+    .btn.pri {
+      background: linear-gradient(135deg, var(--accent-green), #2bb870);
+      color: #000;
+      font-weight: 600;
+      border-color: var(--accent-green);
+      box-shadow: 0 2px 10px rgba(54, 217, 134, 0.2)
+    }
+
+    .btn.pri:hover {
+      box-shadow: 0 4px 16px rgba(54, 217, 134, 0.35);
+      transform: translateY(-1px)
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      outline: none;
+      margin: 4px 0
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      cursor: pointer;
+      border: 2px solid var(--bg-card)
+    }
+
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-secondary)
+    }
+
+    .right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 16px;
+      gap: 12px
+    }
+
+    .chart-area {
+      flex: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 2px;
+      padding: 16px 20px 40px
+    }
+
+    .bar {
+      flex: 1;
+      background: var(--accent-blue);
+      border-radius: 3px 3px 0 0;
+      transition: height .12s ease, background .15s ease;
+      position: relative;
+      min-width: 4px
+    }
+
+    .bar.cmp {
+      background: var(--accent-orange);
+      box-shadow: 0 0 8px rgba(255, 159, 67, 0.4)
+    }
+
+    .bar.swap {
+      background: var(--accent-red);
+      box-shadow: 0 0 12px rgba(255, 92, 108, 0.5)
+    }
+
+    .bar.sorted {
+      background: var(--accent-green);
+      box-shadow: 0 0 6px rgba(54, 217, 134, 0.3)
+    }
+
+    .bar.pivot {
+      background: var(--accent-purple);
+      box-shadow: 0 0 10px rgba(176, 122, 255, 0.5)
+    }
+
+    .bar .bar-val {
+      position: absolute;
+      bottom: -22px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-muted);
+      white-space: nowrap
+    }
+
+    .bar.highlight .bar-val {
+      color: var(--text-primary);
+      font-weight: 700
+    }
+
+    .stats-row {
+      display: flex;
+      gap: 10px;
+      flex-shrink: 0
+    }
+
+    .stat-card {
+      flex: 1;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      text-align: center
+    }
+
+    .stat-card .sv {
+      font-family: var(--mono);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent-green)
+    }
+
+    .stat-card .sl {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px
+    }
+
+    .complexity-row {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0
+    }
+
+    .cx-card {
+      flex: 1;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px;
+      text-align: center;
+      font-size: 10px
+    }
+
+    .cx-card .cxv {
+      font-family: var(--mono);
+      font-weight: 700;
+      color: var(--accent-cyan);
+      font-size: 12px
+    }
+
+    .cx-card .cxl {
+      color: var(--text-muted);
+      margin-top: 2px
+    }
+
+    .legend {
+      display: flex;
+      gap: 14px;
+      justify-content: center;
+      font-size: 10px;
+      color: var(--text-secondary)
+    }
+
+    .legend span {
+      display: flex;
+      align-items: center;
+      gap: 4px
+    }
+
+    .legend .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      display: inline-block
+    }
+
+    @media (max-width: 900px) {
+      .main {
+        flex-direction: column
+      }
+      .left {
+        width: 100%;
+        min-width: 0;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 8px;
+        max-height: 160px
+      }
+      .left .sec {
+        flex: 1;
+        min-width: 130px;
+        padding: 8px
+      }
+      .right {
+        padding: 8px;
+        gap: 8px
+      }
+      .chart-area {
+        padding: 8px 10px 32px;
+        gap: 1px
+      }
+      .bar .bar-val {
+        font-size: 7px;
+        bottom: -18px
+      }
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.14)
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>排序算法可视化</h1>
+    <span class="tag">算法</span>
+  </header>
+  <div class="main">
+    <div class="left">
+      <div class="sec">
+        <div class="sec-t">排序算法</div>
+        <div class="preset-list" id="presetList">
+          <button class="pbtn active" data-id="bubble">
+            <span class="pi">&#128160;</span>
+            <span><span class="pn">冒泡排序</span><span class="pd">Bubble Sort — O(n²)</span></span>
+          </button>
+          <button class="pbtn" data-id="selection">
+            <span class="pi">&#128258;</span>
+            <span><span class="pn">选择排序</span><span class="pd">Selection Sort — O(n²)</span></span>
+          </button>
+          <button class="pbtn" data-id="insertion">
+            <span class="pi">&#128207;</span>
+            <span><span class="pn">插入排序</span><span class="pd">Insertion Sort — O(n²)</span></span>
+          </button>
+          <button class="pbtn" data-id="quick">
+            <span class="pi">&#9889;</span>
+            <span><span class="pn">快速排序</span><span class="pd">Quick Sort — O(n log n)</span></span>
+          </button>
+          <button class="pbtn" data-id="merge">
+            <span class="pi">&#128450;&#65039;</span>
+            <span><span class="pn">归并排序</span><span class="pd">Merge Sort — O(n log n)</span></span>
+          </button>
+          <button class="pbtn" data-id="heap">
+            <span class="pi">&#127793;</span>
+            <span><span class="pn">堆排序</span><span class="pd">Heap Sort — O(n log n)</span></span>
+          </button>
+          <button class="pbtn" data-id="shell">
+            <span class="pi">&#128300;</span>
+            <span><span class="pn">希尔排序</span><span class="pd">Shell Sort — O(n¹·³)</span></span>
+          </button>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-t">控制</div>
+        <div class="btns">
+          <button class="btn pri" id="btnPlay">&#9654; 开始</button>
+          <button class="btn" id="btnPause">&#9208; 暂停</button>
+        </div>
+        <div class="btns" style="margin-top:5px">
+          <button class="btn" id="btnStep">&#9194; 单步</button>
+          <button class="btn" id="btnReset">&#8634; 重置</button>
+        </div>
+        <div class="slider-label" style="margin-top:8px"><span>速度</span><span id="speedVal">中速</span></div>
+        <input type="range" id="speedSlider" min="1" max="5" value="3">
+        <div class="slider-label" style="margin-top:6px"><span>元素数量</span><span id="sizeVal">30</span></div>
+        <input type="range" id="sizeSlider" min="10" max="60" value="30">
+      </div>
+      <div class="sec">
+        <div class="sec-t">图例</div>
+        <div class="legend">
+          <span><span class="dot" style="background:var(--accent-blue)"></span> 默认</span>
+          <span><span class="dot" style="background:var(--accent-orange)"></span> 比较</span>
+          <span><span class="dot" style="background:var(--accent-red)"></span> 交换</span>
+          <span><span class="dot" style="background:var(--accent-purple)"></span> 基准</span>
+          <span><span class="dot" style="background:var(--accent-green)"></span> 已序</span>
+        </div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="chart-area" id="chartArea"></div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="sv" id="cmpCount">0</div><div class="sl">比较次数</div></div>
+        <div class="stat-card"><div class="sv" id="swapCount">0</div><div class="sl">交换次数</div></div>
+        <div class="stat-card"><div class="sv" id="timeElapsed">0ms</div><div class="sl">耗时</div></div>
+        <div class="stat-card"><div class="sv" id="stepCount">0</div><div class="sl">步数</div></div>
+      </div>
+      <div class="complexity-row" id="complexityRow">
+        <div class="cx-card"><div class="cxl">最好</div><div class="cxv">-</div></div>
+        <div class="cx-card"><div class="cxl">平均</div><div class="cxv">-</div></div>
+        <div class="cx-card"><div class="cxl">最坏</div><div class="cxv">-</div></div>
+        <div class="cx-card"><div class="cxl">空间</div><div class="cxv">-</div></div>
+        <div class="cx-card"><div class="cxl">稳定</div><div class="cxv">-</div></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="shared/theme.js"></script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/analytics.js"></script>
+  <script>
+    (function () {
+      var chartArea = document.getElementById('chartArea');
+      var presetList = document.getElementById('presetList');
+      var btnPlay = document.getElementById('btnPlay');
+      var btnPause = document.getElementById('btnPause');
+      var btnStep = document.getElementById('btnStep');
+      var btnReset = document.getElementById('btnReset');
+      var speedSlider = document.getElementById('speedSlider');
+      var speedVal = document.getElementById('speedVal');
+      var sizeSlider = document.getElementById('sizeSlider');
+      var sizeVal = document.getElementById('sizeVal');
+      var cmpCountEl = document.getElementById('cmpCount');
+      var swapCountEl = document.getElementById('swapCount');
+      var timeElapsedEl = document.getElementById('timeElapsed');
+      var stepCountEl = document.getElementById('stepCount');
+
+      var currentAlgo = 'bubble';
+      var arr = [];
+      var steps = [];
+      var stepIdx = 0;
+      var playing = false;
+      var timer = null;
+      var cmpCount = 0;
+      var swapCount = 0;
+      var startTime = 0;
+      var n = 30;
+
+      var complexity = {
+        bubble: { best: 'O(n)', avg: 'O(n²)', worst: 'O(n²)', space: 'O(1)', stable: '是' },
+        selection: { best: 'O(n²)', avg: 'O(n²)', worst: 'O(n²)', space: 'O(1)', stable: '否' },
+        insertion: { best: 'O(n)', avg: 'O(n²)', worst: 'O(n²)', space: 'O(1)', stable: '是' },
+        quick: { best: 'O(n log n)', avg: 'O(n log n)', worst: 'O(n²)', space: 'O(log n)', stable: '否' },
+        merge: { best: 'O(n log n)', avg: 'O(n log n)', worst: 'O(n log n)', space: 'O(n)', stable: '是' },
+        heap: { best: 'O(n log n)', avg: 'O(n log n)', worst: 'O(n log n)', space: 'O(1)', stable: '否' },
+        shell: { best: 'O(n log n)', avg: 'O(n¹·³)', worst: 'O(n²)', space: 'O(1)', stable: '否' }
+      };
+
+      // ── Algorithm step recorders ──
+      function bubbleSort(a) {
+        var s = [];
+        var n = a.length;
+        var arr = a.slice();
+        for (var i = 0; i < n - 1; i++) {
+          var swapped = false;
+          for (var j = 0; j < n - 1 - i; j++) {
+            s.push(['cmp', j, j + 1]);
+            if (arr[j] > arr[j + 1]) {
+              s.push(['swap', j, j + 1]);
+              var t = arr[j];
+              arr[j] = arr[j + 1];
+              arr[j + 1] = t;
+              swapped = true;
+            }
+          }
+          s.push(['done', n - 1 - i]);
+          if (!swapped) {
+            for (var k = 0; k < n - 1 - i; k++) s.push(['done', k]);
+            break;
+          }
+        }
+        s.push(['done', 0]);
+        return s;
+      }
+
+      function selectionSort(a) {
+        var s = [];
+        var arr = a.slice();
+        var n = arr.length;
+        for (var i = 0; i < n - 1; i++) {
+          var minIdx = i;
+          for (var j = i + 1; j < n; j++) {
+            s.push(['cmp', minIdx, j]);
+            if (arr[j] < arr[minIdx]) minIdx = j;
+          }
+          if (minIdx !== i) {
+            s.push(['swap', i, minIdx]);
+            var t = arr[i];
+            arr[i] = arr[minIdx];
+            arr[minIdx] = t;
+          }
+          s.push(['done', i]);
+        }
+        s.push(['done', n - 1]);
+        return s;
+      }
+
+      function insertionSort(a) {
+        var s = [];
+        var arr = a.slice();
+        var n = arr.length;
+        s.push(['done', 0]);
+        for (var i = 1; i < n; i++) {
+          var key = arr[i];
+          var j = i - 1;
+          s.push(['cmp', i, i]);
+          while (j >= 0) {
+            s.push(['cmp', j, j + 1]);
+            if (arr[j] > key) {
+              s.push(['swap', j, j + 1]);
+              arr[j + 1] = arr[j];
+              j--;
+            } else {
+              break;
+            }
+          }
+          arr[j + 1] = key;
+          s.push(['done', i]);
+        }
+        return s;
+      }
+
+      function quickSort(a) {
+        var s = [];
+        var arr = a.slice();
+
+        function qs(lo, hi) {
+          if (lo >= hi) {
+            if (lo === hi) s.push(['done', lo]);
+            return;
+          }
+          var pivot = arr[hi];
+          s.push(['pivot', hi]);
+          var i = lo;
+          for (var j = lo; j < hi; j++) {
+            s.push(['cmp', j, hi]);
+            if (arr[j] < pivot) {
+              if (i !== j) {
+                s.push(['swap', i, j]);
+                var t = arr[i];
+                arr[i] = arr[j];
+                arr[j] = t;
+              }
+              i++;
+            }
+          }
+          s.push(['swap', i, hi]);
+          arr[hi] = arr[i];
+          arr[i] = pivot;
+          s.push(['done', i]);
+          qs(lo, i - 1);
+          qs(i + 1, hi);
+        }
+        qs(0, arr.length - 1);
+        return s;
+      }
+
+      function mergeSort(a) {
+        var s = [];
+        var arr = a.slice();
+        var aux = arr.slice();
+
+        function ms(lo, hi) {
+          if (lo >= hi) return;
+          var mid = Math.floor((lo + hi) / 2);
+          ms(lo, mid);
+          ms(mid + 1, hi);
+          merge(lo, mid, hi);
+        }
+
+        function merge(lo, mid, hi) {
+          for (var k = lo; k <= hi; k++) aux[k] = arr[k];
+          var i = lo, j = mid + 1;
+          for (var k = lo; k <= hi; k++) {
+            if (i > mid) {
+              s.push(['cmp', k, j]);
+              arr[k] = aux[j++];
+            } else if (j > hi) {
+              s.push(['cmp', k, i]);
+              arr[k] = aux[i++];
+            } else {
+              s.push(['cmp', i, j]);
+              if (aux[i] <= aux[j]) {
+                arr[k] = aux[i++];
+              } else {
+                arr[k] = aux[j++];
+              }
+            }
+            s.push(['set', k, arr[k]]);
+            if (lo === 0 && hi === arr.length - 1) s.push(['done', k]);
+          }
+        }
+        ms(0, arr.length - 1);
+        for (var x = 0; x < arr.length; x++) s.push(['done', x]);
+        return s;
+      }
+
+      function heapSort(a) {
+        var s = [];
+        var arr = a.slice();
+        var n = arr.length;
+
+        function heapify(size, root) {
+          var largest = root;
+          var left = 2 * root + 1;
+          var right = 2 * root + 2;
+          if (left < size) {
+            s.push(['cmp', left, largest]);
+            if (arr[left] > arr[largest]) largest = left;
+          }
+          if (right < size) {
+            s.push(['cmp', right, largest]);
+            if (arr[right] > arr[largest]) largest = right;
+          }
+          if (largest !== root) {
+            s.push(['swap', root, largest]);
+            var t = arr[root];
+            arr[root] = arr[largest];
+            arr[largest] = t;
+            heapify(size, largest);
+          }
+        }
+
+        for (var i = Math.floor(n / 2) - 1; i >= 0; i--) heapify(n, i);
+        for (var i = n - 1; i > 0; i--) {
+          s.push(['swap', 0, i]);
+          var t = arr[0];
+          arr[0] = arr[i];
+          arr[i] = t;
+          s.push(['done', i]);
+          heapify(i, 0);
+        }
+        s.push(['done', 0]);
+        return s;
+      }
+
+      function shellSort(a) {
+        var s = [];
+        var arr = a.slice();
+        var n = arr.length;
+        for (var gap = Math.floor(n / 2); gap > 0; gap = Math.floor(gap / 2)) {
+          for (var i = gap; i < n; i++) {
+            var temp = arr[i];
+            var j = i;
+            while (j >= gap) {
+              s.push(['cmp', j - gap, j]);
+              if (arr[j - gap] > temp) {
+                s.push(['swap', j - gap, j]);
+                arr[j] = arr[j - gap];
+                j -= gap;
+              } else {
+                break;
+              }
+            }
+            arr[j] = temp;
+          }
+        }
+        for (var x = 0; x < n; x++) s.push(['done', x]);
+        return s;
+      }
+
+      var algoFns = {
+        bubble: bubbleSort,
+        selection: selectionSort,
+        insertion: insertionSort,
+        quick: quickSort,
+        merge: mergeSort,
+        heap: heapSort,
+        shell: shellSort
+      };
+
+      // ── Render ──
+      function renderBars(highlightA, highlightB, highlightType) {
+        var bars = chartArea.querySelectorAll('.bar');
+        var maxVal = Math.max.apply(null, arr);
+        bars.forEach(function (bar, i) {
+          var h = (arr[i] / maxVal) * 85;
+          bar.style.height = h + '%';
+          var valEl = bar.querySelector('.bar-val');
+          if (valEl) valEl.textContent = arr[i];
+          bar.classList.remove('cmp', 'swap', 'sorted', 'pivot', 'highlight');
+          if (highlightType === 'cmp' && (i === highlightA || i === highlightB)) {
+            bar.classList.add('cmp', 'highlight');
+          } else if (highlightType === 'swap' && (i === highlightA || i === highlightB)) {
+            bar.classList.add('swap', 'highlight');
+          } else if (highlightType === 'pivot' && i === highlightA) {
+            bar.classList.add('pivot', 'highlight');
+          } else if (highlightType === 'done' && i === highlightA) {
+            bar.classList.add('sorted');
+          } else if (highlightType === 'done-all' && i <= highlightA) {
+            bar.classList.add('sorted');
+          }
+        });
+      }
+
+      function initBars() {
+        chartArea.innerHTML = '';
+        arr.forEach(function (v) {
+          var bar = document.createElement('div');
+          bar.className = 'bar';
+          var valEl = document.createElement('span');
+          valEl.className = 'bar-val';
+          valEl.textContent = v;
+          bar.appendChild(valEl);
+          chartArea.appendChild(bar);
+        });
+        renderBars(-1, -1, '');
+      }
+
+      function generateArray() {
+        arr = [];
+        for (var i = 0; i < n; i++) arr.push(Math.floor(Math.random() * 95) + 5);
+        // Ensure no duplicates (or keep them, it's fine)
+        steps = [];
+        stepIdx = 0;
+        cmpCount = 0;
+        swapCount = 0;
+        initBars();
+        updateStats();
+      }
+
+      // ── Step execution ──
+      function applyStep(step) {
+        if (!step) return;
+        var type = step[0];
+        var a = step[1];
+        var b = step[2];
+        if (type === 'cmp') {
+          cmpCount++;
+          renderBars(a, b, 'cmp');
+        } else if (type === 'swap') {
+          swapCount++;
+          var tmp = arr[a];
+          arr[a] = arr[b];
+          arr[b] = tmp;
+          renderBars(a, b, 'swap');
+        } else if (type === 'set') {
+          arr[a] = b;
+          renderBars(a, -1, 'cmp');
+        } else if (type === 'done') {
+          renderBars(a, -1, 'done');
+        } else if (type === 'pivot') {
+          renderBars(a, -1, 'pivot');
+        }
+        stepIdx++;
+        updateStats();
+      }
+
+      function updateStats() {
+        cmpCountEl.textContent = cmpCount;
+        swapCountEl.textContent = swapCount;
+        stepCountEl.textContent = stepIdx + ' / ' + steps.length;
+        if (startTime > 0) {
+          timeElapsedEl.textContent = (Date.now() - startTime) + 'ms';
+        }
+      }
+
+      function updateComplexity(id) {
+        var c = complexity[id];
+        var cards = document.querySelectorAll('#complexityRow .cx-card .cxv');
+        cards[0].textContent = c.best;
+        cards[1].textContent = c.avg;
+        cards[2].textContent = c.worst;
+        cards[3].textContent = c.space;
+        cards[4].textContent = c.stable;
+      }
+
+      // ── Playback ──
+      function pause() {
+        playing = false;
+        if (timer) { clearTimeout(timer); timer = null; }
+        btnPlay.textContent = '▶ 继续';
+      }
+
+      function play() {
+        if (playing) return;
+        if (stepIdx >= steps.length) return;
+        playing = true;
+        btnPlay.textContent = '▶ 运行中';
+        startTime = startTime || Date.now();
+        scheduleNext();
+      }
+
+      function scheduleNext() {
+        if (!playing) return;
+        if (stepIdx >= steps.length) {
+          playing = false;
+          btnPlay.textContent = '✓ 完成';
+          startTime = 0;
+          updateStats();
+          return;
+        }
+        applyStep(steps[stepIdx]);
+        if (stepIdx >= steps.length) {
+          playing = false;
+          btnPlay.textContent = '✓ 完成';
+          startTime = 0;
+          updateStats();
+          return;
+        }
+        var v = parseInt(speedSlider.value);
+        var delays = [400, 200, 100, 50, 15];
+        timer = setTimeout(scheduleNext, delays[v - 1]);
+      }
+
+      function doStep() {
+        if (playing) { pause(); return; }
+        if (stepIdx === 0) startTime = Date.now();
+        if (stepIdx < steps.length) {
+          applyStep(steps[stepIdx]);
+        }
+        if (stepIdx >= steps.length) {
+          btnPlay.textContent = '✓ 完成';
+          startTime = 0;
+        }
+      }
+
+      function resetAll() {
+        pause();
+        startTime = 0;
+        timeElapsedEl.textContent = '0ms';
+        btnPlay.textContent = '▶ 开始';
+        generateArray();
+        steps = algoFns[currentAlgo](arr);
+        stepIdx = 0;
+        cmpCount = 0;
+        swapCount = 0;
+        updateStats();
+        renderBars(-1, -1, '');
+      }
+
+      // ── Load algorithm ──
+      function loadAlgo(id) {
+        currentAlgo = id;
+        updateComplexity(id);
+        resetAll();
+      }
+
+      // ── Events ──
+      presetList.addEventListener('click', function (e) {
+        var btn = e.target.closest('.pbtn');
+        if (!btn) return;
+        var id = btn.getAttribute('data-id');
+        if (id === currentAlgo) return;
+        presetList.querySelectorAll('.pbtn').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        loadAlgo(id);
+      });
+
+      btnPlay.addEventListener('click', function () {
+        if (stepIdx >= steps.length) { resetAll(); }
+        play();
+      });
+
+      btnPause.addEventListener('click', function () { pause(); });
+
+      btnStep.addEventListener('click', function () { doStep(); });
+
+      btnReset.addEventListener('click', function () { resetAll(); });
+
+      speedSlider.addEventListener('input', function () {
+        var labels = ['很慢', '慢速', '中速', '快速', '极快'];
+        speedVal.textContent = labels[parseInt(speedSlider.value) - 1];
+      });
+
+      sizeSlider.addEventListener('input', function () {
+        n = parseInt(sizeSlider.value);
+        sizeVal.textContent = n;
+        resetAll();
+      });
+
+      speedVal.textContent = '中速';
+      sizeVal.textContent = '30';
+      updateComplexity('bubble');
+      generateArray();
+      steps = algoFns[currentAlgo](arr);
+      updateStats();
+    })();
+  </script>
+</body>
+
+</html>

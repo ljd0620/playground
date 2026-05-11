@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A collection of self-contained, single-file HTML playgrounds for interactive visualization of technical concepts. Each file is a standalone educational tool — no build system, no server required. Currently contains 27 topic playgrounds plus an index navigation page.
+A collection of self-contained, single-file HTML playgrounds for interactive visualization of technical concepts. Each file is a standalone educational tool — no build system, no server required. Currently contains 29 topic playgrounds plus an index navigation page.
 
 ## Topics Covered
 
@@ -20,6 +20,7 @@ A collection of self-contained, single-file HTML playgrounds for interactive vis
 | JVM | `classloader.html` |
 | 搜索引擎 | `es-inverted-index.html` |
 | 安全 | `xss-csrf.html` |
+| 算法 | `sorting.html`, `dp.html` |
 
 ## How to Run
 
@@ -36,7 +37,7 @@ Open any `.html` file directly in a browser. No build step or dev server needed.
 │   ├── nav.js              # Navigation bar component
 │   ├── theme.js            # Dark/light theme toggle
 │   └── analytics.js        # Analytics integration
-├── *.html                  # Individual topic playgrounds (27 files)
+├── *.html                  # Individual topic playgrounds (29 files)
 └── CLAUDE.md               # This file
 ```
 

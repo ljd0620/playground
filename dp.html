@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>动态规划算法可视化</title>
+  <meta name="description" content="交互式动态规划算法可视化，演示 0/1 背包、LCS、LIS、硬币找零的 DP 表格填充过程与状态转移">
+  <meta name="keywords" content="动态规划, DP, 背包问题, LCS, 最长公共子序列, LIS, 硬币找零, 算法可视化">
+  <meta property="og:title" content="动态规划算法可视化">
+  <meta property="og:description" content="交互式动态规划算法可视化，演示 0/1 背包、LCS、LIS、硬币找零的 DP 表格填充过程与状态转移">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --mono: 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 13px;
+      position: relative
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(255, 159, 67, 0.05), transparent 70%);
+      pointer-events: none;
+      z-index: 0
+    }
+
+    header {
+      padding: 12px 20px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1
+    }
+
+    header h1 {
+      font-size: 17px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-orange), var(--accent-pink));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text
+    }
+
+    .tag {
+      font-size: 0.68rem;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      padding: 3px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      letter-spacing: 0.3px
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      z-index: 1
+    }
+
+    .left {
+      width: 280px;
+      min-width: 280px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px
+    }
+
+    .sec {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      backdrop-filter: blur(8px);
+      transition: border-color .2s
+    }
+
+    .sec:hover {
+      border-color: var(--border-hover)
+    }
+
+    .sec-t {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .sec-t::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-orange)
+    }
+
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px
+    }
+
+    .pbtn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      text-align: left;
+      transition: all .15s;
+      display: flex;
+      gap: 8px;
+      align-items: center
+    }
+
+    .pbtn:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-elevated)
+    }
+
+    .pbtn.active {
+      border-color: var(--accent-orange);
+      background: rgba(255, 159, 67, 0.06);
+      box-shadow: inset 3px 0 0 var(--accent-orange), 0 0 12px rgba(255, 159, 67, 0.1)
+    }
+
+    .pbtn .pi {
+      font-size: 14px;
+      width: 20px;
+      text-align: center;
+      flex-shrink: 0
+    }
+
+    .pbtn .pn {
+      font-weight: 600;
+      display: block;
+      font-size: 11px
+    }
+
+    .pbtn .pd {
+      color: var(--text-muted);
+      font-size: 9px;
+      line-height: 1.3;
+      margin-top: 1px
+    }
+
+    .btns {
+      display: flex;
+      gap: 5px;
+      margin-top: 4px
+    }
+
+    .btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 0;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 11px;
+      transition: all .15s;
+      flex: 1;
+      text-align: center
+    }
+
+    .btn:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3)
+    }
+
+    .btn.pri {
+      background: linear-gradient(135deg, var(--accent-orange), #e07f30);
+      color: #000;
+      font-weight: 600;
+      border-color: var(--accent-orange);
+      box-shadow: 0 2px 10px rgba(255, 159, 67, 0.2)
+    }
+
+    .btn.pri:hover {
+      box-shadow: 0 4px 16px rgba(255, 159, 67, 0.35);
+      transform: translateY(-1px)
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      outline: none;
+      margin: 4px 0
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-orange);
+      cursor: pointer;
+      border: 2px solid var(--bg-card)
+    }
+
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-secondary)
+    }
+
+    .right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 16px;
+      gap: 12px
+    }
+
+    .canvas-area {
+      flex: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      position: relative;
+      overflow: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center
+    }
+
+    canvas {
+      display: block
+    }
+
+    .info-row {
+      display: flex;
+      gap: 10px;
+      flex-shrink: 0
+    }
+
+    .info-card {
+      flex: 1;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      min-width: 0
+    }
+
+    .info-card .ic-t {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 4px
+    }
+
+    .info-card .ic-v {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent-orange)
+    }
+
+    .formula-box {
+      flex-shrink: 0;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      text-align: center
+    }
+
+    .formula-box .hl {
+      color: var(--accent-orange);
+      font-weight: 600
+    }
+
+    .formula-box .hl2 {
+      color: var(--accent-cyan)
+    }
+
+    .legend {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      font-size: 10px;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+      flex-wrap: wrap
+    }
+
+    .legend span {
+      display: flex;
+      align-items: center;
+      gap: 4px
+    }
+
+    .legend .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      display: inline-block
+    }
+
+    .stat-cards {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0
+    }
+
+    .stc {
+      flex: 1;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 8px;
+      text-align: center
+    }
+
+    .stc .sv {
+      font-family: var(--mono);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent-orange)
+    }
+
+    .stc .sl {
+      font-size: 9px;
+      color: var(--text-muted);
+      margin-top: 2px
+    }
+
+    @media (max-width: 900px) {
+      .main {
+        flex-direction: column
+      }
+
+      .left {
+        width: 100%;
+        min-width: 0;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 8px;
+        max-height: 150px
+      }
+
+      .left .sec {
+        flex: 1;
+        min-width: 130px;
+        padding: 8px
+      }
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.14)
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>动态规划算法可视化</h1>
+    <span class="tag">算法</span>
+  </header>
+  <div class="main">
+    <div class="left">
+      <div class="sec">
+        <div class="sec-t">DP 问题</div>
+        <div class="preset-list" id="presetList">
+          <button class="pbtn active" data-id="knapsack">
+            <span class="pi">&#127890;</span>
+            <span><span class="pn">0/1 背包问题</span><span class="pd">2D DP — 物品选择最大化价值</span></span>
+          </button>
+          <button class="pbtn" data-id="lcs">
+            <span class="pi">&#128196;</span>
+            <span><span class="pn">最长公共子序列 LCS</span><span class="pd">2D DP — 字符串子序列匹配</span></span>
+          </button>
+          <button class="pbtn" data-id="lis">
+            <span class="pi">&#128200;</span>
+            <span><span class="pn">最长递增子序列 LIS</span><span class="pd">1D DP — 元素递增序列</span></span>
+          </button>
+          <button class="pbtn" data-id="coin">
+            <span class="pi">&#129689;</span>
+            <span><span class="pn">硬币找零</span><span class="pd">1D DP — 最少硬币数</span></span>
+          </button>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-t">控制</div>
+        <div class="btns">
+          <button class="btn pri" id="btnPlay">&#9654; 开始</button>
+          <button class="btn" id="btnPause">&#9208; 暂停</button>
+        </div>
+        <div class="btns" style="margin-top:5px">
+          <button class="btn" id="btnStep">&#9194; 单步</button>
+          <button class="btn" id="btnReset">&#8634; 重置</button>
+        </div>
+        <div class="slider-label" style="margin-top:8px"><span>速度</span><span id="speedVal">中速</span></div>
+        <input type="range" id="speedSlider" min="1" max="4" value="3">
+      </div>
+      <div class="sec">
+        <div class="sec-t">图例</div>
+        <div class="legend">
+          <span><span class="dot" style="background:#1e2a3a;border:1px solid #2d4a6f"></span> 未计算</span>
+          <span><span class="dot" style="background:#ff9f43"></span> 计算中</span>
+          <span><span class="dot" style="background:#4da3ff"></span> 依赖项</span>
+          <span><span class="dot" style="background:#1a3550"></span> 已计算</span>
+          <span><span class="dot" style="background:#36d986"></span> 最优路径</span>
+        </div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="canvas-area" id="canvasArea">
+        <canvas id="dpCanvas"></canvas>
+      </div>
+      <div class="formula-box" id="formulaBox">dp[i][j] = max(dp[i-1][j], dp[i-1][j-w] + v)</div>
+      <div class="stat-cards">
+        <div class="stc"><div class="sv" id="stepCounter">0 / 0</div><div class="sl">步骤</div></div>
+        <div class="stc"><div class="sv" id="cellCounter">0</div><div class="sl">已计算格子</div></div>
+        <div class="stc"><div class="sv" id="resultText">-</div><div class="sl">最优解</div></div>
+      </div>
+      <div class="info-row">
+        <div class="info-card"><div class="ic-t">状态定义</div><div class="ic-v" id="infoDef">-</div></div>
+        <div class="info-card"><div class="ic-t">时间复杂度</div><div class="ic-v" id="infoTime">-</div></div>
+        <div class="info-card"><div class="ic-t">空间复杂度</div><div class="ic-v" id="infoSpace">-</div></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="shared/theme.js"></script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/analytics.js"></script>
+  <script>
+    (function () {
+      var canvas = document.getElementById('dpCanvas');
+      var ctx = canvas.getContext('2d');
+      var canvasArea = document.getElementById('canvasArea');
+      var presetList = document.getElementById('presetList');
+      var btnPlay = document.getElementById('btnPlay');
+      var btnPause = document.getElementById('btnPause');
+      var btnStep = document.getElementById('btnStep');
+      var btnReset = document.getElementById('btnReset');
+      var speedSlider = document.getElementById('speedSlider');
+      var speedVal = document.getElementById('speedVal');
+      var formulaBox = document.getElementById('formulaBox');
+      var stepCounter = document.getElementById('stepCounter');
+      var cellCounter = document.getElementById('cellCounter');
+      var resultText = document.getElementById('resultText');
+      var infoDef = document.getElementById('infoDef');
+      var infoTime = document.getElementById('infoTime');
+      var infoSpace = document.getElementById('infoSpace');
+
+      var currentProb = 'knapsack';
+      var steps = [];
+      var stepIdx = 0;
+      var playing = false;
+      var timer = null;
+      var dpState = null;
+
+      // ── Problem definitions ──
+      var problems = {};
+
+      // 0/1 Knapsack
+      problems.knapsack = {
+        name: '0/1 背包问题',
+        formula: '<span class="hl2">dp[i][j]</span> = max(<span class="hl2">dp[i-1][j]</span>, <span class="hl2">dp[i-1][j-wᵢ]</span> + <span class="hl">vᵢ</span>)',
+        def: 'dp[i][j]: 前 i 件物品放入容量 j 的背包的最大价值',
+        time: 'O(n×W)',
+        space: 'O(n×W)',
+        getSteps: function () {
+          var items = [
+            { w: 2, v: 3, name: 'A' },
+            { w: 3, v: 4, name: 'B' },
+            { w: 4, v: 5, name: 'C' },
+            { w: 5, v: 8, name: 'D' }
+          ];
+          var W = 8;
+          var n = items.length;
+          var dp = [];
+          for (var i = 0; i <= n; i++) { dp[i] = []; for (var j = 0; j <= W; j++) dp[i][j] = 0; }
+          var s = [];
+
+          // Row/col labels
+          s.push({ type: 'init', items: items, W: W, n: n });
+
+          for (var i = 1; i <= n; i++) {
+            for (var j = 0; j <= W; j++) {
+              var deps = [{ r: i - 1, c: j }];
+              if (j >= items[i - 1].w) {
+                deps.push({ r: i - 1, c: j - items[i - 1].w });
+                dp[i][j] = Math.max(dp[i - 1][j], dp[i - 1][j - items[i - 1].w] + items[i - 1].v);
+              } else {
+                dp[i][j] = dp[i - 1][j];
+              }
+              s.push({ type: 'compute', row: i, col: j, deps: deps, value: dp[i][j] });
+            }
+          }
+
+          // Trace back optimal solution
+          var i2 = n, j2 = W;
+          var trace = [];
+          while (i2 > 0 && j2 > 0) {
+            if (j2 >= items[i2 - 1].w && dp[i2][j2] === dp[i2 - 1][j2 - items[i2 - 1].w] + items[i2 - 1].v) {
+              trace.push({ r: i2, c: j2 });
+              j2 -= items[i2 - 1].w;
+              i2--;
+            } else {
+              trace.push({ r: i2, c: j2 });
+              i2--;
+            }
+          }
+          s.push({ type: 'trace', cells: trace, value: dp[n][W] });
+          return s;
+        },
+        getHeaderItems: function () { return ['A w=2 v=3', 'B w=3 v=4', 'C w=4 v=5', 'D w=5 v=8']; },
+        getColLabel: function (j) { return j + ''; },
+        headerLabel: '容量→',
+        rowLabel: '物品↓'
+      };
+
+      // LCS
+      problems.lcs = {
+        name: '最长公共子序列 LCS',
+        formula: '<span class="hl2">dp[i][j]</span> = <span class="hl2">dp[i-1][j-1]</span>+1 (Aᵢ=Bⱼ) 或 max(<span class="hl2">dp[i-1][j]</span>, <span class="hl2">dp[i][j-1]</span>)',
+        def: 'dp[i][j]: A[0..i-1] 与 B[0..j-1] 的最长公共子序列长度',
+        time: 'O(m×n)',
+        space: 'O(m×n)',
+        getSteps: function () {
+          var A = 'ABCBDAB';
+          var B = 'BDCABA';
+          var m = A.length, n = B.length;
+          var dp = [];
+          for (var i = 0; i <= m; i++) { dp[i] = []; for (var j = 0; j <= n; j++) dp[i][j] = 0; }
+          var s = [];
+          s.push({ type: 'init', items: null, W: n, n: m, strA: A, strB: B });
+
+          for (var i = 1; i <= m; i++) {
+            for (var j = 1; j <= n; j++) {
+              var deps;
+              if (A[i - 1] === B[j - 1]) {
+                deps = [{ r: i - 1, c: j - 1 }];
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+              } else {
+                deps = [{ r: i - 1, c: j }, { r: i, c: j - 1 }];
+                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+              }
+              s.push({ type: 'compute', row: i, col: j, deps: deps, value: dp[i][j],
+                match: A[i - 1] === B[j - 1] });
+            }
+          }
+
+          // Trace back
+          var i2 = m, j2 = n;
+          var trace = [];
+          while (i2 > 0 && j2 > 0) {
+            trace.push({ r: i2, c: j2 });
+            if (A[i2 - 1] === B[j2 - 1]) { i2--; j2--; }
+            else if (dp[i2 - 1][j2] >= dp[i2][j2 - 1]) i2--;
+            else j2--;
+          }
+          s.push({ type: 'trace', cells: trace, value: dp[m][n], lcsStr: buildLCS(A, B, dp) });
+          return s;
+        },
+        getHeaderItems: function () { return 'BDCABA'.split(''); },
+        getColLabel: function (j) { return 'BDCABA'[j - 1] || ''; },
+        headerLabel: '字符串 B →',
+        rowLabel: '字符串 A ↓'
+      };
+
+      function buildLCS(A, B, dp) {
+        var i = A.length, j = B.length;
+        var result = [];
+        while (i > 0 && j > 0) {
+          if (A[i - 1] === B[j - 1]) { result.push(A[i - 1]); i--; j--; }
+          else if (dp[i - 1][j] >= dp[i][j - 1]) i--;
+          else j--;
+        }
+        return result.reverse().join('');
+      }
+
+      // LIS
+      problems.lis = {
+        name: '最长递增子序列 LIS',
+        formula: '<span class="hl2">dp[i]</span> = max(<span class="hl2">dp[j]</span> + <span class="hl">1</span>) &nbsp; (j &lt; i 且 <span class="hl">arr[j] &lt; arr[i]</span>)',
+        def: 'dp[i]: 以 arr[i] 结尾的最长递增子序列长度',
+        time: 'O(n²)',
+        space: 'O(n)',
+        getSteps: function () {
+          var arr = [10, 9, 2, 5, 3, 7, 101, 18];
+          var n = arr.length;
+          var dp = [];
+          for (var i = 0; i < n; i++) dp[i] = 1;
+          var prev = [];
+          for (var i = 0; i < n; i++) prev[i] = -1;
+          var s = [];
+          s.push({ type: 'init1d', arr: arr, n: n });
+
+          for (var i = 0; i < n; i++) {
+            var deps = [];
+            for (var j = 0; j < i; j++) {
+              if (arr[j] < arr[i]) deps.push(j);
+            }
+            for (var j = 0; j < i; j++) {
+              if (arr[j] < arr[i] && dp[j] + 1 > dp[i]) {
+                dp[i] = dp[j] + 1;
+                prev[i] = j;
+              }
+            }
+            s.push({ type: 'compute1d', idx: i, deps: deps, value: dp[i], arrVal: arr[i] });
+          }
+
+          // Trace back
+          var maxIdx = 0;
+          for (var k = 1; k < n; k++) { if (dp[k] > dp[maxIdx]) maxIdx = k; }
+          var trace = [];
+          var cur = maxIdx;
+          while (cur >= 0) { trace.push(cur); cur = prev[cur]; }
+          trace.reverse();
+          s.push({ type: 'trace1d', cells: trace, value: dp[maxIdx], seq: trace.map(function (i) { return arr[i]; }) });
+          return s;
+        },
+        getHeaderItems: function () { return ['10', '9', '2', '5', '3', '7', '101', '18']; },
+        getColLabel: function (j) { return ''; },
+        headerLabel: '数组元素',
+        rowLabel: ''
+      };
+
+      // Coin Change
+      problems.coin = {
+        name: '硬币找零',
+        formula: '<span class="hl2">dp[i]</span> = min(<span class="hl2">dp[i-cₖ]</span> + <span class="hl">1</span>) &nbsp; (对所有 coin cₖ ≤ i)',
+        def: 'dp[i]: 凑出金额 i 所需的最少硬币数',
+        time: 'O(n×k)',
+        space: 'O(n)',
+        getSteps: function () {
+          var coins = [1, 2, 5];
+          var amount = 12;
+          var dp = [];
+          for (var i = 0; i <= amount; i++) dp[i] = i === 0 ? 0 : Infinity;
+          var s = [];
+          s.push({ type: 'init1d', arr: null, n: amount + 1, amount: amount, coins: coins });
+
+          for (var i = 1; i <= amount; i++) {
+            var deps = [];
+            for (var k = 0; k < coins.length; k++) {
+              if (i >= coins[k]) deps.push(i - coins[k]);
+            }
+            var bestCoin = -1;
+            for (var k = 0; k < coins.length; k++) {
+              if (i >= coins[k] && dp[i - coins[k]] + 1 < dp[i]) {
+                dp[i] = dp[i - coins[k]] + 1;
+                bestCoin = coins[k];
+              }
+            }
+            if (dp[i] === Infinity) dp[i] = -1;
+            s.push({ type: 'compute1d', idx: i, deps: deps, value: dp[i], bestCoin: bestCoin });
+          }
+          s.push({ type: 'done1d', value: dp[amount], amount: amount, dp: dp, coins: coins });
+          return s;
+        },
+        getHeaderItems: function () { return []; },
+        getColLabel: function (j) { return ''; },
+        headerLabel: '',
+        rowLabel: ''
+      };
+
+      // ── Canvas rendering ──
+      var CELL_W = 52;
+      var CELL_H = 38;
+      var MARGIN_LEFT = 80;
+      var MARGIN_TOP = 50;
+
+      function resizeCanvas(p) {
+        var w, h;
+        if (p === 'lis' || p === 'coin') {
+          var steps = problems[p].getSteps();
+          var init = steps[0];
+          var n = init.n;
+          w = MARGIN_LEFT + n * CELL_W + 40;
+          h = MARGIN_TOP + CELL_H + 120;
+          if (p === 'coin') h = MARGIN_TOP + CELL_H + 80;
+        } else {
+          var steps2 = problems[p].getSteps();
+          var init2 = steps2[0];
+          var rows = init2.n + 1;
+          var cols = init2.W + 1;
+          w = MARGIN_LEFT + cols * CELL_W + 40;
+          h = MARGIN_TOP + rows * CELL_H + 40;
+        }
+        canvas.width = Math.max(w, 600);
+        canvas.height = Math.max(h, 300);
+      }
+
+      function draw(p, highlightRow, highlightCol, highlightDeps, traceCells) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        var prob = problems[p];
+
+        if (p === 'lis' || p === 'coin') {
+          draw1D(p, highlightRow, highlightCol, highlightDeps, traceCells);
+        } else {
+          draw2D(p, highlightRow, highlightCol, highlightDeps, traceCells);
+        }
+      }
+
+      function draw2D(p, hRow, hCol, hDeps, traceCells) {
+        var cols = dpState.W + 1;
+        var rows = dpState.n + 1;
+        CELL_W = Math.max(42, Math.min(56, Math.floor((canvas.width - MARGIN_LEFT - 40) / cols)));
+        CELL_H = Math.max(30, Math.min(44, Math.floor((canvas.height - MARGIN_TOP - 40) / rows)));
+
+        ctx.font = '11px ' + getComputedStyle(document.body).fontFamily;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Column headers
+        var prob = problems[p];
+        if (prob.headerLabel) {
+          ctx.fillStyle = '#7d8da0';
+          ctx.font = '10px Inter, system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(prob.headerLabel, MARGIN_LEFT + (cols * CELL_W) / 2, 16);
+        }
+
+        for (var j = 0; j < cols; j++) {
+          var cx = MARGIN_LEFT + j * CELL_W;
+          var label = prob.getColLabel(j);
+          if (label !== '') {
+            ctx.fillStyle = '#e8edf5';
+            ctx.font = 'bold 12px ' + getComputedStyle(document.body).fontFamily;
+            ctx.fillText(label, cx + CELL_W / 2, MARGIN_TOP - 18);
+          }
+        }
+
+        // Row headers
+        if (prob.rowLabel) {
+          ctx.fillStyle = '#7d8da0';
+          ctx.font = '10px Inter, system-ui, sans-serif';
+          ctx.save();
+          ctx.translate(16, MARGIN_TOP + (rows * CELL_H) / 2);
+          ctx.rotate(-Math.PI / 2);
+          ctx.textAlign = 'center';
+          ctx.fillText(prob.rowLabel, 0, 0);
+          ctx.restore();
+        }
+
+        var rowLabels = prob.getHeaderItems ? prob.getHeaderItems() : [];
+        for (var i = 0; i < rows; i++) {
+          var ry = MARGIN_TOP + i * CELL_H;
+          if (i > 0 && rowLabels[i - 1]) {
+            ctx.fillStyle = '#e8edf5';
+            ctx.font = 'bold 11px ' + getComputedStyle(document.body).fontFamily;
+            ctx.textAlign = 'right';
+            ctx.fillText(rowLabels[i - 1], MARGIN_LEFT - 8, ry + CELL_H / 2);
+          }
+        }
+
+        // Trace set for quick lookup
+        var traceSet = {};
+        if (traceCells) {
+          traceCells.forEach(function (t) { traceSet[t.r + ',' + t.c] = true; });
+        }
+
+        // Deps set
+        var depSet = {};
+        if (hDeps) {
+          hDeps.forEach(function (d) { depSet[d.r + ',' + d.c] = true; });
+        }
+
+        // Draw cells
+        for (var i = 0; i < rows; i++) {
+          for (var j = 0; j < cols; j++) {
+            var cx = MARGIN_LEFT + j * CELL_W;
+            var ry = MARGIN_TOP + i * CELL_H;
+            var key = i + ',' + j;
+
+            // Determine fill
+            if (i === hRow && j === hCol) {
+              ctx.fillStyle = '#ff9f43'; // computing
+            } else if (traceSet[key]) {
+              ctx.fillStyle = '#1a4a2a'; // trace path
+            } else if (depSet[key]) {
+              ctx.fillStyle = '#1a3050'; // dependency
+            } else if (dpState.dp[i] && dpState.dp[i][j] !== undefined && (i > 0 || j > 0)) {
+              ctx.fillStyle = '#0d1820'; // computed
+            } else {
+              ctx.fillStyle = '#080b12'; // empty
+            }
+            ctx.fillRect(cx + 1, ry + 1, CELL_W - 2, CELL_H - 2);
+
+            // Border
+            if (traceSet[key]) {
+              ctx.strokeStyle = '#36d986';
+              ctx.lineWidth = 2;
+            } else if (i === hRow && j === hCol) {
+              ctx.strokeStyle = '#ff9f43';
+              ctx.lineWidth = 2;
+            } else {
+              ctx.strokeStyle = '#1e2a3a';
+              ctx.lineWidth = 1;
+            }
+            ctx.strokeRect(cx + 1, ry + 1, CELL_W - 2, CELL_H - 2);
+
+            // Value
+            var val = dpState.dp[i] && dpState.dp[i][j] !== undefined ? dpState.dp[i][j] : (i === 0 && j === 0 ? 0 : '');
+            if (val !== '') {
+              ctx.fillStyle = (traceSet[key] || (i === hRow && j === hCol)) ? '#fff' : '#7d8da0';
+              ctx.font = (i === hRow && j === hCol) ? 'bold 13px ' + getComputedStyle(document.body).fontFamily :
+                '12px ' + getComputedStyle(document.body).fontFamily;
+              ctx.fillText(val, cx + CELL_W / 2, ry + CELL_H / 2);
+            }
+          }
+        }
+
+        // Match arrow indicators for LCS
+        if (p === 'lcs' && hRow > 0 && hCol > 0 && dpState._lastMatch !== undefined) {
+          // Small indicator in the upper-left corner
+        }
+      }
+
+      function draw1D(p, hIdx, highlightDeps, traceCells) {
+        var n = dpState.n;
+        CELL_W = Math.max(42, Math.min(60, Math.floor((canvas.width - MARGIN_LEFT - 40) / n)));
+        CELL_H = 48;
+        var topY = MARGIN_TOP;
+
+        // Draw array values on top
+        if (p === 'lis' && dpState.arr) {
+          ctx.fillStyle = '#7d8da0';
+          ctx.font = '10px Inter, system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('原数组', MARGIN_LEFT + (n * CELL_W) / 2, 16);
+
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          for (var i = 0; i < n; i++) {
+            var cx = MARGIN_LEFT + i * CELL_W;
+            ctx.fillStyle = '#4da3ff';
+            ctx.font = 'bold 12px ' + getComputedStyle(document.body).fontFamily;
+            ctx.fillText(dpState.arr[i], cx + CELL_W / 2, topY - 16);
+          }
+        }
+        if (p === 'coin') {
+          var coins = dpState.coins;
+          ctx.fillStyle = '#7d8da0';
+          ctx.font = '10px Inter, system-ui, sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText('硬币面额: [' + coins.join(', ') + ']  目标金额: ' + dpState.amount, MARGIN_LEFT, 16);
+        }
+
+        // Deps/trace sets
+        var depSet = {};
+        if (highlightDeps && highlightDeps.forEach) { highlightDeps.forEach(function (d) { depSet[d] = true; }); }
+        var traceSet = {};
+        if (traceCells) { traceCells.forEach(function (t) { traceSet[t] = true; }); }
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (var i = 0; i < n; i++) {
+          var cx = MARGIN_LEFT + i * CELL_W;
+          var key = i;
+
+          if (i === hIdx) {
+            ctx.fillStyle = '#ff9f43';
+          } else if (traceSet[key]) {
+            ctx.fillStyle = '#1a4a2a';
+          } else if (depSet[key]) {
+            ctx.fillStyle = '#1a3050';
+          } else if (dpState.dp[i] !== undefined && dpState.dp[i] !== 0) {
+            ctx.fillStyle = '#0d1820';
+          } else {
+            ctx.fillStyle = '#080b12';
+          }
+          ctx.fillRect(cx + 1, topY + 1, CELL_W - 2, CELL_H - 2);
+
+          if (traceSet[key]) {
+            ctx.strokeStyle = '#36d986';
+            ctx.lineWidth = 2;
+          } else if (i === hIdx) {
+            ctx.strokeStyle = '#ff9f43';
+            ctx.lineWidth = 2;
+          } else {
+            ctx.strokeStyle = '#1e2a3a';
+            ctx.lineWidth = 1;
+          }
+          ctx.strokeRect(cx + 1, topY + 1, CELL_W - 2, CELL_H - 2);
+
+          var val = dpState.dp[i];
+          if (val === -1) val = '×';
+          if (val === Infinity) val = '∞';
+          ctx.fillStyle = (traceSet[key] || i === hIdx) ? '#fff' : '#7d8da0';
+          ctx.font = (i === hIdx) ? 'bold 13px ' + getComputedStyle(document.body).fontFamily :
+            '12px ' + getComputedStyle(document.body).fontFamily;
+          ctx.fillText(val, cx + CELL_W / 2, topY + CELL_H / 2);
+        }
+
+        // Labels
+        if (p === 'coin') {
+          ctx.fillStyle = '#7d8da0';
+          ctx.font = '10px Inter, system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('金额 →', MARGIN_LEFT + (n * CELL_W) / 2, topY + CELL_H + 18);
+        }
+        ctx.fillStyle = '#7d8da0';
+        ctx.font = 'bold 10px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(p === 'lis' ? 'dp[i]' : '最小硬币数', MARGIN_LEFT - 8, topY + CELL_H / 2);
+      }
+
+      // ── State management ──
+      function initProblem(p) {
+        currentProb = p;
+        var s = problems[p].getSteps();
+        steps = s;
+        var init = s[0];
+        dpState = {
+          dp: [],
+          n: init.n || 0,
+          W: init.W || 0,
+          arr: init.arr || null,
+          coins: init.coins || null,
+          amount: init.amount || 0,
+          _lastMatch: undefined
+        };
+        if (p === 'lis' || p === 'coin') {
+          for (var i = 0; i < init.n; i++) dpState.dp[i] = p === 'coin' ? (i === 0 ? 0 : Infinity) : 1;
+        } else {
+          for (var i = 0; i <= init.n; i++) {
+            dpState.dp[i] = [];
+            for (var j = 0; j <= init.W; j++) dpState.dp[i][j] = 0;
+          }
+        }
+        stepIdx = 0;
+        resizeCanvas(p);
+        draw(p, -1, -1, null, null);
+        stepCounter.textContent = '0 / ' + (steps.length - 1);
+        cellCounter.textContent = '0';
+        resultText.textContent = '-';
+
+        var prob = problems[p];
+        formulaBox.innerHTML = prob.formula;
+        infoDef.textContent = prob.def;
+        infoTime.textContent = prob.time;
+        infoSpace.textContent = prob.space;
+      }
+
+      function applyStep(step) {
+        if (!step) return;
+        if (step.type === 'init' || step.type === 'init1d') {
+          draw(currentProb, -1, -1, null, null);
+          stepIdx++;
+          stepCounter.textContent = stepIdx + ' / ' + (steps.length - 1);
+          return;
+        }
+        if (step.type === 'compute') {
+          dpState.dp[step.row][step.col] = step.value;
+          dpState._lastMatch = step.match;
+          draw(currentProb, step.row, step.col, step.deps, null);
+          cellCounter.textContent = parseInt(cellCounter.textContent) + 1;
+        } else if (step.type === 'compute1d') {
+          dpState.dp[step.idx] = step.value;
+          draw(currentProb, step.idx, step.deps, null);
+          cellCounter.textContent = parseInt(cellCounter.textContent) + 1;
+        } else if (step.type === 'trace') {
+          draw(currentProb, -1, -1, null, step.cells);
+          resultText.textContent = step.value + (step.lcsStr ? ' "' + step.lcsStr + '"' : '');
+        } else if (step.type === 'trace1d') {
+          draw(currentProb, -1, null, step.cells);
+          resultText.textContent = step.value + ' [' + step.seq.join(',') + ']';
+        } else if (step.type === 'done1d') {
+          draw(currentProb, -1, null, null);
+          resultText.textContent = step.value;
+        }
+        stepIdx++;
+        stepCounter.textContent = stepIdx + ' / ' + (steps.length - 1);
+      }
+
+      // ── Playback ──
+      function pause() {
+        playing = false;
+        if (timer) { clearTimeout(timer); timer = null; }
+        btnPlay.textContent = '▶ 继续';
+      }
+
+      function play() {
+        if (playing) return;
+        if (stepIdx >= steps.length) return;
+        playing = true;
+        btnPlay.textContent = '▶ 运行中';
+        scheduleNext();
+      }
+
+      function scheduleNext() {
+        if (!playing || stepIdx >= steps.length) {
+          playing = false;
+          btnPlay.textContent = '✓ 完成';
+          return;
+        }
+        applyStep(steps[stepIdx]);
+        if (stepIdx >= steps.length) {
+          playing = false;
+          btnPlay.textContent = '✓ 完成';
+          return;
+        }
+        var v = parseInt(speedSlider.value);
+        var delays = [500, 250, 120, 40];
+        timer = setTimeout(scheduleNext, delays[v - 1]);
+      }
+
+      function doStep() {
+        if (playing) { pause(); return; }
+        if (stepIdx < steps.length) {
+          applyStep(steps[stepIdx]);
+        }
+        if (stepIdx >= steps.length) {
+          btnPlay.textContent = '✓ 完成';
+        }
+      }
+
+      function resetAll() {
+        pause();
+        btnPlay.textContent = '▶ 开始';
+        initProblem(currentProb);
+      }
+
+      // ── Events ──
+      presetList.addEventListener('click', function (e) {
+        var btn = e.target.closest('.pbtn');
+        if (!btn) return;
+        var id = btn.getAttribute('data-id');
+        if (id === currentProb) return;
+        presetList.querySelectorAll('.pbtn').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        pause();
+        btnPlay.textContent = '▶ 开始';
+        initProblem(id);
+      });
+
+      btnPlay.addEventListener('click', function () {
+        if (stepIdx >= steps.length) { resetAll(); }
+        play();
+      });
+
+      btnPause.addEventListener('click', function () { pause(); });
+
+      btnStep.addEventListener('click', function () { doStep(); });
+
+      btnReset.addEventListener('click', function () { resetAll(); });
+
+      speedSlider.addEventListener('input', function () {
+        var labels = ['慢速', '中速', '快速', '极快'];
+        speedVal.textContent = labels[parseInt(speedSlider.value) - 1];
+      });
+
+      speedVal.textContent = '快速';
+      initProblem('knapsack');
+    })();
+  </script>
+</body>
+
+</html>

@@ -26,7 +26,9 @@
     { file: 'rate-limiter.html', title: '限流算法' },
     { file: 'es-inverted-index.html', title: 'ES 倒排索引' },
     { file: 'distributed-tx.html', title: '分布式事务方案' },
-    { file: 'xss-csrf.html', title: 'XSS & CSRF' }
+    { file: 'xss-csrf.html', title: 'XSS & CSRF' },
+    { file: 'sorting.html', title: '排序算法' },
+    { file: 'dp.html', title: '动态规划' }
   ];
 
   var SIDEBAR_PAGES = [
