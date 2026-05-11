@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ribbon 客户端负载均衡</title>
+  <meta name="description" content="交互式可视化 Ribbon 客户端负载均衡原理，演示 RoundRobin、WeightedResponseTime、ZoneAvoidance、Retry 等 IRule 策略">
+  <meta name="keywords" content="Ribbon, 客户端负载均衡, IRule, Spring Cloud, RoundRobin, 服务发现, Java">
+  <meta property="og:title" content="Ribbon 客户端负载均衡">
+  <meta property="og:description" content="交互式可视化 Ribbon 客户端负载均衡原理，演示 RoundRobin、WeightedResponseTime、ZoneAvoidance、Retry 等 IRule 策略">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    :root {
+      --bg-primary: #080b12;
+      --bg-card: #0f1319;
+      --bg-elevated: #161c26;
+      --bg-input: #0c1018;
+      --border: #1e2a3a;
+      --border-hover: #2d4a6f;
+      --text-primary: #e8edf5;
+      --text-secondary: #7d8da0;
+      --text-muted: #4a5568;
+      --accent-blue: #4da3ff;
+      --accent-green: #36d986;
+      --accent-purple: #b07aff;
+      --accent-orange: #ff9f43;
+      --accent-red: #ff5c6c;
+      --accent-cyan: #22d3ee;
+      --accent-pink: #f472b6;
+      --glow-blue: rgba(77, 163, 255, 0.15);
+      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-purple: rgba(176, 122, 255, 0.12);
+      --glow-orange: rgba(255, 159, 67, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+      --mono: 'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-size: 13px;
+      position: relative
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(77, 163, 255, 0.06), transparent 70%);
+      pointer-events: none;
+      z-index: 0
+    }
+
+    header {
+      padding: 12px 20px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1
+    }
+
+    header h1 {
+      font-size: 17px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text
+    }
+
+    .tag {
+      font-size: 0.68rem;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      padding: 3px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      letter-spacing: 0.3px
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      z-index: 1
+    }
+
+    .left {
+      width: 300px;
+      min-width: 300px;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px
+    }
+
+    .sec {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      backdrop-filter: blur(8px);
+      transition: border-color .2s
+    }
+
+    .sec:hover {
+      border-color: var(--border-hover)
+    }
+
+    .sec-t {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .sec-t::before {
+      content: '';
+      width: 3px;
+      height: 12px;
+      border-radius: 2px;
+      background: var(--accent-cyan)
+    }
+
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px
+    }
+
+    .pbtn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 9px 11px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      text-align: left;
+      transition: all .15s;
+      display: flex;
+      gap: 8px;
+      align-items: center
+    }
+
+    .pbtn:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-elevated)
+    }
+
+    .pbtn.active {
+      border-color: var(--accent-cyan);
+      background: rgba(34, 211, 238, 0.06);
+      box-shadow: inset 3px 0 0 var(--accent-cyan), 0 0 12px rgba(34, 211, 238, 0.1)
+    }
+
+    .pbtn .pi {
+      font-size: 16px;
+      width: 22px;
+      text-align: center;
+      flex-shrink: 0
+    }
+
+    .pbtn .pn {
+      font-weight: 600;
+      display: block;
+      font-size: 12px
+    }
+
+    .pbtn .pd {
+      color: var(--text-muted);
+      font-size: 10px;
+      line-height: 1.3;
+      margin-top: 2px
+    }
+
+    .btns {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px
+    }
+
+    .btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 7px 0;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 11px;
+      transition: all .15s;
+      flex: 1;
+      text-align: center
+    }
+
+    .btn:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3)
+    }
+
+    .btn.pri {
+      background: linear-gradient(135deg, var(--accent-cyan), #1a9bb8);
+      color: #000;
+      font-weight: 600;
+      border-color: var(--accent-cyan);
+      box-shadow: 0 2px 10px rgba(34, 211, 238, 0.2)
+    }
+
+    .btn.pri:hover {
+      box-shadow: 0 4px 16px rgba(34, 211, 238, 0.35);
+      transform: translateY(-1px)
+    }
+
+    .right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 16px;
+      gap: 16px
+    }
+
+    .canvas-area {
+      flex: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      overflow-y: auto;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 20px
+    }
+
+    .server-pool {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+      flex-shrink: 0
+    }
+
+    .srv {
+      width: 130px;
+      padding: 14px 10px;
+      background: var(--bg-elevated);
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      text-align: center;
+      transition: all .3s;
+      position: relative
+    }
+
+    .srv .sname {
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 4px
+    }
+
+    .srv .sip {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      display: block
+    }
+
+    .srv .szone {
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-top: 3px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: var(--bg-card);
+      display: inline-block
+    }
+
+    .srv .sstat {
+      font-size: 10px;
+      margin-top: 4px;
+      font-family: var(--mono)
+    }
+
+    .srv .sstat.ok {
+      color: var(--accent-green)
+    }
+
+    .srv .sstat.down {
+      color: var(--accent-red)
+    }
+
+    .srv .sstat.slow {
+      color: var(--accent-orange)
+    }
+
+    .srv.selected {
+      border-color: var(--accent-cyan);
+      background: rgba(34, 211, 238, 0.08);
+      box-shadow: 0 0 24px rgba(34, 211, 238, 0.2);
+      transform: translateY(-4px)
+    }
+
+    .srv.filtered {
+      opacity: 0.35;
+      border-color: var(--text-muted)
+    }
+
+    .srv.failed {
+      border-color: var(--accent-red);
+      background: rgba(255, 92, 108, 0.06)
+    }
+
+    .srv .sw {
+      display: inline-block;
+      margin-top: 2px;
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--accent-cyan);
+      font-weight: 600
+    }
+
+    .pipeline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 0;
+      flex-shrink: 0
+    }
+
+    .pnode {
+      padding: 10px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: all .3s;
+      text-align: center;
+      min-width: 80px;
+      position: relative
+    }
+
+    .pnode .pn-label {
+      display: block;
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 400;
+      margin-top: 2px
+    }
+
+    .pnode.active {
+      border-color: var(--accent-cyan);
+      background: rgba(34, 211, 238, 0.12);
+      box-shadow: 0 0 20px rgba(34, 211, 238, 0.15);
+      transform: translateY(-2px);
+      color: var(--accent-cyan)
+    }
+
+    .pnode.done {
+      border-color: var(--accent-blue);
+      background: rgba(77, 163, 255, 0.08);
+      color: var(--accent-blue)
+    }
+
+    .pnode.done .pn-label {
+      color: rgba(77, 163, 255, 0.6)
+    }
+
+    .pnode.err {
+      border-color: var(--accent-red);
+      background: rgba(255, 92, 108, 0.1);
+      box-shadow: 0 0 20px rgba(255, 92, 108, 0.15);
+      color: var(--accent-red)
+    }
+
+    .pnode.warn {
+      border-color: var(--accent-orange);
+      background: rgba(255, 159, 67, 0.08);
+      color: var(--accent-orange)
+    }
+
+    .parrow {
+      color: var(--text-muted);
+      font-size: 14px;
+      flex-shrink: 0
+    }
+
+    .parrow.flow {
+      color: var(--accent-cyan);
+      animation: pulse 0.6s ease-in-out infinite
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 0.4
+      }
+
+      50% {
+        opacity: 1
+      }
+    }
+
+    .counter-display {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      flex-shrink: 0
+    }
+
+    .counter-item {
+      padding: 6px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: var(--mono);
+      font-size: 11px;
+      min-width: 60px;
+      text-align: center
+    }
+
+    .counter-item .cv {
+      color: var(--accent-cyan);
+      font-weight: 700
+    }
+
+    .counter-item .cl {
+      color: var(--text-muted);
+      font-size: 10px;
+      display: block
+    }
+
+    .log-panel {
+      height: 150px;
+      min-height: 150px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow-y: auto;
+      padding: 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.6
+    }
+
+    .log-entry {
+      padding: 4px 8px;
+      border-radius: 4px;
+      margin-bottom: 2px;
+      display: flex;
+      gap: 8px;
+      animation: fadeIn 0.3s ease
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateX(-8px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0)
+      }
+    }
+
+    .log-entry .time {
+      color: var(--text-muted);
+      flex-shrink: 0;
+      min-width: 70px
+    }
+
+    .log-entry .stage {
+      font-weight: 600;
+      flex-shrink: 0;
+      min-width: 100px
+    }
+
+    .log-entry.info .stage {
+      color: var(--accent-blue)
+    }
+
+    .log-entry.success .stage {
+      color: var(--accent-green)
+    }
+
+    .log-entry.warn .stage {
+      color: var(--accent-orange)
+    }
+
+    .log-entry.error .stage {
+      color: var(--accent-red)
+    }
+
+    .log-entry .msg {
+      color: var(--text-secondary)
+    }
+
+    .info-row {
+      display: flex;
+      gap: 16px;
+      flex-shrink: 0
+    }
+
+    .info-card {
+      flex: 1;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      min-width: 0
+    }
+
+    .info-card .ic-t {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 6px
+    }
+
+    .info-card .ic-v {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--accent-cyan)
+    }
+
+    .info-card .ic-v.ok {
+      color: var(--accent-green)
+    }
+
+    .info-card .ic-v.err {
+      color: var(--accent-red)
+    }
+
+    .speed-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 4px
+    }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border);
+      outline: none;
+      margin: 6px 0
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      cursor: pointer;
+      border: 2px solid var(--bg-card)
+    }
+
+    .call-count {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: var(--text-secondary)
+    }
+
+    .call-count span {
+      font-family: var(--mono);
+      color: var(--accent-cyan);
+      font-weight: 700
+    }
+
+    @media (max-width: 900px) {
+      .main {
+        flex-direction: column
+      }
+
+      .left {
+        width: 100%;
+        min-width: 0;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px;
+        max-height: 180px
+      }
+
+      .left .sec {
+        flex: 1;
+        min-width: 140px
+      }
+
+      .right {
+        padding: 10px;
+        gap: 10px
+      }
+
+      .pipeline {
+        gap: 4px
+      }
+
+      .pnode {
+        padding: 6px 8px;
+        font-size: 10px;
+        min-width: 60px
+      }
+
+      .srv {
+        width: 100px;
+        padding: 8px 6px
+      }
+
+      .log-panel {
+        height: 120px;
+        min-height: 120px
+      }
+    }
+
+    .tip-box {
+      background: rgba(77, 163, 255, 0.06);
+      border: 1px solid rgba(77, 163, 255, 0.2);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.5
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.14)
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Ribbon 客户端负载均衡</h1>
+    <span class="tag">Spring Cloud</span>
+  </header>
+  <div class="main">
+    <div class="left">
+      <div class="sec">
+        <div class="sec-t">负载均衡策略</div>
+        <div class="preset-list" id="presetList">
+          <button class="pbtn active" data-id="roundrobin">
+            <span class="pi">&#128259;</span>
+            <span><span class="pn">RoundRobinRule</span><span class="pd">轮询 — 依次分配，简单公平</span></span>
+          </button>
+          <button class="pbtn" data-id="weighted">
+            <span class="pi">&#9879;&#65039;</span>
+            <span><span class="pn">WeightedResponseTimeRule</span><span class="pd">加权 — 响应越快权重越高</span></span>
+          </button>
+          <button class="pbtn" data-id="zone">
+            <span class="pi">&#127758;</span>
+            <span><span class="pn">ZoneAvoidanceRule</span><span class="pd">区域感知 — 优先同区域实例</span></span>
+          </button>
+          <button class="pbtn" data-id="retry">
+            <span class="pi">&#8630;</span>
+            <span><span class="pn">RetryRule</span><span class="pd">重试 — 失败后重新选择实例</span></span>
+          </button>
+          <button class="pbtn" data-id="availability">
+            <span class="pi">&#128308;</span>
+            <span><span class="pn">AvailabilityFilteringRule</span><span class="pd">可用过滤 — 跳过熔断/超限实例</span></span>
+          </button>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-t">控制</div>
+        <div class="btns">
+          <button class="btn pri" id="btnRun">&#9654; 发起调用</button>
+          <button class="btn" id="btnBatch">&#128260; 连续 10 次</button>
+        </div>
+        <div class="btns" style="margin-top:6px">
+          <button class="btn" id="btnStep">&#9194; 单步</button>
+          <button class="btn" id="btnReset">&#8634; 重置</button>
+        </div>
+        <div class="speed-label">
+          <span>动画速度</span>
+          <span id="speedVal">中速</span>
+        </div>
+        <input type="range" id="speedSlider" min="1" max="3" value="2">
+      </div>
+      <div class="info-card">
+        <div class="ic-t">当前状态</div>
+        <div class="ic-v" id="statusText">就绪，等待调用...</div>
+      </div>
+      <div class="info-card">
+        <div class="ic-t">请求计数</div>
+        <div class="call-count">总请求: <span id="totalCount">0</span> 次 | 失败: <span id="failCount">0</span> 次</div>
+      </div>
+      <div class="tip-box" id="tipBox">
+        Ribbon 是 Netflix 开源的客户端负载均衡器，核心组件：ServerList（服务列表）、IRule（负载均衡规则）、ServerListFilter（实例过滤）、IPing（健康检查）。Spring Cloud 将其集成到 RestTemplate / Feign 中，实现透明的客户端负载均衡。
+      </div>
+    </div>
+    <div class="right">
+      <div class="canvas-area" id="canvasArea">
+        <div class="pipeline" id="pipeline">
+          <div class="pnode" data-node="cmd"><span>LoadBalancerCommand</span><span class="pn-label">封装 HTTP 调用</span></div>
+          <span class="parrow">→</span>
+          <div class="pnode" data-node="list"><span>ServerList</span><span class="pn-label">从注册中心获取</span></div>
+          <span class="parrow">→</span>
+          <div class="pnode" data-node="filter"><span>ServerListFilter</span><span class="pn-label">过滤可用实例</span></div>
+          <span class="parrow">→</span>
+          <div class="pnode" data-node="rule"><span>IRule</span><span class="pn-label">选择目标实例</span></div>
+          <span class="parrow">→</span>
+          <div class="pnode" data-node="ping"><span>IPing</span><span class="pn-label">存活检查</span></div>
+          <span class="parrow">→</span>
+          <div class="pnode" data-node="result"><span>执行请求</span><span class="pn-label">HTTP → 目标实例</span></div>
+        </div>
+        <div class="server-pool" id="serverPool">
+          <div class="srv" data-srv="0">
+            <div class="sname">user-service-01</div>
+            <span class="sip">192.168.1.10:8080</span>
+            <span class="szone">zone-a</span>
+            <div class="sstat ok">&#9679; 健康</div>
+            <span class="sw"></span>
+          </div>
+          <div class="srv" data-srv="1">
+            <div class="sname">user-service-02</div>
+            <span class="sip">192.168.1.11:8080</span>
+            <span class="szone">zone-a</span>
+            <div class="sstat ok">&#9679; 健康</div>
+            <span class="sw"></span>
+          </div>
+          <div class="srv" data-srv="2">
+            <div class="sname">user-service-03</div>
+            <span class="sip">192.168.1.12:8080</span>
+            <span class="szone">zone-b</span>
+            <div class="sstat ok">&#9679; 健康</div>
+            <span class="sw"></span>
+          </div>
+          <div class="srv" data-srv="3">
+            <div class="sname">user-service-04</div>
+            <span class="sip">192.168.1.13:8080</span>
+            <span class="szone">zone-b</span>
+            <div class="sstat ok">&#9679; 健康</div>
+            <span class="sw"></span>
+          </div>
+          <div class="srv" data-srv="4">
+            <div class="sname">user-service-05</div>
+            <span class="sip">192.168.1.14:8080</span>
+            <span class="szone">zone-c</span>
+            <div class="sstat ok">&#9679; 健康</div>
+            <span class="sw"></span>
+          </div>
+        </div>
+        <div class="counter-display" id="counterDisplay">
+          <div class="counter-item"><span class="cv">0</span><span class="cl">user-service-01</span></div>
+          <div class="counter-item"><span class="cv">0</span><span class="cl">user-service-02</span></div>
+          <div class="counter-item"><span class="cv">0</span><span class="cl">user-service-03</span></div>
+          <div class="counter-item"><span class="cv">0</span><span class="cl">user-service-04</span></div>
+          <div class="counter-item"><span class="cv">0</span><span class="cl">user-service-05</span></div>
+        </div>
+        <div class="info-row">
+          <div class="info-card">
+            <div class="ic-t">请求 URL</div>
+            <div class="ic-v" id="infoUrl">GET /users/1</div>
+          </div>
+          <div class="info-card">
+            <div class="ic-t">命中实例</div>
+            <div class="ic-v" id="infoTarget">-</div>
+          </div>
+          <div class="info-card">
+            <div class="ic-t">当前游标</div>
+            <div class="ic-v" id="infoCursor">0</div>
+          </div>
+          <div class="info-card">
+            <div class="ic-t">响应状态</div>
+            <div class="ic-v ok" id="infoStatus">-</div>
+          </div>
+        </div>
+      </div>
+      <div class="log-panel" id="logPanel">
+        <div class="log-entry info"><span class="time">00:00.000</span><span class="stage">系统</span><span class="msg">Ribbon Playground 就绪，共有 5 个服务实例，选择一个策略后点击「发起调用」</span></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="shared/theme.js"></script>
+  <script src="shared/nav.js"></script>
+  <script src="shared/analytics.js"></script>
+  <script>
+    (function () {
+      var presetList = document.getElementById('presetList');
+      var btnRun = document.getElementById('btnRun');
+      var btnBatch = document.getElementById('btnBatch');
+      var btnStep = document.getElementById('btnStep');
+      var btnReset = document.getElementById('btnReset');
+      var speedSlider = document.getElementById('speedSlider');
+      var speedVal = document.getElementById('speedVal');
+      var statusText = document.getElementById('statusText');
+      var logPanel = document.getElementById('logPanel');
+      var pipeline = document.getElementById('pipeline');
+      var serverPool = document.getElementById('serverPool');
+      var counterDisplay = document.getElementById('counterDisplay');
+      var infoUrl = document.getElementById('infoUrl');
+      var infoTarget = document.getElementById('infoTarget');
+      var infoCursor = document.getElementById('infoCursor');
+      var infoStatus = document.getElementById('infoStatus');
+      var tipBox = document.getElementById('tipBox');
+      var totalCount = document.getElementById('totalCount');
+      var failCount = document.getElementById('failCount');
+
+      var currentPreset = 'roundrobin';
+      var running = false;
+      var batchRunning = false;
+      var batchCount = 0;
+      var batchTotal = 0;
+      var currentStep = -1;
+      var timer = null;
+      var cursor = 0;
+      var serverHits = [0, 0, 0, 0, 0];
+      var total = 0;
+      var fails = 0;
+      var servers = [
+        { name: 'user-service-01', ip: '192.168.1.10:8080', zone: 'zone-a', healthy: true, status: 'ok', rt: 30 },
+        { name: 'user-service-02', ip: '192.168.1.11:8080', zone: 'zone-a', healthy: true, status: 'ok', rt: 15 },
+        { name: 'user-service-03', ip: '192.168.1.12:8080', zone: 'zone-b', healthy: true, status: 'ok', rt: 80 },
+        { name: 'user-service-04', ip: '192.168.1.13:8080', zone: 'zone-b', healthy: true, status: 'ok', rt: 45 },
+        { name: 'user-service-05', ip: '192.168.1.14:8080', zone: 'zone-c', healthy: true, status: 'ok', rt: 60 }
+      ];
+
+      // ── Preset configs ──
+      var rules = {
+        roundrobin: {
+          name: 'RoundRobinRule (轮询)',
+          select: function () {
+            var tries = 0;
+            while (tries < servers.length) {
+              var idx = cursor % servers.length;
+              cursor++;
+              if (servers[idx].healthy) return { idx: idx, reason: '轮询到第 ' + (idx + 1) + ' 个实例 (游标=' + (cursor - 1) + ')' };
+              tries++;
+            }
+            return { idx: -1, reason: '无可用实例' };
+          },
+          filter: function (list) { return list; },
+          tip: 'RoundRobinRule 是 Ribbon 的默认策略，维护一个递增计数器，依次将请求分配给每个实例，实现简单公平的负载分布。'
+        },
+        weighted: {
+          name: 'WeightedResponseTimeRule (加权)',
+          select: function () {
+            var healthy = [];
+            servers.forEach(function (s, i) { if (s.healthy) healthy.push(i); });
+            if (!healthy.length) return { idx: -1, reason: '无可用实例' };
+            var totalRt = 0;
+            healthy.forEach(function (i) { totalRt += servers[i].rt; });
+            var totalWeight = 0;
+            healthy.forEach(function (i) {
+              servers[i]._weight = totalRt - servers[i].rt + 1;
+              totalWeight += servers[i]._weight;
+            });
+            var r = Math.random() * totalWeight;
+            var acc = 0;
+            for (var h = 0; h < healthy.length; h++) {
+              acc += servers[healthy[h]]._weight;
+              if (r <= acc) {
+                var w = servers[healthy[h]]._weight;
+                return { idx: healthy[h], reason: '加权随机选中 (RT=' + servers[healthy[h]].rt + 'ms, 权重=' + w + '/' + totalWeight + ')' };
+              }
+            }
+            return { idx: healthy[healthy.length - 1], reason: '加权选中 (兜底)' };
+          },
+          filter: function (list) { return list; },
+          tip: 'WeightedResponseTimeRule 根据每个实例的平均响应时间计算权重，响应越快权重越高。每 30 秒重新计算一次权重，适合实例性能不均的场景。'
+        },
+        zone: {
+          name: 'ZoneAvoidanceRule (区域感知)',
+          select: function () {
+            var myZone = 'zone-a';
+            var sameZone = [];
+            var otherZone = [];
+            servers.forEach(function (s, i) {
+              if (!s.healthy) return;
+              if (s.zone === myZone) sameZone.push(i);
+              else otherZone.push(i);
+            });
+            if (sameZone.length) {
+              var idx = sameZone[cursor % sameZone.length];
+              cursor++;
+              return { idx: idx, reason: '优先同区域 zone-a，从 ' + sameZone.length + ' 个实例中轮询选择 #' + ((cursor - 1) % sameZone.length + 1) };
+            }
+            if (otherZone.length) {
+              var idx2 = otherZone[cursor % otherZone.length];
+              cursor++;
+              return { idx: idx2, reason: '同区域无实例，降级到跨区域选择' };
+            }
+            return { idx: -1, reason: '无可用实例' };
+          },
+          filter: function (list) {
+            return list.filter(function (s) { return s.zone === 'zone-a'; }).length ? list.filter(function (s) { return s.zone === 'zone-a'; }) : list;
+          },
+          tip: 'ZoneAvoidanceRule 是 Ribbon 的默认规则（注意不是 RoundRobin），会优先选择与调用方在同一可用区的实例，避免跨区域网络延迟。'
+        },
+        retry: {
+          name: 'RetryRule (重试)',
+          select: function () {
+            var healthy = [];
+            servers.forEach(function (s, i) { if (s.healthy) healthy.push(i); });
+            if (!healthy.length) return { idx: -1, reason: '无可用实例' };
+            var sel = healthy[Math.floor(Math.random() * healthy.length)];
+            servers[sel]._failChance = 0.35;
+            if (Math.random() < servers[sel]._failChance) {
+              var remaining = healthy.filter(function (i) { return i !== sel; });
+              if (remaining.length) {
+                var retry = remaining[Math.floor(Math.random() * remaining.length)];
+                return { idx: retry, reason: '实例 #' + (sel + 1) + ' 失败 → 重试选中 #' + (retry + 1), failedFirst: sel };
+              }
+              return { idx: -1, reason: '所有实例均失败' };
+            }
+            return { idx: sel, reason: '首次选中 #' + (sel + 1) + ' 调用成功' };
+          },
+          filter: function (list) { return list; },
+          tip: 'RetryRule 内部包装了一个 subRule（默认 RoundRobin），当选择失败时会在配置的时间窗口内重试其他实例，最多重试 maxRetryMillis 毫秒。'
+        },
+        availability: {
+          name: 'AvailabilityFilteringRule (可用过滤)',
+          select: function () {
+            var available = [];
+            servers.forEach(function (s, i) {
+              if (!s.healthy) return;
+              if (s._circuitOpen) return;
+              if (s._connLimit >= 3) return;
+              available.push(i);
+            });
+            if (!available.length) {
+              if (servers.some(function (s) { return s._circuitOpen; })) {
+                return { idx: -1, reason: '所有实例已熔断或达到连接上限' };
+              }
+              return { idx: -1, reason: '无可用实例' };
+            }
+            var idx = available[cursor % available.length];
+            cursor++;
+            servers[idx]._connLimit = (servers[idx]._connLimit || 0) + 1;
+            return { idx: idx, reason: '过滤后剩余 ' + available.length + ' 个实例，轮询选中 #' + (idx + 1) + ' (连接数=' + servers[idx]._connLimit + ')' };
+          },
+          filter: function (list) {
+            return list.filter(function (s) {
+              return s.healthy && !s._circuitOpen && (s._connLimit || 0) < 3;
+            });
+          },
+          tip: 'AvailabilityFilteringRule 会跳过两类实例：1) 熔断器已断开的实例；2) 活跃连接数达到阈值的实例。适合需要主动隔离故障节点的场景。'
+        }
+      };
+
+      // ── Helpers ──
+      function getSpeedMs() {
+        var v = parseInt(speedSlider.value);
+        return v === 1 ? 1000 : v === 2 ? 600 : 280;
+      }
+
+      function updateSpeedLabel() {
+        var v = parseInt(speedSlider.value);
+        speedVal.textContent = v === 1 ? '慢速' : v === 2 ? '中速' : '快速';
+      }
+
+      function clearAllNodes() {
+        var nodes = pipeline.querySelectorAll('.pnode');
+        nodes.forEach(function (n) { n.className = 'pnode'; });
+        var arrows = pipeline.querySelectorAll('.parrow');
+        arrows.forEach(function (a) { a.classList.remove('flow'); });
+      }
+
+      function setNodeState(nodeName, state) {
+        var node = pipeline.querySelector('[data-node="' + nodeName + '"]');
+        if (node) {
+          if (state === 'active') node.className = 'pnode active';
+          else if (state === 'done') node.className = 'pnode done';
+          else if (state === 'err') node.className = 'pnode err';
+          else if (state === 'warn') node.className = 'pnode warn';
+          else node.className = 'pnode';
+        }
+      }
+
+      function clearServerStates() {
+        var srvs = serverPool.querySelectorAll('.srv');
+        srvs.forEach(function (s) {
+          s.classList.remove('selected', 'filtered', 'failed');
+          s.querySelector('.sw').textContent = '';
+        });
+      }
+
+      function updateServerDisplay(filteredList) {
+        var srvs = serverPool.querySelectorAll('.srv');
+        srvs.forEach(function (s, i) {
+          s.querySelector('.sstat').textContent = servers[i].healthy ? '● 健康' : '● 宕机';
+          s.querySelector('.sstat').className = 'sstat ' + (servers[i].healthy ? 'ok' : 'down');
+          if (filteredList && filteredList.indexOf(servers[i]) === -1 && servers[i].healthy) {
+            s.classList.add('filtered');
+          } else if (!servers[i].healthy) {
+            s.classList.add('filtered');
+          } else {
+            s.classList.remove('filtered');
+          }
+        });
+      }
+
+      function updateCounters() {
+        var items = counterDisplay.querySelectorAll('.counter-item');
+        items.forEach(function (item, i) {
+          item.querySelector('.cv').textContent = serverHits[i] || 0;
+        });
+        totalCount.textContent = total;
+        failCount.textContent = fails;
+        infoCursor.textContent = cursor;
+      }
+
+      function addLog(time, stage, msg, level) {
+        var entry = document.createElement('div');
+        entry.className = 'log-entry ' + (level || 'info');
+        var t = document.createElement('span');
+        t.className = 'time';
+        t.textContent = time;
+        var s = document.createElement('span');
+        s.className = 'stage';
+        s.textContent = stage;
+        var m = document.createElement('span');
+        m.className = 'msg';
+        m.textContent = msg;
+        entry.appendChild(t);
+        entry.appendChild(s);
+        entry.appendChild(m);
+        logPanel.appendChild(entry);
+        logPanel.scrollTop = logPanel.scrollHeight;
+      }
+
+      function clearLogs() {
+        logPanel.innerHTML = '';
+      }
+
+      function updateInfoCards(url, target, status, statusClass) {
+        infoUrl.textContent = url || '-';
+        infoTarget.textContent = target || '-';
+        infoStatus.textContent = status || '-';
+        infoStatus.className = 'ic-v ' + (statusClass || '');
+      }
+
+      function formatTime(ms) {
+        return '00:' + (ms / 1000).toFixed(3).replace('.', ':').replace(/(\d)$/, function (m) { return m + '00'; }).slice(0, 9);
+      }
+
+      // ── Load preset ──
+      function loadPreset(id) {
+        if (running || batchRunning) return;
+        currentPreset = id;
+        clearAllNodes();
+        clearServerStates();
+        clearLogs();
+        updateServerDisplay(servers);
+        addLog(formatTime(0), '系统', '已加载策略: ' + rules[id].name);
+        currentStep = -1;
+        cursor = 0;
+        serverHits = [0, 0, 0, 0, 0];
+        total = 0;
+        fails = 0;
+        servers.forEach(function (s) {
+          s._circuitOpen = false;
+          s._connLimit = 0;
+          s._failChance = 0;
+          s._weight = 0;
+          s.healthy = true;
+          s.status = 'ok';
+        });
+        updateCounters();
+        statusText.textContent = '就绪';
+        statusText.className = 'ic-v';
+        updateInfoCards('GET /users/1', '-', '-', '');
+        tipBox.textContent = rules[id].tip;
+        var svrEls = serverPool.querySelectorAll('.srv');
+        svrEls.forEach(function (s) { s.querySelector('.sw').textContent = ''; });
+      }
+
+      // ── Core: execute one call ──
+      function executeCall(callback) {
+        var rule = rules[currentPreset];
+        var steps = [];
+        var stepIdx = -1;
+
+        function next() {
+          stepIdx++;
+          if (stepIdx >= steps.length) {
+            if (callback) callback();
+            return;
+          }
+          var st = steps[stepIdx];
+          setNodeState(st.node, st.state);
+          addLog(formatTime(st.time), st.stage, st.msg, st.level);
+          setTimeout(next, getSpeedMs());
+        }
+
+        // Step 1: LoadBalancerCommand
+        steps.push({ node: 'cmd', state: 'active', time: 50, stage: 'LoadBalancerCommand', msg: '拦截 HTTP 请求 GET /users/1，准备执行负载均衡', level: 'info' });
+
+        // Step 2: ServerList
+        var healthyCount = servers.filter(function (s) { return s.healthy; }).length;
+        steps.push({ node: 'list', state: 'active', time: 200, stage: 'ServerList', msg: '从注册中心获取服务列表，共 ' + servers.length + ' 个实例 (' + healthyCount + ' 个健康)', level: 'info' });
+
+        // Step 3: ServerListFilter
+        var filtered = rule.filter(servers);
+        var filteredNames = filtered.map(function (s) { return s.name; }).join(', ');
+        steps.push({ node: 'filter', state: 'active', time: 400, stage: 'ServerListFilter', msg: '过滤后剩余 ' + filtered.length + ' 个候选实例: [' + filteredNames + ']', level: 'info' });
+
+        // Step 4: IRule choose
+        var selected = rule.select();
+        if (selected.idx < 0) {
+          steps.push({ node: 'rule', state: 'err', time: 600, stage: 'IRule', msg: '选择失败: ' + selected.reason, level: 'error' });
+          steps.push({ node: 'result', state: 'err', time: 700, stage: '结果', msg: '请求失败，无可用实例', level: 'error' });
+        } else {
+          var svr = servers[selected.idx];
+          steps.push({ node: 'rule', state: 'active', time: 600, stage: 'IRule', msg: selected.reason, level: 'success' });
+
+          // Step 5: IPing
+          steps.push({ node: 'ping', state: 'active', time: 800, stage: 'IPing', msg: '检查 ' + svr.ip + ' 存活状态 → 通过', level: 'success' });
+
+          // Step 6: Execute
+          if (selected.failedFirst !== undefined) {
+            steps.push({ node: 'result', state: 'warn', time: 1000, stage: '结果', msg: '原始实例 #' + (selected.failedFirst + 1) + ' 失败，重试成功 → 命中 ' + svr.ip, level: 'warn' });
+          } else {
+            steps.push({ node: 'result', state: 'active', time: 1000, stage: '结果', msg: 'HTTP 请求成功 → ' + svr.ip + ' 返回 200 OK', level: 'success' });
+          }
+        }
+
+        // Pre-mark nodes as done for previous step
+        var prevNode = null;
+        steps.forEach(function (st, i) {
+          st._origState = st.state;
+        });
+
+        // Override: mark previous non-same-node as done
+        var origSteps = steps.slice();
+        steps = [];
+        origSteps.forEach(function (st, i) {
+          var s2 = { node: st.node, state: st.state, time: st.time, stage: st.stage, msg: st.msg, level: st.level };
+          if (i > 0 && origSteps[i - 1].node !== st.node) {
+            s2._prevNode = origSteps[i - 1].node;
+          }
+          steps.push(s2);
+        });
+
+        function nextWithPrev() {
+          stepIdx++;
+          if (stepIdx >= steps.length) {
+            // Finalize
+            clearServerStates();
+            updateServerDisplay(filtered);
+            if (selected.idx >= 0) {
+              var selEl = serverPool.querySelector('[data-srv="' + selected.idx + '"]');
+              if (selEl) selEl.classList.add('selected');
+              serverHits[selected.idx] = (serverHits[selected.idx] || 0) + 1;
+              total++;
+              infoTarget.textContent = servers[selected.idx].ip;
+              infoStatus.textContent = '200 OK';
+              infoStatus.className = 'ic-v ok';
+              statusText.textContent = '调用成功 ✓';
+              statusText.className = 'ic-v ok';
+            } else {
+              fails++;
+              total++;
+              infoTarget.textContent = 'N/A';
+              infoStatus.textContent = 'FAIL';
+              infoStatus.className = 'ic-v err';
+              statusText.textContent = '调用失败 ✗';
+              statusText.className = 'ic-v err';
+            }
+            updateCounters();
+            running = false;
+            if (callback) callback();
+            return;
+          }
+          var st = steps[stepIdx];
+          if (st._prevNode) setNodeState(st._prevNode, 'done');
+          setNodeState(st.node, st.state);
+          addLog(formatTime(st.time), st.stage, st.msg, st.level);
+
+          // Visual: mark filtered servers
+          if (st.node === 'filter') {
+            clearServerStates();
+            updateServerDisplay(filtered);
+          }
+          // Visual: highlight selected
+          if (st.node === 'result' && selected.idx >= 0) {
+            clearServerStates();
+            updateServerDisplay(filtered);
+            var selEl = serverPool.querySelector('[data-srv="' + selected.idx + '"]');
+            if (selEl) selEl.classList.add('selected');
+            if (selected.failedFirst !== undefined) {
+              var failEl = serverPool.querySelector('[data-srv="' + selected.failedFirst + '"]');
+              if (failEl) failEl.classList.add('failed');
+            }
+          }
+
+          timer = setTimeout(nextWithPrev, getSpeedMs());
+        }
+
+        nextWithPrev();
+      }
+
+      // ── Actions ──
+      function runOnce() {
+        if (running) return;
+        running = true;
+        clearAllNodes();
+        clearServerStates();
+        clearLogs();
+        updateServerDisplay(servers);
+        addLog(formatTime(0), '系统', '开始调用: ' + rules[currentPreset].name);
+        statusText.textContent = '调用中...';
+        statusText.className = 'ic-v';
+        updateInfoCards('GET /users/1', '-', '-', '');
+        executeCall();
+      }
+
+      function runBatch(n) {
+        if (running || batchRunning) return;
+        batchRunning = true;
+        batchCount = 0;
+        batchTotal = n;
+        clearAllNodes();
+        clearServerStates();
+        clearLogs();
+        updateServerDisplay(servers);
+        addLog(formatTime(0), '系统', '连续 ' + n + ' 次请求: ' + rules[currentPreset].name);
+        statusText.textContent = '批量调用中... (0/' + n + ')';
+        statusText.className = 'ic-v';
+        updateInfoCards('GET /users/1', '-', '-', '');
+
+        function runNext() {
+          if (batchCount >= batchTotal) {
+            batchRunning = false;
+            statusText.textContent = '完成 ' + batchTotal + ' 次调用 ✓';
+            statusText.className = 'ic-v ok';
+            updateCounters();
+            return;
+          }
+          clearAllNodes();
+          clearServerStates();
+          updateServerDisplay(servers);
+          executeCall(function () {
+            batchCount++;
+            statusText.textContent = '批量调用中... (' + batchCount + '/' + batchTotal + ')';
+            updateCounters();
+            timer = setTimeout(runNext, 400);
+          });
+        }
+        runNext();
+      }
+
+      function doStep() {
+        // Single-step simplified: just calls once but pauses at each step via executeCall
+        if (running || batchRunning) return;
+        runOnce();
+      }
+
+      function resetAll() {
+        running = false;
+        batchRunning = false;
+        if (timer) { clearTimeout(timer); timer = null; }
+        clearAllNodes();
+        clearServerStates();
+        clearLogs();
+        updateServerDisplay(servers);
+        currentStep = -1;
+        cursor = 0;
+        serverHits = [0, 0, 0, 0, 0];
+        total = 0;
+        fails = 0;
+        servers.forEach(function (s) {
+          s._circuitOpen = false;
+          s._connLimit = 0;
+          s._failChance = 0;
+          s._weight = 0;
+          s.healthy = true;
+          s.status = 'ok';
+        });
+        updateCounters();
+        statusText.textContent = '等待发起调用...';
+        statusText.className = 'ic-v';
+        updateInfoCards('GET /users/1', '-', '-', '');
+        addLog(formatTime(0), '系统', '已重置');
+      }
+
+      // ── Event binding ──
+      presetList.addEventListener('click', function (e) {
+        var btn = e.target.closest('.pbtn');
+        if (!btn) return;
+        var id = btn.getAttribute('data-id');
+        if (id === currentPreset && !running && !batchRunning) return;
+        presetList.querySelectorAll('.pbtn').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        resetAll();
+        loadPreset(id);
+      });
+
+      btnRun.addEventListener('click', function () {
+        if (running || batchRunning) return;
+        resetAll();
+        runOnce();
+      });
+
+      btnBatch.addEventListener('click', function () {
+        if (running || batchRunning) return;
+        resetAll();
+        runBatch(10);
+      });
+
+      btnStep.addEventListener('click', function () {
+        if (running || batchRunning) return;
+        resetAll();
+        runOnce();
+      });
+
+      btnReset.addEventListener('click', function () { resetAll(); });
+
+      speedSlider.addEventListener('input', function () { updateSpeedLabel(); });
+
+      updateSpeedLabel();
+      loadPreset('roundrobin');
+    })();
+  </script>
+</body>
+
+</html>

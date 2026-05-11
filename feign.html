@@ -573,6 +573,23 @@
       color: var(--text-secondary);
       line-height: 1.5
     }
+
+    ::-webkit-scrollbar {
+      width: 6px
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 3px
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.14)
+    }
   </style>
 </head>
 
@@ -715,7 +732,6 @@
       var running = false;
       var currentStep = -1;
       var timer = null;
-      var startTime = 0;
 
       // ── Preset configs ──
       var presets = {
@@ -966,22 +982,18 @@
           return false;
         }
 
-        // Mark previous step nodes as done
+        // Mark previous step node as done, unless the next step targets the same node
         if (currentStep >= 0) {
           var prev = p.steps[currentStep];
-          setNodeState(prev.node, 'done');
+          var sameNode = (currentStep + 1 < p.steps.length) && (p.steps[currentStep + 1].node === prev.node);
+          if (!sameNode) {
+            setNodeState(prev.node, 'done');
+          }
         }
 
         currentStep++;
         var step = p.steps[currentStep];
 
-        // Clear active from all and set current as active
-        var nodes = pipeline.querySelectorAll('.pnode');
-        nodes.forEach(function (n) {
-          if (n.getAttribute('data-node') === step.node && n.className !== 'done' && n.className !== 'err' && n.className !== 'warn') {
-            // keep it
-          }
-        });
         setNodeState(step.node, step.level === 'error' ? 'err' : step.level === 'warn' ? 'warn' : 'active');
 
         var timeStr = '00:0' + step.time.toFixed(1).replace('.', ':');
@@ -1020,7 +1032,6 @@
         infoStatus.className = 'ic-v';
         infoResp.textContent = '-';
         infoResp.className = 'ic-v';
-        startTime = Date.now();
         addLog('00:00.000', '系统', '开始执行: ' + presets[currentPreset].name);
         scheduleNext();
       }
