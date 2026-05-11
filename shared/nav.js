@@ -22,6 +22,7 @@
     { file: 'hystrix.html', title: 'Hystrix 熔断' },
     { file: 'rate-limiter.html', title: '限流算法' },
     { file: 'es-inverted-index.html', title: 'ES 倒排索引' },
+    { file: 'distributed-tx.html', title: '分布式事务方案' },
     { file: 'xss-csrf.html', title: 'XSS & CSRF' }
   ];
 
