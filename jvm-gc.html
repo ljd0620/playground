@@ -98,6 +98,9 @@
         <button class="pbtn" data-id="cms"><span><span class="pn">CMS</span><span class="pd">并发标记清除、低延迟、两次短暂 STW</span></span></button>
         <button class="pbtn" data-id="g1"><span><span class="pn">G1 GC</span><span class="pd">区域化堆、增量回收、Java 9+ 默认</span></span></button>
         <button class="pbtn" data-id="zgc"><span><span class="pn">ZGC</span><span class="pd">全并发、亚毫秒暂停、超大堆支持</span></span></button>
+        <button class="pbtn" data-id="shenandoah"><span><span class="pn">Shenandoah GC</span><span class="pd">并发整理、Brooks 指针、Red Hat 贡献</span></span></button>
+        <button class="pbtn" data-id="epsilon"><span><span class="pn">Epsilon GC</span><span class="pd">无操作 GC、只分配不回收、压力测试</span></span></button>
+        <button class="pbtn" data-id="cmsfail"><span><span class="pn">CMS 并发失败</span><span class="pd">Concurrent Mode Failure → Full GC 退化</span></span></button>
       </div>
     </div>
     <div class="sec">
@@ -170,7 +173,13 @@
     g1:{name:'G1 GC',nThreads:4,stw:'Young Evacuation + Remark',throughput:'中高 (97%)',feature:'区域化堆、增量回收',
       desc:'-XX:+UseG1GC (Java 9+ 默认)',flag:'g1'},
     zgc:{name:'ZGC',nThreads:4,stw:'<1ms (仅 Relocate Start)',throughput:'高 (98%)',feature:'全并发、亚毫秒暂停',
-      desc:'-XX:+UseZGC (Java 15+ 生产可用)',flag:'zgc'}
+      desc:'-XX:+UseZGC (Java 15+ 生产可用)',flag:'zgc'},
+    shenandoah:{name:'Shenandoah GC',nThreads:4,stw:'短暂 (Init Mark + Final Mark)',throughput:'高 (97%)',feature:'并发整理、Brooks 指针转发',
+      desc:'-XX:+UseShenandoahGC (Java 12+)',flag:'shenandoah'},
+    epsilon:{name:'Epsilon GC',nThreads:0,stw:'无 GC',throughput:'极限 (无 GC 开销)',feature:'只分配不回收、压力测试',
+      desc:'-XX:+UnlockExperimentalVMOptions -XX:+UseEpsilonGC',flag:'epsilon'},
+    cmsfail:{name:'CMS 并发失败',nThreads:3,stw:'退化 Full GC 大暂停',throughput:'骤降 (<90%)',feature:'并发跟不上分配速率',
+      desc:'CMS Concurrent Mode Failure 场景',flag:'cmsfail'}
   };
 
   // ── Heap regions (traditional, for Serial/Parallel/CMS) ──
@@ -575,8 +584,93 @@
     return s;
   }
 
-  var presetFns={serial:serialSteps,parallel:parallelSteps,cms:cmsSteps,g1:g1Steps,zgc:zgcSteps};
-  var algoPresets=['serial','parallel','cms','g1','zgc'];
+  function shenandoahSteps(){
+    var s=[];
+    s.push({t:'event',e:'Shenandoah GC — 并发整理收集器，使用 Brooks 指针实现对象转发'});
+    s.push({t:'alloc',n:20,region:'eden'});
+    s.push({t:'alloc',n:15,region:'old'});
+    s.push({t:'event',e:'Shenandoah 启动并发 GC 周期（与应用线程同时运行）'});
+    s.push({t:'gc-start',type:'full'});
+    // Init Mark — STW
+    s.push({t:'phase',phase:'Init Mark',stw:true,threads:4,startX:0,width:30,duration:2});
+    s.push({t:'mark',target:'all'});
+    s.push({t:'event',e:'Init Mark: 扫描 GC Roots (STW 极短 ~2ms)'});
+    // Concurrent Mark
+    s.push({t:'phase',phase:'Concurrent Mark',stw:false,threads:4,startX:30,width:180,duration:0});
+    s.push({t:'event',e:'Concurrent Mark: 与应用并发遍历对象图'});
+    // Final Mark — STW
+    s.push({t:'phase',phase:'Final Mark',stw:true,threads:4,startX:210,width:30,duration:3});
+    s.push({t:'event',e:'Final Mark: 处理并发标记期间的变更队列 (STW ~3ms)'});
+    // Concurrent Evacuation — unique to Shenandoah!
+    s.push({t:'phase',phase:'Concurrent Evacuation',stw:false,threads:4,startX:240,width:200,duration:0});
+    s.push({t:'event',e:'Concurrent Evacuation: 并发整理！将存活对象复制到新 Region (Shenandoah 独有)'});
+    s.push({t:'compact',from:'old',to:'old',n:8});
+    s.push({t:'sweep',target:'old'});
+    // Concurrent Update Refs
+    s.push({t:'phase',phase:'Update References',stw:false,threads:4,startX:440,width:80,duration:0});
+    s.push({t:'event',e:'Update References: 并发更新指向已迁移对象的引用'});
+    s.push({t:'gc-end'});
+    s.push({t:'event',e:'Shenandoah 周期完成：不依赖代际，暂停与堆大小无关！'});
+    s.push({t:'event',e:'Shenandoah 特点：Brooks 指针转发、并发整理、无需分代假设'});
+    s.push({t:'done',e:'Shenandoah: 与 ZGC 同为超低延迟方案，Red Hat 贡献至 OpenJDK'});
+    return s;
+  }
+
+  function epsilonSteps(){
+    var s=[];
+    s.push({t:'event',e:'Epsilon GC — 只分配内存，从不回收（No-Op GC）'});
+    s.push({t:'alloc',n:15,region:'eden'});
+    s.push({t:'alloc',n:5,region:'meta'});
+    s.push({t:'event',e:'Epsilon 不执行任何 GC，Eden 持续分配新对象'});
+    s.push({t:'alloc',n:15,region:'eden'});
+    s.push({t:'alloc',n:10,region:'old'});
+    s.push({t:'event',e:'Eden 接近满，但 Epsilon 不回收 → 继续分配到 Old Gen'});
+    s.push({t:'alloc',n:15,region:'old'});
+    s.push({t:'alloc',n:10,region:'old'});
+    s.push({t:'event',e:'⚠ Old Gen 逐渐填满，Epsilon 仍不回收…'});
+    s.push({t:'alloc',n:10,region:'meta'});
+    s.push({t:'event',e:'⚠ 堆内存耗尽！Epsilon 直接抛出 OutOfMemoryError'});
+    s.push({t:'event',e:'时间线：无 GC 线程活动，零 STW，但也零回收'});
+    // Timeline — no GC activity at all
+    s.push({t:'phase',phase:'App Only (无 GC)',stw:false,threads:0,startX:0,width:560,duration:0});
+    s.push({t:'gc-end'});
+    s.push({t:'event',e:'Epsilon 小结：适合短期任务、压力测试、GC 开销基准对比'});
+    s.push({t:'done',e:'Epsilon GC: 零回收开销，但内存耗尽即 OOM → 仅用于极端性能场景'});
+    return s;
+  }
+
+  function cmsfailSteps(){
+    var s=[];
+    s.push({t:'event',e:'CMS Concurrent Mode Failure — 并发标记速度跟不上对象分配速率'});
+    s.push({t:'alloc',n:15,region:'eden'});
+    s.push({t:'alloc',n:30,region:'old'});
+    s.push({t:'event',e:'Old Gen 使用率达阈值 → CMS 启动并发标记'});
+    s.push({t:'gc-start',type:'full'});
+    s.push({t:'phase',phase:'Initial Mark',stw:true,threads:1,startX:0,width:30,duration:7});
+    s.push({t:'mark',target:'old'});
+    s.push({t:'event',e:'Initial Mark: GC Roots 直接引用 (STW ~7ms)'});
+    // Concurrent Mark starts — but allocation is fast
+    s.push({t:'phase',phase:'Concurrent Mark',stw:false,threads:3,startX:30,width:100,duration:0});
+    s.push({t:'event',e:'Concurrent Mark 进行中…同时 Old Gen 被快速填满！'});
+    s.push({t:'alloc',n:15,region:'old'});
+    s.push({t:'alloc',n:10,region:'eden'});
+    s.push({t:'event',e:'⚠ Old Gen 已满！但并发标记尚未完成 → Concurrent Mode Failure!'});
+    // Fallback to Serial Old GC — long STW!
+    s.push({t:'phase',phase:'Fallback Full GC',stw:true,threads:1,startX:130,width:430,duration:250});
+    s.push({t:'event',e:'退化为 Serial Old Full GC：单线程 STW 标记-清除-整理 (~250ms!)'});
+    s.push({t:'mark',target:'all'});
+    s.push({t:'sweep',target:'all'});
+    s.push({t:'compact',from:'old',to:'old',n:15});
+    s.push({t:'gc-end'});
+    s.push({t:'event',e:'CMS CMF 后果：一次 Full GC 暂停 250ms，远超过 CMS 承诺的低延迟'});
+    s.push({t:'event',e:'这就是 CMS 在 Java 14 被废弃的原因之一'});
+    s.push({t:'done',e:'CMS Concurrent Mode Failure: 并发不够快 → 退化全 STW，延迟爆炸'});
+    return s;
+  }
+
+  var presetFns={serial:serialSteps,parallel:parallelSteps,cms:cmsSteps,g1:g1Steps,zgc:zgcSteps,
+    shenandoah:shenandoahSteps,epsilon:epsilonSteps,cmsfail:cmsfailSteps};
+  var algoPresets=['serial','parallel','cms','g1','zgc','shenandoah','epsilon','cmsfail'];
 
   // ── initProblem ──
   function initProblem(id){
@@ -587,6 +681,7 @@
     state.useGrid=(id==='g1'||id==='zgc');
     if(id==='zgc')initGrid(8,10,0);
     else if(id==='g1')initGrid(10,8,2);
+    else state.objects=[];
     steps=presetFns[id]();
     var a=algos[id];
     algoName.textContent=a.name;
