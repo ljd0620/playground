@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JWT & OAuth2 可视化</title>
+  <meta name="description" content="交互式 JWT 与 OAuth2 认证流程可视化，演示 JWT 签发验证、OAuth2 授权码流程、Token 刷新和 PKCE 扩展">
+  <meta name="keywords" content="JWT, OAuth2, 认证, 授权码, PKCE, Token, 安全">
+  <meta property="og:title" content="JWT & OAuth2 可视化">
+  <meta property="og:description" content="交互式 JWT 与 OAuth2 认证流程可视化">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg-primary:#080b12;--bg-card:#0f1319;--bg-elevated:#161c26;--bg-input:#0c1018;
+      --border:#1e2a3a;--border-hover:#2d4a6f;--text-primary:#e8edf5;--text-secondary:#7d8da0;
+      --text-muted:#4a5568;--accent-blue:#4da3ff;--accent-green:#36d986;--accent-purple:#b07aff;
+      --accent-orange:#ff9f43;--accent-red:#ff5c6c;--accent-cyan:#22d3ee;--accent-pink:#f472b6;
+      --glow-blue:rgba(77,163,255,0.15);--glow-green:rgba(54,217,134,0.12);--glow-purple:rgba(176,122,255,0.12);
+      --radius:14px;--radius-sm:8px;
+    }
+    body{
+      font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg-primary);
+      color:var(--text-primary);height:100vh;display:flex;flex-direction:column;overflow:hidden;
+      font-size:13px;position:relative
+    }
+    body::before{
+      content:'';position:fixed;inset:0;
+      background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(244,114,182,0.04),transparent 70%);
+      pointer-events:none;z-index:0
+    }
+    header{
+      padding:12px 20px;background:var(--bg-card);border-bottom:1px solid var(--border);
+      display:flex;align-items:center;justify-content:center;gap:14px;flex-shrink:0;position:relative;z-index:1
+    }
+    header h1{
+      font-size:17px;font-weight:700;
+      background:linear-gradient(135deg,var(--accent-pink),var(--accent-purple));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
+    }
+    .tag{font-size:.68rem;background:var(--bg-elevated);color:var(--text-secondary);padding:3px 12px;border-radius:20px;border:1px solid var(--border);letter-spacing:.3px}
+    .main{display:flex;flex:1;overflow:hidden;position:relative;z-index:1}
+    .left{width:260px;min-width:260px;background:var(--bg-card);border-right:1px solid var(--border);overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+    .sec{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:10px;transition:border-color .2s}
+    .sec:hover{border-color:var(--border-hover)}
+    .sec-t{font-size:.65rem;text-transform:uppercase;letter-spacing:1.4px;color:var(--text-muted);margin-bottom:8px;font-weight:600;display:flex;align-items:center;gap:8px}
+    .sec-t::before{content:'';width:3px;height:12px;border-radius:2px;background:var(--accent-pink)}
+    .preset-list{display:flex;flex-direction:column;gap:4px}
+    .pbtn{background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;text-align:left;transition:all .15s;display:flex;gap:8px;align-items:center}
+    .pbtn:hover{border-color:var(--border-hover);background:var(--bg-elevated)}
+    .pbtn.active{border-color:var(--accent-pink);background:rgba(244,114,182,0.06);box-shadow:inset 3px 0 0 var(--accent-pink),0 0 12px rgba(244,114,182,0.12)}
+    .pbtn .pn{font-weight:600;display:block;font-size:11px}
+    .pbtn .pd{color:var(--text-muted);font-size:9px;margin-top:2px}
+    .btns{display:flex;gap:5px;margin-top:4px}
+    .btn{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);padding:7px 0;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;transition:all .15s;flex:1;text-align:center}
+    .btn:hover{border-color:var(--border-hover);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.3)}
+    .btn.pri{background:linear-gradient(135deg,var(--accent-pink),#db2777);color:#fff;font-weight:600;border-color:var(--accent-pink);box-shadow:0 2px 10px rgba(244,114,182,0.2)}
+    .btn.pri:hover{box-shadow:0 4px 16px rgba(244,114,182,0.35)}
+    input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:var(--border);outline:none;margin:4px 0}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent-pink);cursor:pointer;border:2px solid var(--bg-card)}
+    .slider-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text-secondary)}
+    .right{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:14px;gap:10px}
+    .canvas-area{flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+    canvas{display:block}
+    .info-row{display:flex;gap:8px;flex-shrink:0}
+    .info-card{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;min-width:0}
+    .info-card .ic-t{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:3px}
+    .info-card .ic-v{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent-pink)}
+    .stat-cards{display:flex;gap:8px;flex-shrink:0}
+    .stc{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;text-align:center}
+    .stc .sv{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--accent-pink)}
+    .stc .sl{font-size:9px;color:var(--text-muted);margin-top:2px}
+    @media(max-width:900px){
+      .main{flex-direction:column}
+      .left{width:100%;min-width:0;flex-direction:row;flex-wrap:wrap;gap:6px;padding:8px;max-height:140px}
+      .left .sec{flex:1;min-width:120px;padding:8px}
+    }
+    ::-webkit-scrollbar{width:6px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.14)}
+  </style>
+</head>
+<body>
+<header><h1>JWT & OAuth2 认证流程</h1><span class="tag">安全</span></header>
+<div class="main">
+  <div class="left">
+    <div class="sec">
+      <div class="sec-t">认证场景</div>
+      <div class="preset-list" id="presetList">
+        <button class="pbtn active" data-id="jwt"><span><span class="pn">JWT 签发与验证</span><span class="pd">Header.Payload.Signature 结构</span></span></button>
+        <button class="pbtn" data-id="oauth2"><span><span class="pn">OAuth2 授权码流程</span><span class="pd">Client → Auth Server → Resource</span></span></button>
+        <button class="pbtn" data-id="refresh"><span><span class="pn">Token 刷新流程</span><span class="pd">Access Token 过期 → Refresh Token</span></span></button>
+        <button class="pbtn" data-id="pkce"><span><span class="pn">PKCE 扩展流程</span><span class="pd">Code Challenge + Verifier</span></span></button>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-t">控制</div>
+      <div class="btns"><button class="btn pri" id="btnPlay">▶ 开始</button><button class="btn" id="btnPause">⏸ 暂停</button></div>
+      <div class="btns" style="margin-top:5px"><button class="btn" id="btnStep">⏮ 单步</button><button class="btn" id="btnReset">↺ 重置</button></div>
+      <div class="slider-label" style="margin-top:8px"><span>速度</span><span id="speedVal">快速</span></div>
+      <input type="range" id="speedSlider" min="1" max="4" value="3">
+    </div>
+  </div>
+  <div class="right">
+    <div class="canvas-area"><canvas id="cv"></canvas></div>
+    <div class="stat-cards">
+      <div class="stc"><div class="sv" id="stepCounter">0 / 0</div><div class="sl">步骤</div></div>
+      <div class="stc"><div class="sv" id="flowPhase">-</div><div class="sl">当前阶段</div></div>
+      <div class="stc"><div class="sv" id="tokenStatus">-</div><div class="sl">Token 状态</div></div>
+    </div>
+    <div class="info-row">
+      <div class="info-card"><div class="ic-t">认证方式</div><div class="ic-v" id="infoAuth">-</div></div>
+      <div class="info-card"><div class="ic-t">签名算法</div><div class="ic-v" id="infoAlg">-</div></div>
+      <div class="info-card"><div class="ic-t">安全特性</div><div class="ic-v" id="infoSec">-</div></div>
+      <div class="info-card"><div class="ic-t">适用场景</div><div class="ic-v" id="infoUse">-</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="shared/theme.js"></script>
+<script src="shared/nav.js"></script>
+<script src="shared/analytics.js"></script>
+<script>
+(function(){
+  var cv=document.getElementById('cv'),ctx=cv.getContext('2d'),W=760,H=480;
+  var presetList=document.getElementById('presetList'),btnPlay=document.getElementById('btnPlay');
+  var btnPause=document.getElementById('btnPause'),btnStep=document.getElementById('btnStep');
+  var btnReset=document.getElementById('btnReset'),speedSlider=document.getElementById('speedSlider');
+  var speedVal=document.getElementById('speedVal'),stepCounter=document.getElementById('stepCounter');
+  var flowPhase=document.getElementById('flowPhase'),tokenStatus=document.getElementById('tokenStatus');
+  var infoAuth=document.getElementById('infoAuth'),infoAlg=document.getElementById('infoAlg');
+  var infoSec=document.getElementById('infoSec'),infoUse=document.getElementById('infoUse');
+
+  var currentPreset='jwt',steps=[],stepIdx=0,playing=false,timer=null;
+
+  function getC(){
+    var s=getComputedStyle(document.documentElement);
+    return{bg:s.getPropertyValue('--bg-primary').trim(),card:s.getPropertyValue('--bg-card').trim(),
+      elevated:s.getPropertyValue('--bg-elevated').trim(),border:s.getPropertyValue('--border').trim(),
+      text:s.getPropertyValue('--text-primary').trim(),text2:s.getPropertyValue('--text-secondary').trim(),
+      text3:s.getPropertyValue('--text-muted').trim(),blue:s.getPropertyValue('--accent-blue').trim(),
+      green:s.getPropertyValue('--accent-green').trim(),purple:s.getPropertyValue('--accent-purple').trim(),
+      orange:s.getPropertyValue('--accent-orange').trim(),red:s.getPropertyValue('--accent-red').trim(),
+      cyan:s.getPropertyValue('--accent-cyan').trim(),pink:s.getPropertyValue('--accent-pink').trim()};
+  }
+  function hexA(hex,a){var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return'rgba('+r+','+g+','+b+','+a+')';}
+  var C=getC();
+
+  function rbox(x,y,w,h,fill,stroke,r,c){c=c||ctx;c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h-r);c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);c.lineTo(x+r,y+h);c.quadraticCurveTo(x,y+h,x,y+h-r);c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();if(fill){c.fillStyle=fill;c.fill();}if(stroke){c.strokeStyle=stroke;c.lineWidth=1.5;c.stroke();}}
+  function arrow(x1,y1,x2,y2,color,dashed){
+    ctx.save();ctx.strokeStyle=color;ctx.lineWidth=2;ctx.lineCap='round';
+    if(dashed)ctx.setLineDash([6,4]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+    ctx.setLineDash([]);var ang=Math.atan2(y2-y1,x2-x1),len=10;
+    ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-len*Math.cos(ang-Math.PI/6),y2-len*Math.sin(ang-Math.PI/6));
+    ctx.lineTo(x2-len*Math.cos(ang+Math.PI/6),y2-len*Math.sin(ang+Math.PI/6));ctx.closePath();ctx.fill();ctx.restore();
+  }
+  function txt(x,y,text,size,color,align,bl){ctx.save();ctx.font=(size||12)+'px Inter,system-ui,sans-serif';ctx.fillStyle=color||C.text;ctx.textAlign=align||'center';ctx.textBaseline=bl||'middle';ctx.fillText(text,x,y);ctx.restore();}
+  function txtM(x,y,text,size,color,align,bl){ctx.save();ctx.font=(size||10)+'px JetBrains Mono,monospace';ctx.fillStyle=color||C.text2;ctx.textAlign=align||'center';ctx.textBaseline=bl||'middle';ctx.fillText(text,x,y);ctx.restore();}
+
+  function drawNode(x,y,w,h,label,sub,accent,state){
+    var fill,stroke,bg;
+    if(state==='active'){fill=hexA(accent,0.12);stroke=accent;bg=accent;}
+    else if(state==='done'){fill=hexA(C.green,0.08);stroke=hexA(C.green,0.4);bg=C.green;}
+    else{fill=C.card;stroke=C.border;bg=C.text3;}
+    rbox(x,y,w,h,fill,stroke,8);
+    if(state==='active'){ctx.save();ctx.shadowColor=hexA(accent,0.3);ctx.shadowBlur=12;rbox(x,y,w,h,null,accent,8);ctx.restore();}
+    txt(x+w/2,y+18,label,13,state==='active'?accent:C.text);
+    if(sub)txt(x+w/2,y+40,sub,10,state==='done'?C.green:C.text3);
+    var bx=x+w/2-8;ctx.fillStyle=bg;ctx.beginPath();ctx.arc(bx+8,y-5,6,0,Math.PI*2);ctx.fill();
+    if(state==='active'){ctx.strokeStyle=accent;ctx.lineWidth=1.5;ctx.stroke();}
+    txt(bx+8,y-5,state==='done'?'✓':state==='active'?'●':'○',10,state==='active'?accent:state==='done'?C.green:C.text3);
+  }
+
+  function drawMsg(x,y,text,data,color,enc){
+    var pad=enc?' 🔒':'';
+    ctx.save();ctx.font='bold 12px Inter,system-ui,sans-serif';ctx.fillStyle=color;
+    var w=ctx.measureText(text+pad).width+16;ctx.textAlign='left';ctx.fillText(text+pad,x,y);
+    if(data){ctx.font='10px JetBrains Mono,monospace';ctx.fillStyle=C.text3;ctx.fillText(data,x,y+16);}
+    ctx.restore();
+  }
+
+  var state={arrows:[],activeNode:'',event:'',info:{auth:'-',alg:'-',sec:'-',use:'-'}};
+
+  // Node positions
+  var n={client:{x:60,y:180},server:{x:590,y:180},authSvr:{x:325,y:60},resSvr:{x:325,y:320}};
+  var nw=120,nh=60;
+
+  function draw(){
+    C=getC();cv.width=W;cv.height=H;ctx.clearRect(0,0,W,H);
+
+    // Title
+    var titles={jwt:'JWT 签发与验证流程',oauth2:'OAuth2 授权码流程',refresh:'Token 刷新流程',pkce:'PKCE 扩展流程'};
+    txt(W/2,10,titles[currentPreset]||'',14,C.text);
+
+    // Draw nodes
+    var nodesToDraw=[];
+    if(currentPreset==='jwt'){nodesToDraw=['client','server'];}
+    else if(currentPreset==='refresh'){nodesToDraw=['client','authSvr'];}
+    else{nodesToDraw=['client','authSvr','resSvr'];}
+
+    nodesToDraw.forEach(function(k){
+      var p=n[k],label=k==='client'?'Client':k==='authSvr'?'Auth Server':k==='resSvr'?'Resource Svr':'Server';
+      var sub=k==='client'?'浏览器/App':k==='authSvr'?'认证中心':k==='resSvr'?'API 资源':'应用服务';
+      var ac=k==='client'?C.blue:k==='authSvr'?C.purple:k==='resSvr'?C.green:C.pink;
+      var s=state.activeNode===k?'active':state.arrows.some(function(a){return a.f===k||a.to===k;})?'done':'';
+      drawNode(p.x,p.y,nw,nh,label,sub,ac,s);
+    });
+
+    // Draw arrows
+    var ay=250;
+    state.arrows.forEach(function(a,i){
+      var from=n[a.f],to=n[a.to];
+      var x1=from.x+nw,y1=from.y+20+(i%3)*12,x2=to.x,y2=to.y+20+(i%3)*12;
+      if(a.f==='authSvr'&&a.to==='client'){x1=from.x;x2=to.x+nw;}
+      if(a.f==='authSvr'&&a.to==='resSvr'){x1=from.x+nw/2;x2=to.x+nw/2;y1=from.y+nh;y2=to.y;}
+      var col=a.color==='blue'?C.blue:a.color==='green'?C.green:a.color==='purple'?C.purple:a.color==='orange'?C.orange:C.pink;
+      arrow(x1,y1,x2,y2,col,a.dashed);
+      var mx=(x1+x2)/2,my=(y1+y2)/2-8;
+      drawMsg(mx-40,my,a.label,a.data,col,a.enc);
+    });
+
+    if(state.event){
+      var warn=state.event.indexOf('⚠')!==-1;
+      txt(W/2,H-20,state.event,12,warn?C.orange:C.text);
+    }
+
+    flowPhase.textContent=state.activeNode||'Idle';
+    tokenStatus.textContent=state.info.tokenStatus||'-';
+    infoAuth.textContent=state.info.auth||'-';
+    infoAlg.textContent=state.info.alg||'-';
+    infoSec.textContent=state.info.sec||'-';
+    infoUse.textContent=state.info.use||'-';
+  }
+
+  // ── Preset definitions ──
+  function jwtSteps(){
+    return[
+      {t:'init'},
+      {t:'node',id:'client',s:'active'},
+      {t:'event',e:'用户输入用户名/密码，客户端向服务端发送登录请求'},
+      {t:'arrow',id:1,f:'client',to:'server',label:'POST /login',color:'blue',data:'{"username":"alice","password":"***"}'},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'server',s:'active'},
+      {t:'event',e:'服务端验证凭据，生成 JWT Token'},
+      {t:'arrow',id:2,f:'server',to:'client',label:'200 OK + JWT',color:'green',data:'Header.Payload.Signature',enc:true},
+      {t:'node',id:'server',s:'done'},{t:'node',id:'client',s:'active'},
+      {t:'event',e:'客户端存储 JWT (localStorage/Cookie)，后续请求携带 Authorization 头'},
+      {t:'arrow',id:3,f:'client',to:'server',label:'GET /api/me',color:'blue',data:'Authorization: Bearer eyJhbG...',enc:true},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'server',s:'active'},
+      {t:'event',e:'服务端验证签名 + 检查过期时间 → 解析用户信息'},
+      {t:'arrow',id:4,f:'server',to:'client',label:'200 OK',color:'green',data:'{"user":"alice","role":"admin"}'},
+      {t:'done',e:'✓ JWT 认证完成: 无状态、跨域支持、自包含用户信息'}
+    ];
+  }
+
+  function oauth2Steps(){
+    return[
+      {t:'init'},
+      {t:'node',id:'client',s:'active'},
+      {t:'event',e:'用户点击"使用 Google 登录"，客户端重定向到授权服务器'},
+      {t:'arrow',id:1,f:'client',to:'authSvr',label:'GET /authorize',color:'blue',data:'?client_id=app&redirect_uri=/cb&scope=read'},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'authSvr',s:'active'},
+      {t:'event',e:'授权服务器展示登录页面，用户确认授权范围'},
+      {t:'arrow',id:2,f:'authSvr',to:'client',label:'302 Redirect',color:'purple',data:'?code=AUTH_CODE_xyz&state=123'},
+      {t:'node',id:'authSvr',s:'done'},{t:'node',id:'client',s:'active'},
+      {t:'event',e:'客户端收到授权码 (Authorization Code)，后端用 code 换 token'},
+      {t:'arrow',id:3,f:'client',to:'authSvr',label:'POST /token',color:'blue',data:'code=AUTH_CODE_xyz&client_secret=***'},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'authSvr',s:'active'},
+      {t:'event',e:'授权服务器验证 code + client_secret，颁发 Access Token'},
+      {t:'arrow',id:4,f:'authSvr',to:'client',label:'200 OK',color:'green',data:'{"access_token":"AT_xxx","refresh_token":"RT_yyy"}'},
+      {t:'node',id:'authSvr',s:'done'},{t:'node',id:'client',s:'active'},
+      {t:'event',e:'客户端用 Access Token 访问资源服务器'},
+      {t:'arrow',id:5,f:'client',to:'resSvr',label:'GET /api/user',color:'blue',data:'Authorization: Bearer AT_xxx',enc:true},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'resSvr',s:'active'},
+      {t:'arrow',id:6,f:'resSvr',to:'client',label:'200 OK',color:'green',data:'{"name":"Alice","email":"a@b.com"}'},
+      {t:'done',e:'✓ OAuth2 授权码流程完成: code 换 token，客户端从未接触用户密码'}
+    ];
+  }
+
+  function refreshSteps(){
+    return[
+      {t:'init'},
+      {t:'event',e:'Access Token 已过期 (exp 时间戳已过)，客户端收到 401'},
+      {t:'arrow',id:1,f:'client',to:'authSvr',label:'GET /api/me',color:'blue',data:'Authorization: Bearer AT_expired'},
+      {t:'arrow',id:2,f:'authSvr',to:'client',label:'401 Unauthorized',color:'red',data:'{"error":"token_expired"}'},
+      {t:'node',id:'client',s:'active'},
+      {t:'event',e:'客户端使用 Refresh Token 请求新 Access Token'},
+      {t:'arrow',id:3,f:'client',to:'authSvr',label:'POST /refresh',color:'orange',data:'refresh_token=RT_yyy'},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'authSvr',s:'active'},
+      {t:'event',e:'授权服务器验证 Refresh Token 有效性，颁发新 Token'},
+      {t:'arrow',id:4,f:'authSvr',to:'client',label:'200 OK',color:'green',data:'{"access_token":"AT_new","refresh_token":"RT_new"}'},
+      {t:'node',id:'authSvr',s:'done'},{t:'node',id:'client',s:'active'},
+      {t:'event',e:'客户端更新 Token，用户无感知 → 继续正常访问'},
+      {t:'arrow',id:5,f:'client',to:'authSvr',label:'GET /api/me',color:'blue',data:'Authorization: Bearer AT_new',enc:true},
+      {t:'arrow',id:6,f:'authSvr',to:'client',label:'200 OK',color:'green',data:'{"user":"alice","role":"admin"}'},
+      {t:'done',e:'✓ Token 刷新完成: 用户无感知续期，Refresh Token Rotation 增强安全性'}
+    ];
+  }
+
+  function pkceSteps(){
+    return[
+      {t:'init'},
+      {t:'node',id:'client',s:'active'},
+      {t:'event',e:'PKCE — 防止授权码拦截攻击 (移动端/SPA 无 client_secret)'},
+      {t:'event',e:'客户端生成 code_verifier (随机字符串) 和 code_challenge (SHA256 哈希)'},
+      {t:'arrow',id:1,f:'client',to:'authSvr',label:'GET /authorize',color:'blue',data:'?code_challenge=SHA256(verifier)&method=S256'},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'authSvr',s:'active'},
+      {t:'event',e:'授权服务器保存 code_challenge，返回授权码'},
+      {t:'arrow',id:2,f:'authSvr',to:'client',label:'302 + code',color:'purple',data:'?code=AUTH_CODE_pkce'},
+      {t:'node',id:'authSvr',s:'done'},{t:'node',id:'client',s:'active'},
+      {t:'event',e:'客户端发送 code + code_verifier (非 hash 原文)'},
+      {t:'arrow',id:3,f:'client',to:'authSvr',label:'POST /token',color:'blue',data:'code=xxx&code_verifier=random_128'},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'authSvr',s:'active'},
+      {t:'event',e:'服务器计算 SHA256(code_verifier) 与保存的 code_challenge 对比 → 匹配!'},
+      {t:'arrow',id:4,f:'authSvr',to:'client',label:'200 OK',color:'green',data:'{"access_token":"AT_pkce"}'},
+      {t:'event',e:'⚠ 攻击者即使拦截了 code，没有 code_verifier 也无法换 token'},
+      {t:'done',e:'✓ PKCE 完成: 防止授权码拦截，OAuth2.1 推荐所有客户端使用'}
+    ];
+  }
+
+  var presetFns={jwt:jwtSteps,oauth2:oauth2Steps,refresh:refreshSteps,pkce:pkceSteps};
+  var presetInfo={
+    jwt:{auth:'JWT Bearer Token',alg:'HS256 / RS256',sec:'签名防篡改',use:'无状态 API 认证'},
+    oauth2:{auth:'Authorization Code',alg:'-',sec:'Code 换 Token',use:'第三方登录 (Google/GitHub)'},
+    refresh:{auth:'Refresh Token',alg:'-',sec:'Token Rotation',use:'长期会话续期'},
+    pkce:{auth:'PKCE + Auth Code',alg:'SHA256',sec:'防授权码拦截',use:'移动端 / SPA 安全'}
+  };
+
+  function initProblem(id){
+    currentPreset=id;steps=presetFns[id]();stepIdx=0;
+    state={arrows:[],activeNode:'',event:'',info:{tokenStatus:'-',auth:'-',alg:'-',sec:'-',use:'-'}};
+    var inf=presetInfo[id];
+    infoAuth.textContent=inf.auth;infoAlg.textContent=inf.alg;
+    infoSec.textContent=inf.sec;infoUse.textContent=inf.use;
+    flowPhase.textContent='就绪';tokenStatus.textContent='无';
+    stepCounter.textContent='0 / '+(steps.length-1);
+    cv.width=W;cv.height=H;draw();
+  }
+
+  function applyStep(step){
+    if(!step)return;
+    if(step.t==='init'){state.arrows=[];state.activeNode='';}
+    else if(step.t==='node'){
+      if(step.s==='active'){state.activeNode=step.id;}
+      else if(step.s==='done'&&state.activeNode===step.id)state.activeNode='';
+    }
+    else if(step.t==='arrow'){state.arrows.push(step);flowPhase.textContent=step.label;}
+    else if(step.t==='event'){state.event=step.e;}
+    else if(step.t==='done'){state.event=step.e;tokenStatus.textContent='✓ 有效';}
+    draw();stepIdx++;stepCounter.textContent=stepIdx+' / '+(steps.length-1);
+  }
+
+  function pause(){playing=false;if(timer){clearTimeout(timer);timer=null;}btnPlay.textContent='▶ 继续';}
+  function play(){if(playing||stepIdx>=steps.length)return;playing=true;btnPlay.textContent='▶ 运行中';scheduleNext();}
+  function scheduleNext(){
+    if(!playing||stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    applyStep(steps[stepIdx]);if(stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    var v=parseInt(speedSlider.value);timer=setTimeout(scheduleNext,[500,250,120,40][v-1]);
+  }
+  function doStep(){if(playing){pause();return;}if(stepIdx<steps.length)applyStep(steps[stepIdx]);if(stepIdx>=steps.length)btnPlay.textContent='✓ 完成';}
+  function resetAll(){pause();btnPlay.textContent='▶ 开始';initProblem(currentPreset);}
+
+  presetList.addEventListener('click',function(e){
+    var btn=e.target.closest('.pbtn');if(!btn)return;var id=btn.getAttribute('data-id');
+    if(id===currentPreset)return;
+    presetList.querySelectorAll('.pbtn').forEach(function(b){b.classList.remove('active');});
+    btn.classList.add('active');pause();btnPlay.textContent='▶ 开始';initProblem(id);
+  });
+  btnPlay.addEventListener('click',function(){if(stepIdx>=steps.length)resetAll();play();});
+  btnPause.addEventListener('click',function(){pause();});
+  btnStep.addEventListener('click',function(){doStep();});
+  btnReset.addEventListener('click',function(){resetAll();});
+  speedSlider.addEventListener('input',function(){speedVal.textContent=['慢速','中速','快速','极快'][parseInt(speedSlider.value)-1];});
+  speedVal.textContent='快速';initProblem('jwt');
+
+  new MutationObserver(function(){draw();}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','style']});
+})();
+</script>
+</body>
+</html>

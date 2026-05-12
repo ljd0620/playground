@@ -12,8 +12,11 @@
     { file: 'redis-cluster.html', title: 'Redis Cluster' },
     { file: 'redis-sentinel.html', title: 'Redis Sentinel' },
     { file: 'redis-db-consistency.html', title: 'Redis 与数据库一致性' },
+    { file: 'redis-stream.html', title: 'Redis Stream 消息队列' },
     { file: 'mysql-explain.html', title: 'MySQL Explain' },
+    { file: 'mysql-index.html', title: 'MySQL 索引结构' },
     { file: 'mysql-isolation.html', title: 'MySQL 事务隔离' },
+    { file: 'mysql-lock.html', title: 'MySQL 锁机制' },
     { file: 'kafka.html', title: 'Kafka 架构' },
     { file: 'kafka-offset.html', title: 'Kafka Offset 管理' },
     { file: 'rabbitmq.html', title: 'RabbitMQ 运行原理' },
@@ -22,6 +25,7 @@
     { file: 'juc-tools.html', title: 'JUC 并发工具' },
     { file: 'jvm-gc.html', title: 'JVM 垃圾回收' },
     { file: 'classloader.html', title: '类加载机制' },
+    { file: 'hashmap.html', title: 'HashMap 原理' },
     { file: 'ha-architecture.html', title: '高可用架构' },
     { file: 'hystrix.html', title: 'Hystrix 熔断' },
     { file: 'rate-limiter.html', title: '限流算法' },
@@ -31,16 +35,20 @@
     { file: 'raft.html', title: 'Raft 共识算法' },
     { file: 'distributed-lock.html', title: '分布式锁' },
     { file: 'xss-csrf.html', title: 'XSS & CSRF' },
+    { file: 'jwt-oauth2.html', title: 'JWT & OAuth2' },
     { file: 'sorting.html', title: '排序算法' },
     { file: 'dp.html', title: '动态规划' },
-    { file: 'binary-tree.html', title: '二叉树遍历' }
+    { file: 'binary-tree.html', title: '二叉树遍历' },
+    { file: 'graph-algorithm.html', title: '图算法可视化' }
   ];
 
   var SIDEBAR_PAGES = [
     'rag.html', 'redis-cluster.html', 'mysql-isolation.html',
     'xss-csrf.html', 'juc-tools.html', 'spring-boot-startup.html',
     'classloader.html', 'threadpool.html', 'binary-tree.html',
-    'tls-handshake.html', 'raft.html', 'distributed-lock.html', 'jvm-gc.html'
+    'tls-handshake.html', 'raft.html', 'distributed-lock.html', 'jvm-gc.html',
+    'hashmap.html', 'jwt-oauth2.html', 'mysql-lock.html', 'mysql-index.html',
+    'graph-algorithm.html', 'redis-stream.html'
   ];
 
   var pathParts = location.pathname.replace(/\/+$/, '').split('/');

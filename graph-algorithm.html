@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>图算法可视化</title>
+  <meta name="description" content="交互式图算法可视化，演示 BFS、DFS、Dijkstra 最短路径和拓扑排序的完整过程">
+  <meta name="keywords" content="图算法, BFS, DFS, Dijkstra, 拓扑排序, 算法可视化">
+  <meta property="og:title" content="图算法可视化">
+  <meta property="og:description" content="交互式图算法可视化，演示 BFS、DFS、Dijkstra 最短路径和拓扑排序">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg-primary:#080b12;--bg-card:#0f1319;--bg-elevated:#161c26;--bg-input:#0c1018;
+      --border:#1e2a3a;--border-hover:#2d4a6f;--text-primary:#e8edf5;--text-secondary:#7d8da0;
+      --text-muted:#4a5568;--accent-blue:#4da3ff;--accent-green:#36d986;--accent-purple:#b07aff;
+      --accent-orange:#ff9f43;--accent-red:#ff5c6c;--accent-cyan:#22d3ee;--accent-pink:#f472b6;
+      --glow-blue:rgba(77,163,255,0.15);--glow-green:rgba(54,217,134,0.12);--glow-purple:rgba(176,122,255,0.12);
+      --radius:14px;--radius-sm:8px;
+    }
+    body{
+      font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg-primary);
+      color:var(--text-primary);height:100vh;display:flex;flex-direction:column;overflow:hidden;
+      font-size:13px;position:relative
+    }
+    body::before{
+      content:'';position:fixed;inset:0;
+      background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(54,217,134,0.04),transparent 70%);
+      pointer-events:none;z-index:0
+    }
+    header{
+      padding:12px 20px;background:var(--bg-card);border-bottom:1px solid var(--border);
+      display:flex;align-items:center;justify-content:center;gap:14px;flex-shrink:0;position:relative;z-index:1
+    }
+    header h1{
+      font-size:17px;font-weight:700;
+      background:linear-gradient(135deg,var(--accent-green),var(--accent-cyan));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
+    }
+    .tag{font-size:.68rem;background:var(--bg-elevated);color:var(--text-secondary);padding:3px 12px;border-radius:20px;border:1px solid var(--border);letter-spacing:.3px}
+    .main{display:flex;flex:1;overflow:hidden;position:relative;z-index:1}
+    .left{width:260px;min-width:260px;background:var(--bg-card);border-right:1px solid var(--border);overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+    .sec{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:10px;transition:border-color .2s}
+    .sec:hover{border-color:var(--border-hover)}
+    .sec-t{font-size:.65rem;text-transform:uppercase;letter-spacing:1.4px;color:var(--text-muted);margin-bottom:8px;font-weight:600;display:flex;align-items:center;gap:8px}
+    .sec-t::before{content:'';width:3px;height:12px;border-radius:2px;background:var(--accent-green)}
+    .preset-list{display:flex;flex-direction:column;gap:4px}
+    .pbtn{background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;text-align:left;transition:all .15s;display:flex;gap:8px;align-items:center}
+    .pbtn:hover{border-color:var(--border-hover);background:var(--bg-elevated)}
+    .pbtn.active{border-color:var(--accent-green);background:rgba(54,217,134,0.06);box-shadow:inset 3px 0 0 var(--accent-green),0 0 12px var(--glow-green)}
+    .pbtn .pn{font-weight:600;display:block;font-size:11px}
+    .pbtn .pd{color:var(--text-muted);font-size:9px;margin-top:2px}
+    .btns{display:flex;gap:5px;margin-top:4px}
+    .btn{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);padding:7px 0;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;transition:all .15s;flex:1;text-align:center}
+    .btn:hover{border-color:var(--border-hover);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.3)}
+    .btn.pri{background:linear-gradient(135deg,var(--accent-green),#059669);color:#fff;font-weight:600;border-color:var(--accent-green);box-shadow:0 2px 10px var(--glow-green)}
+    .btn.pri:hover{box-shadow:0 4px 16px var(--glow-green)}
+    input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:var(--border);outline:none;margin:4px 0}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent-green);cursor:pointer;border:2px solid var(--bg-card)}
+    .slider-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text-secondary)}
+    .right{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:14px;gap:10px}
+    .canvas-area{flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+    canvas{display:block}
+    .info-row{display:flex;gap:8px;flex-shrink:0}
+    .info-card{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;min-width:0}
+    .info-card .ic-t{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:3px}
+    .info-card .ic-v{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent-green)}
+    .stat-cards{display:flex;gap:8px;flex-shrink:0}
+    .stc{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;text-align:center}
+    .stc .sv{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--accent-green)}
+    .stc .sl{font-size:9px;color:var(--text-muted);margin-top:2px}
+    @media(max-width:900px){
+      .main{flex-direction:column}
+      .left{width:100%;min-width:0;flex-direction:row;flex-wrap:wrap;gap:6px;padding:8px;max-height:140px}
+      .left .sec{flex:1;min-width:120px;padding:8px}
+    }
+    ::-webkit-scrollbar{width:6px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.14)}
+  </style>
+</head>
+<body>
+<header><h1>图算法可视化</h1><span class="tag">算法</span></header>
+<div class="main">
+  <div class="left">
+    <div class="sec">
+      <div class="sec-t">图算法</div>
+      <div class="preset-list" id="presetList">
+        <button class="pbtn active" data-id="bfs"><span><span class="pn">BFS 广度优先</span><span class="pd">队列、层级遍历、最短非加权路径</span></span></button>
+        <button class="pbtn" data-id="dfs"><span><span class="pn">DFS 深度优先</span><span class="pd">栈/递归、回溯、连通分量</span></span></button>
+        <button class="pbtn" data-id="dijkstra"><span><span class="pn">Dijkstra 最短路径</span><span class="pd">贪心、优先队列、加权图</span></span></button>
+        <button class="pbtn" data-id="topo"><span><span class="pn">拓扑排序</span><span class="pd">入度表、Kahn 算法、DAG</span></span></button>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-t">控制</div>
+      <div class="btns"><button class="btn pri" id="btnPlay">▶ 开始</button><button class="btn" id="btnPause">⏸ 暂停</button></div>
+      <div class="btns" style="margin-top:5px"><button class="btn" id="btnStep">⏮ 单步</button><button class="btn" id="btnReset">↺ 重置</button></div>
+      <div class="slider-label" style="margin-top:8px"><span>速度</span><span id="speedVal">快速</span></div>
+      <input type="range" id="speedSlider" min="1" max="4" value="3">
+    </div>
+  </div>
+  <div class="right">
+    <div class="canvas-area"><canvas id="cv"></canvas></div>
+    <div class="stat-cards">
+      <div class="stc"><div class="sv" id="stepCounter">0 / 0</div><div class="sl">步骤</div></div>
+      <div class="stc"><div class="sv" id="visitedCount">0</div><div class="sl">已访问节点</div></div>
+      <div class="stc"><div class="sv" id="algoName">BFS</div><div class="sl">当前算法</div></div>
+    </div>
+    <div class="info-row">
+      <div class="info-card"><div class="ic-t">时间复杂度</div><div class="ic-v" id="infoTime">-</div></div>
+      <div class="info-card"><div class="ic-t">空间复杂度</div><div class="ic-v" id="infoSpace">-</div></div>
+      <div class="info-card"><div class="ic-t">数据结构</div><div class="ic-v" id="infoDS">-</div></div>
+      <div class="info-card"><div class="ic-t">典型应用</div><div class="ic-v" id="infoApp">-</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="shared/theme.js"></script>
+<script src="shared/nav.js"></script>
+<script src="shared/analytics.js"></script>
+<script>
+(function(){
+  var cv=document.getElementById('cv'),ctx=cv.getContext('2d'),W=760,H=480;
+  var presetList=document.getElementById('presetList'),btnPlay=document.getElementById('btnPlay');
+  var btnPause=document.getElementById('btnPause'),btnStep=document.getElementById('btnStep');
+  var btnReset=document.getElementById('btnReset'),speedSlider=document.getElementById('speedSlider');
+  var speedVal=document.getElementById('speedVal'),stepCounter=document.getElementById('stepCounter');
+  var visitedCount=document.getElementById('visitedCount'),algoName=document.getElementById('algoName');
+  var infoTime=document.getElementById('infoTime'),infoSpace=document.getElementById('infoSpace');
+  var infoDS=document.getElementById('infoDS'),infoApp=document.getElementById('infoApp');
+
+  var currentPreset='bfs',steps=[],stepIdx=0,playing=false,timer=null;
+
+  function getC(){
+    var s=getComputedStyle(document.documentElement);
+    return{bg:s.getPropertyValue('--bg-primary').trim(),card:s.getPropertyValue('--bg-card').trim(),
+      elevated:s.getPropertyValue('--bg-elevated').trim(),border:s.getPropertyValue('--border').trim(),
+      text:s.getPropertyValue('--text-primary').trim(),text2:s.getPropertyValue('--text-secondary').trim(),
+      text3:s.getPropertyValue('--text-muted').trim(),blue:s.getPropertyValue('--accent-blue').trim(),
+      green:s.getPropertyValue('--accent-green').trim(),purple:s.getPropertyValue('--accent-purple').trim(),
+      orange:s.getPropertyValue('--accent-orange').trim(),red:s.getPropertyValue('--accent-red').trim(),
+      cyan:s.getPropertyValue('--accent-cyan').trim()};
+  }
+  function hexA(hex,a){var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return'rgba('+r+','+g+','+b+','+a+')';}
+  var C=getC();
+
+  function rbox(x,y,w,h,fill,stroke,r,c){c=c||ctx;c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h-r);c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);c.lineTo(x+r,y+h);c.quadraticCurveTo(x,y+h,x,y+h-r);c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();if(fill){c.fillStyle=fill;c.fill();}if(stroke){c.strokeStyle=stroke;c.lineWidth=1.5;c.stroke();}}
+  function txt(x,y,text,size,color,align,bl){ctx.save();ctx.font=(size||12)+'px Inter,system-ui,sans-serif';ctx.fillStyle=color||C.text;ctx.textAlign=align||'center';ctx.textBaseline=bl||'middle';ctx.fillText(text,x,y);ctx.restore();}
+  function txtM(x,y,text,size,color,align,bl){ctx.save();ctx.font=(size||10)+'px JetBrains Mono,monospace';ctx.fillStyle=color||C.text2;ctx.textAlign=align||'center';ctx.textBaseline=bl||'middle';ctx.fillText(text,x,y);ctx.restore();}
+
+  // Graph: 10 nodes with fixed positions
+  var nodes=[
+    {id:0,label:'A',x:380,y:30},{id:1,label:'B',x:220,y:120},{id:2,label:'C',x:540,y:120},
+    {id:3,label:'D',x:100,y:220},{id:4,label:'E',x:300,y:220},{id:5,label:'F',x:480,y:220},
+    {id:6,label:'G',x:660,y:220},{id:7,label:'H',x:160,y:340},{id:8,label:'I',x:400,y:340},
+    {id:9,label:'J',x:600,y:340}
+  ];
+  var edges=[
+    {from:0,to:1,w:4},{from:0,to:2,w:2},{from:1,to:3,w:5},{from:1,to:4,w:1},
+    {from:2,to:4,w:8},{from:2,to:5,w:3},{from:2,to:6,w:7},{from:3,to:7,w:2},
+    {from:4,to:5,w:6},{from:4,to:8,w:4},{from:5,to:6,w:1},{from:5,to:8,w:3},
+    {from:6,to:9,w:5},{from:7,to:8,w:3},{from:8,to:9,w:2}
+  ];
+
+  var state={visited:[],current:null,queue:[],distances:{},event:'',order:[]};
+
+  function draw(){
+    C=getC();cv.width=W;cv.height=H;ctx.clearRect(0,0,W,H);
+    txt(W/2,10,'图算法可视化',14,C.text);
+
+    // Draw edges
+    edges.forEach(function(e){
+      var f=nodes[e.from],t=nodes[e.to];
+      var col=C.border;
+      if(state.order.length>0){
+        var fi=state.order.indexOf(e.from),ti=state.order.indexOf(e.to);
+        if(fi!==-1&&ti!==-1&&Math.abs(ti-fi)===1)col=C.orange;
+      }
+      ctx.save();ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(f.x,f.y);ctx.lineTo(t.x,t.y);ctx.stroke();ctx.restore();
+      if(e.w!==undefined&&currentPreset==='dijkstra'){
+        txt((f.x+t.x)/2,(f.y+t.y)/2-6,e.w+'',9,C.orange);
+      }
+    });
+
+    // Draw nodes
+    nodes.forEach(function(n){
+      var s=state.visited.indexOf(n.id)!==-1?'visited':state.current===n.id?'current':'';
+      var fill=s==='current'?hexA(C.orange,0.2):s==='visited'?hexA(C.green,0.1):hexA(C.card,0.6);
+      var stroke=s==='current'?C.orange:s==='visited'?C.green:C.border;
+      ctx.beginPath();ctx.arc(n.x,n.y,20,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();
+      txtM(n.x,n.y,n.label,13,s==='current'?C.orange:s==='visited'?C.green:C.text);
+      if(currentPreset==='topo')txt(n.x,n.y-28,'入度:'+(state.indegrees?state.indegrees[n.id]:'?'),9,C.text3);
+    });
+
+    if(state.event)txt(W/2,H-20,state.event,12,C.text);
+    visitedCount.textContent=state.visited.length+'';
+  }
+
+  function bfsSteps(){
+    var s=[];
+    s.push({t:'event',e:'BFS: 从 A 开始，使用队列按层遍历'});
+    s.push({t:'visit',node:0});s.push({t:'event',e:'访问 A，入队 → 队列: [A]'});
+    s.push({t:'visit',node:1});s.push({t:'visit',node:2});s.push({t:'event',e:'A 的邻居 B、C 入队 → 队列: [B, C]'});
+    s.push({t:'current',node:1});s.push({t:'event',e:'出队 B，访问其邻居'});
+    s.push({t:'visit',node:3});s.push({t:'visit',node:4});s.push({t:'event',e:'B 的邻居 D、E 入队 → 队列: [C, D, E]'});
+    s.push({t:'current',node:2});s.push({t:'event',e:'出队 C，访问其邻居'});
+    s.push({t:'visit',node:5});s.push({t:'visit',node:6});s.push({t:'event',e:'C 的邻居 F、G 入队 → 队列: [D, E, F, G]'});
+    s.push({t:'current',node:3});s.push({t:'visit',node:7});s.push({t:'current',node:4});s.push({t:'visit',node:8});
+    s.push({t:'current',node:5});s.push({t:'current',node:6});s.push({t:'visit',node:9});
+    s.push({t:'current',node:7});s.push({t:'current',node:8});s.push({t:'current',node:9});
+    s.push({t:'event',e:'遍历完成! BFS 顺序: A → B → C → D → E → F → G → H → I → J'});
+    s.push({t:'done',e:'BFS: O(V+E)，适合最短路径 (非加权)、层级遍历、社交网络好友推荐'});
+    return s;
+  }
+
+  function dfsSteps(){
+    var s=[];
+    s.push({t:'event',e:'DFS: 从 A 开始，使用栈/递归深度优先遍历'});
+    s.push({t:'visit',node:0});s.push({t:'event',e:'访问 A，递归进入 B'});
+    s.push({t:'visit',node:1});s.push({t:'event',e:'访问 B，递归进入 D'});
+    s.push({t:'visit',node:3});s.push({t:'event',e:'访问 D，递归进入 H'});
+    s.push({t:'visit',node:7});s.push({t:'event',e:'访问 H (无未访问邻居)，回溯到 D'});
+    s.push({t:'current',node:3});s.push({t:'event',e:'D 无其他邻居，回溯到 B → 访问 E'});
+    s.push({t:'visit',node:4});s.push({t:'event',e:'B 无其他邻居，回溯到 A → 访问 C'});
+    s.push({t:'visit',node:2});s.push({t:'visit',node:5});s.push({t:'visit',node:6});
+    s.push({t:'visit',node:9});s.push({t:'visit',node:8});
+    s.push({t:'event',e:'DFS 顺序: A → B → D → H → E → C → F → G → J → I'});
+    s.push({t:'done',e:'DFS: O(V+E)，适合连通分量检测、拓扑排序、迷宫求解、回溯问题'});
+    return s;
+  }
+
+  function dijkstraSteps(){
+    var s=[];
+    var d={0:0,1:4,2:2,3:9,4:5,5:5,6:9,7:11,8:8,9:10};
+    s.push({t:'event',e:'Dijkstra: 从 A 开始计算到所有节点的最短路径 (加权)'});
+    s.push({t:'visit',node:0});s.push({t:'event',e:'A: dist=0，更新邻居 B(dist=4)、C(dist=2)'});
+    s.push({t:'visit',node:2});s.push({t:'event',e:'选 C (dist=2 最小)，更新 E(dist=2+8)、F(dist=2+3)'});
+    s.push({t:'visit',node:1});s.push({t:'event',e:'选 B (dist=4)，更新 D(dist=4+5)、E(dist=min(10,4+1)'});
+    s.push({t:'visit',node:5});s.push({t:'event',e:'选 F (dist=5)，更新 G(dist=5+1)、I(dist=5+3)'});
+    s.push({t:'visit',node:4});s.push({t:'event',e:'选 E (dist=5)，更新 I(dist=min(8,5+4)'});
+    s.push({t:'visit',node:6});s.push({t:'visit',node:8});s.push({t:'visit',node:9});
+    s.push({t:'visit',node:3});s.push({t:'visit',node:7});
+    s.push({t:'event',e:'Dijkstra 完成! A→J 最短路径: A→C→F→G→J (dist=10)'});
+    s.push({t:'done',e:'Dijkstra: O((V+E)logV) 优先队列，非负权图，GPS 导航 / 网络路由'});
+    return s;
+  }
+
+  function topoSteps(){
+    var s=[];
+    s.push({t:'event',e:'拓扑排序 (Kahn 算法): DAG 有向无环图 → 按依赖关系排序'});
+    s.push({t:'event',e:'各节点入度: A=0, B=1, C=1, D=1, E=2, F=1, G=1, H=1, I=2, J=2'});
+    s.push({t:'visit',node:0});s.push({t:'event',e:'选入度 0 的 A → 移除 A 及出边 → B 入度-1, C 入度-1'});
+    s.push({t:'visit',node:1});s.push({t:'event',e:'B 入度变 0 → 选 B → D 入度-1, E 入度-1'});
+    s.push({t:'visit',node:2});s.push({t:'event',e:'只有 C 入度=0 → 选 C → F 入度-1, G 入度-1'});
+    s.push({t:'visit',node:3});s.push({t:'visit',node:4});s.push({t:'visit',node:5});
+    s.push({t:'visit',node:6});s.push({t:'event',e:'继续移除入度 0 的节点 → 推进拓扑顺序'});
+    s.push({t:'visit',node:7});s.push({t:'visit',node:8});s.push({t:'visit',node:9});
+    s.push({t:'event',e:'拓扑序列: A → B → C → D → E → F → G → H → I → J'});
+    s.push({t:'done',e:'拓扑排序: O(V+E)，适合构建系统依赖、课程安排、编译顺序'});
+    return s;
+  }
+
+  var presetFns={bfs:bfsSteps,dfs:dfsSteps,dijkstra:dijkstraSteps,topo:topoSteps};
+  var algoInfo={
+    bfs:{time:'O(V+E)',space:'O(V)',ds:'队列 Queue',app:'最短路径、社交推荐'},
+    dfs:{time:'O(V+E)',space:'O(V)',ds:'栈/递归 Stack',app:'连通分量、迷宫求解'},
+    dijkstra:{time:'O((V+E)logV)',space:'O(V)',ds:'优先队列 PriorityQueue',app:'GPS 导航、网络路由'},
+    topo:{time:'O(V+E)',space:'O(V)',ds:'队列 + 入度表',app:'构建系统、课程安排'}
+  };
+
+  function applyStep(step){
+    if(!step)return;
+    if(step.t==='event'){state.event=step.e;}
+    else if(step.t==='visit'){if(state.visited.indexOf(step.node)===-1){state.visited.push(step.node);state.order.push(step.node);}}
+    else if(step.t==='current'){state.current=step.node;}
+    else if(step.t==='done'){state.event=step.e;}
+    draw();stepIdx++;stepCounter.textContent=stepIdx+' / '+(steps.length-1);
+  }
+
+  function initProblem(id){
+    currentPreset=id;stepIdx=0;steps=presetFns[id]();
+    state={visited:[],current:null,queue:[],distances:{},event:'',order:[],indegrees:null};
+    var inf=algoInfo[id];algoName.textContent=id.toUpperCase();
+    infoTime.textContent=inf.time;infoSpace.textContent=inf.space;infoDS.textContent=inf.ds;infoApp.textContent=inf.app;
+    visitedCount.textContent='0';stepCounter.textContent='0 / '+(steps.length-1);
+    cv.width=W;cv.height=H;draw();
+  }
+
+  function pause(){playing=false;if(timer){clearTimeout(timer);timer=null;}btnPlay.textContent='▶ 继续';}
+  function play(){if(playing||stepIdx>=steps.length)return;playing=true;btnPlay.textContent='▶ 运行中';scheduleNext();}
+  function scheduleNext(){
+    if(!playing||stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    applyStep(steps[stepIdx]);if(stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    var v=parseInt(speedSlider.value);timer=setTimeout(scheduleNext,[500,250,120,40][v-1]);
+  }
+  function doStep(){if(playing){pause();return;}if(stepIdx<steps.length)applyStep(steps[stepIdx]);if(stepIdx>=steps.length)btnPlay.textContent='✓ 完成';}
+  function resetAll(){pause();btnPlay.textContent='▶ 开始';initProblem(currentPreset);}
+
+  presetList.addEventListener('click',function(e){
+    var btn=e.target.closest('.pbtn');if(!btn)return;var id=btn.getAttribute('data-id');
+    if(id===currentPreset)return;
+    presetList.querySelectorAll('.pbtn').forEach(function(b){b.classList.remove('active');});
+    btn.classList.add('active');pause();btnPlay.textContent='▶ 开始';initProblem(id);
+  });
+  btnPlay.addEventListener('click',function(){if(stepIdx>=steps.length)resetAll();play();});
+  btnPause.addEventListener('click',function(){pause();});
+  btnStep.addEventListener('click',function(){doStep();});
+  btnReset.addEventListener('click',function(){resetAll();});
+  speedSlider.addEventListener('input',function(){speedVal.textContent=['慢速','中速','快速','极快'][parseInt(speedSlider.value)-1];});
+  speedVal.textContent='快速';initProblem('bfs');
+  new MutationObserver(function(){draw();}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','style']});
+})();
+</script>
+</body>
+</html>

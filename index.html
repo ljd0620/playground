@@ -5,10 +5,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Playground 导航 — 交互式技术概念可视化</title>
-  <meta name="description" content="交互式技术概念可视化工具集，涵盖 AI、Spring、Redis、MySQL、Kafka、Java 并发、高可用架构、安全等 34 个主题的 Playground。">
+  <meta name="description" content="交互式技术概念可视化工具集，涵盖 AI、Spring、Redis、MySQL、Kafka、Java 并发、高可用架构、安全等 40 个主题的 Playground。">
   <meta name="keywords" content="playground,交互式学习,RAG,Kafka,Redis,MySQL,Spring Boot,Java并发,高可用,AI Agent">
   <meta property="og:title" content="Playground 导航 — 交互式技术概念可视化">
-  <meta property="og:description" content="34 个交互式技术概念可视化 Playground，涵盖 AI、中间件、数据库、架构等核心主题。">
+  <meta property="og:description" content="40 个交互式技术概念可视化 Playground，涵盖 AI、中间件、数据库、架构等核心主题。">
   <meta property="og:type" content="website">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,7 +41,7 @@
       --accent-cyan: #22d3ee;
       --accent-pink: #f472b6;
       --glow-blue: rgba(77, 163, 255, 0.15);
-      --glow-green: rgba(54, 217, 134, 0.12);
+      --glow-green: rgba(54, 217, 140, 0.12);
       --glow-purple: rgba(176, 122, 255, 0.12);
       --radius: 18px;
       --radius-sm: 12px;
@@ -69,7 +69,7 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: radial-gradient(ellipse 120% 70% at 50% -30%, rgba(77, 163, 255, 0.1), transparent 60%), radial-gradient(ellipse 80% 50% at 80% 0%, rgba(176, 122, 255, 0.07), transparent 50%), radial-gradient(ellipse 60% 40% at 20% 10%, rgba(54, 217, 134, 0.04), transparent 50%);
+      background: radial-gradient(ellipse 120% 70% at 50% -30%, rgba(77, 163, 255, 0.1), transparent 60%), radial-gradient(ellipse 80% 50% at 80% 0%, rgba(176, 122, 255, 0.07), transparent 50%), radial-gradient(ellipse 60% 40% at 20% 10%, rgba(54, 217, 140, 0.04), transparent 50%);
       pointer-events: none;
       z-index: 0;
       transition: opacity 0.3s
@@ -371,7 +371,7 @@
 
     .cards {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
       gap: 20px
     }
 
@@ -448,9 +448,9 @@
     }
 
     .tag-spring {
-      background: rgba(54, 217, 134, 0.1);
+      background: rgba(54, 217, 140, 0.1);
       color: var(--accent-green);
-      border-color: rgba(54, 217, 134, 0.2)
+      border-color: rgba(54, 217, 140, 0.2)
     }
 
     .tag-redis {
@@ -478,9 +478,9 @@
     }
 
     .tag-arch {
-      background: rgba(34, 211, 238, 0.1);
+      background: rgba(40, 211, 238, 0.1);
       color: var(--accent-cyan);
-      border-color: rgba(34, 211, 238, 0.2)
+      border-color: rgba(40, 211, 238, 0.2)
     }
 
     .tag-sec {
@@ -490,9 +490,9 @@
     }
 
     .tag-algo {
-      background: rgba(54, 217, 134, 0.1);
+      background: rgba(54, 217, 140, 0.1);
       color: var(--accent-green);
-      border-color: rgba(54, 217, 134, 0.2)
+      border-color: rgba(54, 217, 140, 0.2)
     }
 
     footer {
@@ -723,7 +723,7 @@
             <rect class="logo-bg" width="88" height="88" rx="22" fill="url(#logo-bg)" stroke="url(#logo-grad)"
               stroke-width="1.5" />
             <g class="logo-bars" filter="url(#glow)">
-              <rect x="18" y="28" width="10" height="34" rx="3" fill="url(#logo-grad)" opacity="0.9" />
+              <rect x="18" y="28" width="10" height="40" rx="3" fill="url(#logo-grad)" opacity="0.9" />
               <rect x="33" y="36" width="10" height="26" rx="3" fill="url(#logo-grad)" opacity="0.7" />
               <rect x="48" y="32" width="10" height="30" rx="3" fill="url(#logo-grad)" opacity="0.8" />
               <rect x="63" y="24" width="10" height="38" rx="3" fill="url(#logo-grad)" opacity="0.95" />
@@ -742,7 +742,7 @@
       </div>
       <p>交互式技术概念可视化工具集，通过动画与模拟深入理解核心原理</p>
       <div class="hero-stats">
-        <div class="hero-stat"><span class="hero-stat-num">34</span>个主题</div>
+        <div class="hero-stat"><span class="hero-stat-num">40</span>个主题</div>
         <div class="hero-stat"><span class="hero-stat-num">9</span>个类目</div>
         <div class="hero-stat"><span class="hero-stat-num">0</span>依赖</div>
       </div>
@@ -839,6 +839,11 @@
             <div class="card-desc">缓存更新策略、双写一致性、延迟双删方案</div>
             <span class="card-tag tag-redis">Redis</span>
           </a>
+          <a class="card" href="redis-stream.html" data-tag="redis">
+            <div class="card-name">Redis Stream 消息队列</div>
+            <div class="card-desc">消息发布消费、消费者组、ACK 确认与消息回溯</div>
+            <span class="card-tag tag-redis">Redis</span>
+          </a>
         </div>
       </div>
 
@@ -853,6 +858,16 @@
           <a class="card" href="mysql-isolation.html" data-tag="mysql">
             <div class="card-name">MySQL 事务隔离</div>
             <div class="card-desc">四种隔离级别、MVCC 机制、幻读与间隙锁</div>
+            <span class="card-tag tag-mysql">MySQL</span>
+          </a>
+          <a class="card" href="mysql-lock.html" data-tag="mysql">
+            <div class="card-name">MySQL 锁机制</div>
+            <div class="card-desc">行锁/表锁/间隙锁/死锁检测、加锁范围可视化</div>
+            <span class="card-tag tag-mysql">MySQL</span>
+          </a>
+          <a class="card" href="mysql-index.html" data-tag="mysql">
+            <div class="card-name">MySQL 索引结构</div>
+            <div class="card-desc">B+Tree 插入分裂查找、聚簇索引 vs 二级索引</div>
             <span class="card-tag tag-mysql">MySQL</span>
           </a>
         </div>
@@ -905,6 +920,11 @@
           <a class="card" href="jvm-gc.html" data-tag="java">
             <div class="card-name">JVM 垃圾回收</div>
             <div class="card-desc">GC 算法、堆内存结构、对象晋升与回收过程</div>
+            <span class="card-tag tag-java">Java</span>
+          </a>
+          <a class="card" href="hashmap.html" data-tag="java">
+            <div class="card-name">HashMap 原理</div>
+            <div class="card-desc">哈希冲突、链表转红黑树、扩容 rehash 过程</div>
             <span class="card-tag tag-java">Java</span>
           </a>
         </div>
@@ -969,6 +989,11 @@
             <div class="card-desc">跨站脚本攻击与跨站请求伪造的原理与防御</div>
             <span class="card-tag tag-sec">安全</span>
           </a>
+          <a class="card" href="jwt-oauth2.html" data-tag="sec">
+            <div class="card-name">JWT & OAuth2</div>
+            <div class="card-desc">JWT 签发验证、OAuth2 授权码流程、PKCE 扩展</div>
+            <span class="card-tag tag-sec">安全</span>
+          </a>
         </div>
       </div>
       <div class="group" data-group="algo">
@@ -987,6 +1012,11 @@
           <a class="card" href="binary-tree.html" data-tag="algo">
             <div class="card-name">二叉树遍历</div>
             <div class="card-desc">前序、中序、后序、层序遍历的交互式动画演示与节点访问过程可视化</div>
+            <span class="card-tag tag-algo">算法</span>
+          </a>
+          <a class="card" href="graph-algorithm.html" data-tag="algo">
+            <div class="card-name">图算法可视化</div>
+            <div class="card-desc">BFS/DFS 遍历、Dijkstra 最短路径、拓扑排序</div>
             <span class="card-tag tag-algo">算法</span>
           </a>
         </div>

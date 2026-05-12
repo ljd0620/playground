@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MySQL 锁机制可视化</title>
+  <meta name="description" content="交互式 MySQL 锁机制可视化，演示行锁、表锁、间隙锁和死锁检测的完整过程">
+  <meta name="keywords" content="MySQL, 锁, 行锁, 表锁, 间隙锁, 死锁, InnoDB">
+  <meta property="og:title" content="MySQL 锁机制可视化">
+  <meta property="og:description" content="交互式 MySQL 锁机制可视化，演示行锁、表锁、间隙锁和死锁检测">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg-primary:#080b12;--bg-card:#0f1319;--bg-elevated:#161c26;--bg-input:#0c1018;
+      --border:#1e2a3a;--border-hover:#2d4a6f;--text-primary:#e8edf5;--text-secondary:#7d8da0;
+      --text-muted:#4a5568;--accent-blue:#4da3ff;--accent-green:#36d986;--accent-purple:#b07aff;
+      --accent-orange:#ff9f43;--accent-red:#ff5c6c;--accent-cyan:#22d3ee;--accent-pink:#f472b6;
+      --glow-blue:rgba(77,163,255,0.15);--glow-green:rgba(54,217,134,0.12);--glow-purple:rgba(176,122,255,0.12);
+      --radius:14px;--radius-sm:8px;
+    }
+    body{
+      font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg-primary);
+      color:var(--text-primary);height:100vh;display:flex;flex-direction:column;overflow:hidden;
+      font-size:13px;position:relative
+    }
+    body::before{
+      content:'';position:fixed;inset:0;
+      background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(255,159,67,0.04),transparent 70%);
+      pointer-events:none;z-index:0
+    }
+    header{
+      padding:12px 20px;background:var(--bg-card);border-bottom:1px solid var(--border);
+      display:flex;align-items:center;justify-content:center;gap:14px;flex-shrink:0;position:relative;z-index:1
+    }
+    header h1{
+      font-size:17px;font-weight:700;
+      background:linear-gradient(135deg,var(--accent-orange),var(--accent-red));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
+    }
+    .tag{font-size:.68rem;background:var(--bg-elevated);color:var(--text-secondary);padding:3px 12px;border-radius:20px;border:1px solid var(--border);letter-spacing:.3px}
+    .main{display:flex;flex:1;overflow:hidden;position:relative;z-index:1}
+    .left{width:260px;min-width:260px;background:var(--bg-card);border-right:1px solid var(--border);overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+    .sec{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:10px;transition:border-color .2s}
+    .sec:hover{border-color:var(--border-hover)}
+    .sec-t{font-size:.65rem;text-transform:uppercase;letter-spacing:1.4px;color:var(--text-muted);margin-bottom:8px;font-weight:600;display:flex;align-items:center;gap:8px}
+    .sec-t::before{content:'';width:3px;height:12px;border-radius:2px;background:var(--accent-orange)}
+    .preset-list{display:flex;flex-direction:column;gap:4px}
+    .pbtn{background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;text-align:left;transition:all .15s;display:flex;gap:8px;align-items:center}
+    .pbtn:hover{border-color:var(--border-hover);background:var(--bg-elevated)}
+    .pbtn.active{border-color:var(--accent-orange);background:rgba(255,159,67,0.06);box-shadow:inset 3px 0 0 var(--accent-orange),0 0 12px rgba(255,159,67,0.12)}
+    .pbtn .pn{font-weight:600;display:block;font-size:11px}
+    .pbtn .pd{color:var(--text-muted);font-size:9px;margin-top:2px}
+    .btns{display:flex;gap:5px;margin-top:4px}
+    .btn{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);padding:7px 0;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;transition:all .15s;flex:1;text-align:center}
+    .btn:hover{border-color:var(--border-hover);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.3)}
+    .btn.pri{background:linear-gradient(135deg,var(--accent-orange),#b45309);color:#fff;font-weight:600;border-color:var(--accent-orange);box-shadow:0 2px 10px rgba(255,159,67,0.2)}
+    .btn.pri:hover{box-shadow:0 4px 16px rgba(255,159,67,0.35)}
+    input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:var(--border);outline:none;margin:4px 0}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent-orange);cursor:pointer;border:2px solid var(--bg-card)}
+    .slider-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text-secondary)}
+    .right{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:14px;gap:10px}
+    .canvas-area{flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+    canvas{display:block}
+    .info-row{display:flex;gap:8px;flex-shrink:0}
+    .info-card{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;min-width:0}
+    .info-card .ic-t{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:3px}
+    .info-card .ic-v{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent-orange)}
+    .stat-cards{display:flex;gap:8px;flex-shrink:0}
+    .stc{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;text-align:center}
+    .stc .sv{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--accent-orange)}
+    .stc .sl{font-size:9px;color:var(--text-muted);margin-top:2px}
+    @media(max-width:900px){
+      .main{flex-direction:column}
+      .left{width:100%;min-width:0;flex-direction:row;flex-wrap:wrap;gap:6px;padding:8px;max-height:140px}
+      .left .sec{flex:1;min-width:120px;padding:8px}
+    }
+    ::-webkit-scrollbar{width:6px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.14)}
+  </style>
+</head>
+<body>
+<header><h1>MySQL 锁机制可视化</h1><span class="tag">MySQL</span></header>
+<div class="main">
+  <div class="left">
+    <div class="sec">
+      <div class="sec-t">锁场景</div>
+      <div class="preset-list" id="presetList">
+        <button class="pbtn active" data-id="rowlock"><span><span class="pn">行锁 (Record Lock)</span><span class="pd">SELECT FOR UPDATE 精确锁定</span></span></button>
+        <button class="pbtn" data-id="tablelock"><span><span class="pn">表锁 (Table Lock)</span><span class="pd">ALTER TABLE / LOCK TABLES</span></span></button>
+        <button class="pbtn" data-id="gaplock"><span><span class="pn">间隙锁 (Gap Lock)</span><span class="pd">REPEATABLE READ 下幻读防护</span></span></button>
+        <button class="pbtn" data-id="deadlock"><span><span class="pn">死锁 (Deadlock)</span><span class="pd">循环等待 → 检测回滚</span></span></button>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-t">控制</div>
+      <div class="btns"><button class="btn pri" id="btnPlay">▶ 开始</button><button class="btn" id="btnPause">⏸ 暂停</button></div>
+      <div class="btns" style="margin-top:5px"><button class="btn" id="btnStep">⏮ 单步</button><button class="btn" id="btnReset">↺ 重置</button></div>
+      <div class="slider-label" style="margin-top:8px"><span>速度</span><span id="speedVal">快速</span></div>
+      <input type="range" id="speedSlider" min="1" max="4" value="3">
+    </div>
+  </div>
+  <div class="right">
+    <div class="canvas-area"><canvas id="cv"></canvas></div>
+    <div class="stat-cards">
+      <div class="stc"><div class="sv" id="stepCounter">0 / 0</div><div class="sl">步骤</div></div>
+      <div class="stc"><div class="sv" id="txnState">-</div><div class="sl">当前事务</div></div>
+      <div class="stc"><div class="sv" id="lockTypeText">-</div><div class="sl">锁类型</div></div>
+    </div>
+    <div class="info-row">
+      <div class="info-card"><div class="ic-t">隔离级别</div><div class="ic-v" id="infoIsolation">-</div></div>
+      <div class="info-card"><div class="ic-t">锁模式</div><div class="ic-v" id="infoMode">-</div></div>
+      <div class="info-card"><div class="ic-t">冲突检测</div><div class="ic-v" id="infoConflict">-</div></div>
+      <div class="info-card"><div class="ic-t">InnoDB 特性</div><div class="ic-v" id="infoFeature">-</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="shared/theme.js"></script>
+<script src="shared/nav.js"></script>
+<script src="shared/analytics.js"></script>
+<script>
+(function(){
+  var cv=document.getElementById('cv'),ctx=cv.getContext('2d'),W=760,H=480;
+  var presetList=document.getElementById('presetList'),btnPlay=document.getElementById('btnPlay');
+  var btnPause=document.getElementById('btnPause'),btnStep=document.getElementById('btnStep');
+  var btnReset=document.getElementById('btnReset'),speedSlider=document.getElementById('speedSlider');
+  var speedVal=document.getElementById('speedVal'),stepCounter=document.getElementById('stepCounter');
+  var txnState=document.getElementById('txnState'),lockTypeText=document.getElementById('lockTypeText');
+  var infoIsolation=document.getElementById('infoIsolation'),infoMode=document.getElementById('infoMode');
+  var infoConflict=document.getElementById('infoConflict'),infoFeature=document.getElementById('infoFeature');
+
+  var currentPreset='rowlock',steps=[],stepIdx=0,playing=false,timer=null;
+
+  function getC(){
+    var s=getComputedStyle(document.documentElement);
+    return{bg:s.getPropertyValue('--bg-primary').trim(),card:s.getPropertyValue('--bg-card').trim(),
+      elevated:s.getPropertyValue('--bg-elevated').trim(),border:s.getPropertyValue('--border').trim(),
+      text:s.getPropertyValue('--text-primary').trim(),text2:s.getPropertyValue('--text-secondary').trim(),
+      text3:s.getPropertyValue('--text-muted').trim(),blue:s.getPropertyValue('--accent-blue').trim(),
+      green:s.getPropertyValue('--accent-green').trim(),purple:s.getPropertyValue('--accent-purple').trim(),
+      orange:s.getPropertyValue('--accent-orange').trim(),red:s.getPropertyValue('--accent-red').trim(),
+      cyan:s.getPropertyValue('--accent-cyan').trim(),pink:s.getPropertyValue('--accent-pink').trim()};
+  }
+  function hexA(hex,a){var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return'rgba('+r+','+g+','+b+','+a+')';}
+  var C=getC();
+
+  function rbox(x,y,w,h,fill,stroke,r,c){c=c||ctx;c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h-r);c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);c.lineTo(x+r,y+h);c.quadraticCurveTo(x,y+h,x,y+h-r);c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();if(fill){c.fillStyle=fill;c.fill();}if(stroke){c.strokeStyle=stroke;c.lineWidth=1.5;c.stroke();}}
+  function arrow(x1,y1,x2,y2,color,dashed){
+    ctx.save();ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.lineCap='round';
+    if(dashed)ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+    ctx.setLineDash([]);var ang=Math.atan2(y2-y1,x2-x1),len=8;
+    ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-len*Math.cos(ang-Math.PI/6.5),y2-len*Math.sin(ang-Math.PI/6.5));
+    ctx.lineTo(x2-len*Math.cos(ang+Math.PI/6.5),y2-len*Math.sin(ang+Math.PI/6.5));ctx.closePath();ctx.fill();ctx.restore();
+  }
+  function txt(x,y,text,size,color,align,bl){ctx.save();ctx.font=(size||12)+'px Inter,system-ui,sans-serif';ctx.fillStyle=color||C.text;ctx.textAlign=align||'center';ctx.textBaseline=bl||'middle';ctx.fillText(text,x,y);ctx.restore();}
+  function txtM(x,y,text,size,color,align,bl){ctx.save();ctx.font=(size||10)+'px JetBrains Mono,monospace';ctx.fillStyle=color||C.text2;ctx.textAlign=align||'center';ctx.textBaseline=bl||'middle';ctx.fillText(text,x,y);ctx.restore();}
+
+  // Table data: 8 rows with id, name, age
+  var rows=[
+    {id:1,name:'Alice',age:25},{id:2,name:'Bob',age:30},{id:3,name:'Carol',age:28},
+    {id:4,name:'Dave',age:35},{id:5,name:'Eve',age:22},{id:6,name:'Frank',age:40},
+    {id:7,name:'Grace',age:27},{id:8,name:'Hank',age:33}
+  ];
+  var state,currentPreset;
+
+  function initState(){state={locks:[],txnA:null,txnB:null,event:'',activeTxn:'',lockType:''};}
+  initState();
+
+  function draw(){
+    C=getC();cv.width=W;cv.height=H;ctx.clearRect(0,0,W,H);
+
+    // Table
+    var tx=220,ty=40,colW=[50,80,60,60],th=30,hdrH=28;
+    var hdrs=['id','name','age','lock'];
+    // Header
+    var cx=tx;hdrs.forEach(function(h,i){rbox(cx,ty,colW[i],hdrH,hexA(C.orange,0.12),hexA(C.orange,0.3),4);txt(cx+colW[i]/2,ty+hdrH/2,h,11,C.orange);cx+=colW[i];});
+
+    // Rows
+    rows.forEach(function(r,i){
+      var ry=ty+hdrH+4+i*th,cx2=tx;
+      var vals=[r.id+'',r.name,r.age+'',''];
+      // Check if locked
+      var lock=state.locks.find(function(l){return l.rowId===r.id;});
+      var lkCol=null;
+      if(lock&&lock.type==='row'){lkCol=C.orange;}
+      else if(lock&&lock.type==='gap'){lkCol=C.red;}
+      else if(lock&&lock.type==='table'){lkCol=C.red;}
+      else if(lock&&lock.type==='deadlock'){lkCol=hexA(C.red,0.6);}
+
+      vals.forEach(function(v,j){
+        var bg=null;
+        if(lkCol){bg=hexA(lkCol,0.1);}
+        rbox(cx2,ry,colW[j],th,bg,hexA(C.border,0.4),3);
+        var col=j===3&&lkCol?lkCol:C.text;
+        if(j===3&&lkCol)v=lock.type==='row'?'🔒':lock.type==='gap'?'⛓':lock.type==='table'?'🔐':'💀';
+        txt(cx2+colW[j]/2,ry+th/2,v,10,col);
+        cx2+=colW[j];
+      });
+    });
+
+    // Row lock gap highlight
+    var gapLock=state.locks.filter(function(l){return l.type==='gap';});
+    if(gapLock.length>0){
+      var g=gapLock[0],ri=rows.findIndex(function(r){return r.id===g.rowId;});
+      if(ri>=0){
+        var gy=ty+hdrH+4+(ri)*th-2;
+        ctx.save();ctx.strokeStyle=C.red;ctx.lineWidth=2;ctx.setLineDash([3,3]);
+        ctx.strokeRect(tx-4,gy,250,th+4);ctx.setLineDash([]);ctx.restore();
+      }
+    }
+
+    // Draw txns
+    var txaX=30,txnY=320,txnW=320,txnH=55;
+    if(state.txnA!==null){
+      var ac=state.activeTxn==='A'?C.blue:C.orange;
+      rbox(txaX,txnY,txnW,txnH,hexA(ac,0.08),hexA(ac,0.4),8);
+      txt(txaX+txnW/2,txnY+16,'事务 A',13,ac);
+      txtM(txaX+txnW/2,txnY+34,state.txnA,10,C.text2);
+    }
+    if(state.txnB!==null){
+      var bc=state.activeTxn==='B'?C.blue:C.purple;
+      rbox(txaX,txnY+70,txnW,txnH,hexA(bc,0.08),hexA(bc,0.4),8);
+      txt(txaX+txnW/2,txnY+86,'事务 B',13,bc);
+      txtM(txaX+txnW/2,txnY+104,state.txnB,10,C.text2);
+    }
+
+    // Title
+    txt(W/2,10,'MySQL 锁机制 — InnoDB',14,C.text);
+
+    // Event
+    if(state.event){
+      var warn=state.event.indexOf('⚠')!==-1||state.event.indexOf('死锁')!==-1;
+      txt(W/2,H-20,state.event,12,warn?C.red:C.text);
+    }
+
+    lockTypeText.textContent=state.lockType||'-';
+    txnState.textContent=state.activeTxn||'就绪';
+  }
+
+  function rowlockSteps(){
+    return[
+      {t:'event',e:'Txn A: BEGIN; SELECT * FROM users WHERE id=3 FOR UPDATE'},
+      {t:'txnA','sql':'SELECT ... FOR UPDATE'},{t:'lock',rowId:3,type:'row',txn:'A'},
+      {t:'event',e:'Txn A 持有 id=3 的行锁 (Record Lock)'},
+      {t:'event',e:'Txn B: 尝试 UPDATE users SET age=29 WHERE id=3 — 被阻塞!'},
+      {t:'txnB','sql':'UPDATE ... WHERE id=3 (等待中...)'},{t:'active','txn':'B'},{t:'conflict',rowId:3},
+      {t:'event',e:'⚠ Txn B 等待 Txn A 释放锁 → 锁等待超时 (innodb_lock_wait_timeout=50s)'},
+      {t:'event',e:'Txn A: COMMIT → 释放行锁'},
+      {t:'unlock',rowId:3},{t:'txnA','sql':'COMMIT'},{t:'active','txn':''},
+      {t:'event',e:'Txn B 获得锁，UPDATE 执行成功'},
+      {t:'done',e:'行锁: InnoDB 默认锁定被修改的行，并发高，粒度细'}
+    ];
+  }
+
+  function tablelockSteps(){
+    return[
+      {t:'event',e:'Txn A: LOCK TABLES users WRITE'},
+      {t:'txnA','sql':'LOCK TABLES users WRITE'},{t:'lock',rowId:0,type:'table',txn:'A'},
+      {t:'event',e:'Txn A 持有 users 表的写锁，其他会话无法读写'},
+      {t:'txnB','sql':'SELECT * FROM users (被阻塞)'},
+      {t:'active','txn':'B'},{t:'event',e:'⚠ Txn B 的 SELECT 被表锁阻塞 — 即使是只读查询!'},
+      {t:'event',e:'Txn A: UNLOCK TABLES → 释放表锁'},
+      {t:'unlock',rowId:0},{t:'active','txn':''},{t:'txnA','sql':'UNLOCK TABLES'},
+      {t:'event',e:'Txn B SELECT 恢复正常，表锁粒度大、并发度低'},
+      {t:'done',e:'表锁: MyISAM 默认使用，InnoDB 通常用行锁替代，DDL 操作会加表锁'}
+    ];
+  }
+
+  function gaplockSteps(){
+    return[
+      {t:'event',e:'REPEATABLE READ 隔离级别下，InnoDB 使用间隙锁防止幻读'},
+      {t:'txnA','sql':'SELECT * FROM users WHERE id BETWEEN 3 AND 5 FOR UPDATE'},
+      {t:'lock',rowId:3,type:'gap',txn:'A'},{t:'lock',rowId:5,type:'gap',txn:'A'},
+      {t:'event',e:'Txn A 锁定了 id∈[3,5] 的行和间隙 (Next-Key Lock)'},
+      {t:'event',e:'Txn B: INSERT INTO users VALUES (4, "Frank", 40) — 被阻塞!'},
+      {t:'txnB','sql':'INSERT INTO users VALUES (4,...) (等待)'},{t:'active','txn':'B'},
+      {t:'event',e:'⚠ id=4 在间隙范围 (3,5) 内，Txn B 无法插入 — 防止幻读!'},
+      {t:'event',e:'Txn A: COMMIT → 释放间隙锁'},
+      {t:'unlock',rowId:3},{t:'unlock',rowId:5},{t:'txnA','sql':'COMMIT'},
+      {t:'active','txn':''},{t:'txnB','sql':'INSERT 成功'},
+      {t:'done',e:'间隙锁: InnoDB REPEATABLE READ 下自动加 Next-Key Lock，防止幻读'}
+    ];
+  }
+
+  function deadlockSteps(){
+    return[
+      {t:'event',e:'Txn A: SELECT * FROM users WHERE id=3 FOR UPDATE'},
+      {t:'txnA','sql':'SELECT id=3 FOR UPDATE'},{t:'lock',rowId:3,type:'row',txn:'A'},
+      {t:'event',e:'Txn B: SELECT * FROM users WHERE id=5 FOR UPDATE'},
+      {t:'txnB','sql':'SELECT id=5 FOR UPDATE'},{t:'lock',rowId:5,type:'row',txn:'B'},
+      {t:'event',e:'Txn A: 尝试 UPDATE id=5 → 等待 Txn B 释放锁'},
+      {t:'active','txn':'A'},{t:'conflict',rowId:5},
+      {t:'event',e:'Txn B: 尝试 UPDATE id=3 → 等待 Txn A 释放锁'},
+      {t:'active','txn':'B'},{t:'conflict',rowId:3},
+      {t:'event',e:'⚠ 死锁! A 等 B，B 等 A → 循环等待 → InnoDB 检测到死锁'},
+      {t:'deadlock',rollback:'B'},
+      {t:'event',e:'InnoDB 回滚 Txn B (持有锁较少)，Txn A 继续执行'},
+      {t:'done',e:'死锁检测: InnoDB 自动检测死锁 (innodb_deadlock_detect=ON)，回滚代价小的事务'}
+    ];
+  }
+
+  var presetFns={rowlock:rowlockSteps,tablelock:tablelockSteps,gaplock:gaplockSteps,deadlock:deadlockSteps};
+  var presetInfo={
+    rowlock:{ iso:'REPEATABLE READ (默认)',mode:'Record Lock',conflict:'锁等待超时',feature:'行级锁定，高并发'},
+    tablelock:{ iso:'所有级别',mode:'Table Lock',conflict:'所有写操作阻塞',feature:'DDL / MyISAM 使用'},
+    gaplock:{ iso:'REPEATABLE READ',mode:'Gap / Next-Key Lock',conflict:'间隙内 INSERT 阻塞',feature:'防止幻读 (Phantom Read)'},
+    deadlock:{ iso:'REPEATABLE READ',mode:'Record Lock',conflict:'循环等待 → 检测回滚',feature:'innodb_deadlock_detect 自动检测'}
+  };
+
+  function applyStep(step){
+    if(!step)return;
+    if(step.t==='event'){state.event=step.e;}
+    else if(step.t==='txnA'){state.txnA=step.sql;}
+    else if(step.t==='txnB'){state.txnB=step.sql;}
+    else if(step.t==='lock'){state.locks.push({rowId:step.rowId,type:step.type,txn:step.txn});state.lockType=step.type==='table'?'Table Lock':step.type==='gap'?'Gap Lock':step.type==='deadlock'?'Deadlock':'Record Lock';}
+    else if(step.t==='unlock'){state.locks=state.locks.filter(function(l){return l.rowId!==step.rowId;});}
+    else if(step.t==='active'){state.activeTxn=step.txn;}
+    else if(step.t==='conflict'){var lk=state.locks.find(function(l){return l.rowId===step.rowId;});}
+    else if(step.t==='deadlock'){
+      state.locks=[];state.lockType='Deadlock!';
+      state.event='InnoDB: 检测到死锁 → 回滚 Txn '+step.rollback;
+      state.txnB='ROLLBACK (被 InnoDB 回滚)';state.activeTxn='';
+    }
+    else if(step.t==='done'){state.event=step.e;}
+    draw();stepIdx++;stepCounter.textContent=stepIdx+' / '+(steps.length-1);
+  }
+
+  function initProblem(id){
+    currentPreset=id;initState();stepIdx=0;steps=presetFns[id]();
+    var inf=presetInfo[id];
+    infoIsolation.textContent=inf.iso;infoMode.textContent=inf.mode;
+    infoConflict.textContent=inf.conflict;infoFeature.textContent=inf.feature;
+    txnState.textContent='就绪';lockTypeText.textContent='-';
+    stepCounter.textContent='0 / '+(steps.length-1);
+    cv.width=W;cv.height=H;draw();
+  }
+
+  function pause(){playing=false;if(timer){clearTimeout(timer);timer=null;}btnPlay.textContent='▶ 继续';}
+  function play(){if(playing||stepIdx>=steps.length)return;playing=true;btnPlay.textContent='▶ 运行中';scheduleNext();}
+  function scheduleNext(){
+    if(!playing||stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    applyStep(steps[stepIdx]);if(stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    var v=parseInt(speedSlider.value);timer=setTimeout(scheduleNext,[500,250,120,40][v-1]);
+  }
+  function doStep(){if(playing){pause();return;}if(stepIdx<steps.length)applyStep(steps[stepIdx]);if(stepIdx>=steps.length)btnPlay.textContent='✓ 完成';}
+  function resetAll(){pause();btnPlay.textContent='▶ 开始';initProblem(currentPreset);}
+
+  presetList.addEventListener('click',function(e){
+    var btn=e.target.closest('.pbtn');if(!btn)return;var id=btn.getAttribute('data-id');
+    if(id===currentPreset)return;
+    presetList.querySelectorAll('.pbtn').forEach(function(b){b.classList.remove('active');});
+    btn.classList.add('active');pause();btnPlay.textContent='▶ 开始';initProblem(id);
+  });
+  btnPlay.addEventListener('click',function(){if(stepIdx>=steps.length)resetAll();play();});
+  btnPause.addEventListener('click',function(){pause();});
+  btnStep.addEventListener('click',function(){doStep();});
+  btnReset.addEventListener('click',function(){resetAll();});
+  speedSlider.addEventListener('input',function(){speedVal.textContent=['慢速','中速','快速','极快'][parseInt(speedSlider.value)-1];});
+  speedVal.textContent='快速';initProblem('rowlock');
+  new MutationObserver(function(){draw();}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','style']});
+})();
+</script>
+</body>
+</html>
