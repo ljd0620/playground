@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>分布式锁可视化</title>
+  <meta name="description" content="交互式分布式锁可视化，演示 Redis 单实例锁、Redlock 算法和 ZooKeeper 临时顺序节点三种方案">
+  <meta name="keywords" content="分布式锁,Redis,Redlock,ZooKeeper,SETNX,临时顺序节点,分布式系统">
+  <meta property="og:title" content="分布式锁可视化">
+  <meta property="og:description" content="交互式分布式锁可视化，演示 Redis 单实例锁、Redlock 算法和 ZooKeeper 临时顺序节点三种方案">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg-primary:#080b12;--bg-card:#0f1319;--bg-elevated:#161c26;--bg-input:#0c1018;
+      --border:#1e2a3a;--border-hover:#2d4a6f;--text-primary:#e8edf5;--text-secondary:#7d8da0;
+      --text-muted:#4a5568;--accent-blue:#4da3ff;--accent-green:#36d986;--accent-purple:#b07aff;
+      --accent-orange:#ff9f43;--accent-red:#ff5c6c;--accent-cyan:#22d3ee;--accent-pink:#f472b6;
+      --glow-blue:rgba(77,163,255,0.15);--glow-green:rgba(54,217,134,0.12);--glow-purple:rgba(176,122,255,0.12);
+      --radius:14px;--radius-sm:8px;
+    }
+    body{
+      font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg-primary);
+      color:var(--text-primary);height:100vh;display:flex;flex-direction:column;overflow:hidden;
+      font-size:13px;position:relative
+    }
+    body::before{
+      content:'';position:fixed;inset:0;
+      background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(255,159,67,0.04),transparent 70%);
+      pointer-events:none;z-index:0
+    }
+    header{
+      padding:12px 20px;background:var(--bg-card);border-bottom:1px solid var(--border);
+      display:flex;align-items:center;justify-content:center;gap:14px;flex-shrink:0;position:relative;z-index:1
+    }
+    header h1{
+      font-size:17px;font-weight:700;
+      background:linear-gradient(135deg,var(--accent-orange),var(--accent-red));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
+    }
+    .tag{font-size:.68rem;background:var(--bg-elevated);color:var(--text-secondary);padding:3px 12px;border-radius:20px;border:1px solid var(--border);letter-spacing:.3px}
+    .main{display:flex;flex:1;overflow:hidden;position:relative;z-index:1}
+    .left{width:260px;min-width:260px;background:var(--bg-card);border-right:1px solid var(--border);overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+    .sec{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:10px;transition:border-color .2s}
+    .sec:hover{border-color:var(--border-hover)}
+    .sec-t{font-size:.65rem;text-transform:uppercase;letter-spacing:1.4px;color:var(--text-muted);margin-bottom:8px;font-weight:600;display:flex;align-items:center;gap:8px}
+    .sec-t::before{content:'';width:3px;height:12px;border-radius:2px;background:var(--accent-orange)}
+    .preset-list{display:flex;flex-direction:column;gap:4px}
+    .pbtn{background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;text-align:left;transition:all .15s;display:flex;gap:8px;align-items:center}
+    .pbtn:hover{border-color:var(--border-hover);background:var(--bg-elevated)}
+    .pbtn.active{border-color:var(--accent-orange);background:rgba(255,159,67,0.06);box-shadow:inset 3px 0 0 var(--accent-orange),0 0 12px rgba(255,159,67,0.1)}
+    .pbtn .pn{font-weight:600;display:block;font-size:11px}
+    .pbtn .pd{color:var(--text-muted);font-size:9px;margin-top:2px}
+    .btns{display:flex;gap:5px;margin-top:4px}
+    .btn{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);padding:7px 0;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;transition:all .15s;flex:1;text-align:center}
+    .btn:hover{border-color:var(--border-hover);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.3)}
+    .btn.pri{background:linear-gradient(135deg,var(--accent-orange),#d97706);color:#000;font-weight:600;border-color:var(--accent-orange);box-shadow:0 2px 10px rgba(255,159,67,0.2)}
+    .btn.pri:hover{box-shadow:0 4px 16px rgba(255,159,67,0.35)}
+    input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:var(--border);outline:none;margin:4px 0}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent-orange);cursor:pointer;border:2px solid var(--bg-card)}
+    .slider-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text-secondary)}
+    .right{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:14px;gap:10px}
+    .scene{flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);position:relative;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
+    .lock-row{display:flex;align-items:center;gap:16px;min-height:70px;flex-wrap:wrap}
+    .lock-client{background:var(--bg-elevated);border:2px solid var(--border);border-radius:var(--radius-sm);padding:12px 18px;text-align:center;min-width:80px;transition:all .3s}
+    .lock-client.active{border-color:var(--accent-blue);box-shadow:0 0 16px var(--glow-blue)}
+    .lock-client.holding{border-color:var(--accent-green);box-shadow:0 0 16px rgba(54,217,134,0.2)}
+    .lock-client .lc-name{font-weight:600;font-size:13px}
+    .lock-client .lc-state{font-size:10px;color:var(--text-muted);margin-top:4px}
+    .lock-arrow{font-size:20px;color:var(--text-muted);transition:all .3s;min-width:40px;text-align:center}
+    .lock-arrow.flow{color:var(--accent-orange);font-weight:700}
+    .lock-server{background:var(--bg-elevated);border:2px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;text-align:center;min-width:90px;transition:all .3s}
+    .lock-server.locked{border-color:var(--accent-red);background:rgba(255,92,108,0.06)}
+    .lock-server .ls-name{font-weight:600;font-size:12px}
+    .lock-server .ls-val{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted);margin-top:3px}
+    .lock-server .ls-ttl{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--accent-orange);margin-top:2px}
+    .server-pool{display:flex;gap:12px;flex-wrap:wrap;padding:16px;background:var(--bg-elevated);border-radius:var(--radius-sm);border:1px solid var(--border)}
+    .server-pool .srv{flex:1;min-width:80px;text-align:center;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-card);transition:all .3s}
+    .server-pool .srv.locked{border-color:var(--accent-red);background:rgba(255,92,108,0.06)}
+    .server-pool .srv.acquired{border-color:var(--accent-green);background:rgba(54,217,134,0.06)}
+    .server-pool .srv.failed{border-color:var(--accent-red);opacity:.5}
+    .srv .sn{font-weight:600;font-size:12px}
+    .srv .ss{font-size:10px;color:var(--text-muted);margin-top:3px}
+    .info-row{display:flex;gap:8px;flex-shrink:0}
+    .info-card{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;min-width:0}
+    .info-card .ic-t{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:3px}
+    .info-card .ic-v{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent-orange)}
+    .stat-cards{display:flex;gap:8px;flex-shrink:0}
+    .stc{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;text-align:center}
+    .stc .sv{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--accent-orange)}
+    .stc .sl{font-size:9px;color:var(--text-muted);margin-top:2px}
+    @media(max-width:900px){
+      .main{flex-direction:column}
+      .left{width:100%;min-width:0;flex-direction:row;flex-wrap:wrap;gap:6px;padding:8px;max-height:140px}
+      .left .sec{flex:1;min-width:120px;padding:8px}
+    }
+    ::-webkit-scrollbar{width:6px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.14)}
+  </style>
+</head>
+<body>
+<header><h1>分布式锁可视化</h1><span class="tag">架构</span></header>
+<div class="main">
+  <div class="left">
+    <div class="sec">
+      <div class="sec-t">锁方案</div>
+      <div class="preset-list" id="presetList">
+        <button class="pbtn active" data-id="redis"><span><span class="pn">Redis 单实例</span><span class="pd">SET NX PX + Lua 脚本释放</span></span></button>
+        <button class="pbtn" data-id="redlock"><span><span class="pn">Redlock 多实例</span><span class="pd">N 个独立 Redis，多数派加锁</span></span></button>
+        <button class="pbtn" data-id="zk"><span><span class="pn">ZooKeeper</span><span class="pd">临时顺序节点 + Watch 机制</span></span></button>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-t">控制</div>
+      <div class="btns"><button class="btn pri" id="btnPlay">▶ 开始</button><button class="btn" id="btnPause">⏸ 暂停</button></div>
+      <div class="btns" style="margin-top:5px"><button class="btn" id="btnStep">⏮ 单步</button><button class="btn" id="btnReset">↺ 重置</button></div>
+      <div class="slider-label" style="margin-top:8px"><span>速度</span><span id="speedVal">快速</span></div>
+      <input type="range" id="speedSlider" min="1" max="4" value="3">
+    </div>
+  </div>
+  <div class="right">
+    <div class="scene" id="scene"></div>
+    <div class="stat-cards">
+      <div class="stc"><div class="sv" id="stepCounter">0 / 0</div><div class="sl">步骤</div></div>
+      <div class="stc"><div class="sv" id="lockHolder">-</div><div class="sl">锁持有者</div></div>
+      <div class="stc"><div class="sv" id="lockStatus">空闲</div><div class="sl">锁状态</div></div>
+    </div>
+    <div class="info-row">
+      <div class="info-card"><div class="ic-t">当前操作</div><div class="ic-v" id="infoOp">-</div></div>
+      <div class="info-card"><div class="ic-t">实现方式</div><div class="ic-v" id="infoImpl">-</div></div>
+      <div class="info-card"><div class="ic-t">容错能力</div><div class="ic-v" id="infoFT">-</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="shared/theme.js"></script>
+<script src="shared/nav.js"></script>
+<script src="shared/analytics.js"></script>
+<script>
+(function(){
+  var scene=document.getElementById('scene'),presetList=document.getElementById('presetList');
+  var btnPlay=document.getElementById('btnPlay'),btnPause=document.getElementById('btnPause');
+  var btnStep=document.getElementById('btnStep'),btnReset=document.getElementById('btnReset');
+  var speedSlider=document.getElementById('speedSlider'),speedVal=document.getElementById('speedVal');
+  var stepCounter=document.getElementById('stepCounter'),lockHolder=document.getElementById('lockHolder');
+  var lockStatus=document.getElementById('lockStatus'),infoOp=document.getElementById('infoOp');
+  var infoImpl=document.getElementById('infoImpl'),infoFT=document.getElementById('infoFT');
+
+  var currentAlgo='redis',steps=[],stepIdx=0,playing=false,timer=null;
+
+  function el(tag,cls,html){var e=document.createElement(tag);if(cls)e.className=cls;if(html)e.innerHTML=html;return e;}
+  function rm(cls){var els=scene.querySelectorAll('.'+cls);for(var i=0;i<els.length;i++)els[i].classList.remove(cls);}
+
+  // ── Redis single ──
+  function redisSteps(){
+    return[
+      {t:'info',op:'Client1 发起加锁',impl:'SET lock_key uuid1 NX PX 30000',ft:'单点故障锁失效'},
+      {t:'client',id:1,state:'active'},
+      {t:'arrow',label:'SET lock uuid1 NX PX 30000'},
+      {t:'server',id:0,state:'locked',val:'uuid1',ttl:'TTL=30s'},
+      {t:'client',id:1,state:'holding'},
+      {t:'arrow',label:'OK ✓',result:'success'},
+      {t:'info',op:'Client2 尝试获取同一把锁',impl:'SET lock_key uuid2 NX PX 30000',ft:'-'},
+      {t:'client',id:2,state:'active'},
+      {t:'arrow',label:'SET lock uuid2 NX PX 30000'},
+      {t:'server',id:0,state:'locked',val:'uuid1',ttl:'TTL=27s'},
+      {t:'arrow',label:'nil ✗ (已锁定)',result:'fail'},
+      {t:'client',id:2,state:'waiting'},
+      {t:'info',op:'Client1 释放锁 (Lua 原子操作)',impl:'eval "if get==uuid1 then del"',ft:'-'},
+      {t:'client',id:1,state:'active'},
+      {t:'arrow',label:'EVAL release.lua'},
+      {t:'server',id:0,state:'free',val:'-',ttl:''},
+      {t:'client',id:1,state:'free'},
+      {t:'arrow',label:'OK ✓',result:'success'},
+      {t:'info',op:'Client2 重试加锁成功',impl:'SET lock_key uuid2 NX PX 30000',ft:'-'},
+      {t:'client',id:2,state:'holding'},
+      {t:'arrow',label:'SET lock uuid2 NX PX 30000 → OK ✓'},
+      {t:'server',id:0,state:'locked',val:'uuid2',ttl:'TTL=30s'},
+      {t:'done'}
+    ];
+  }
+
+  // ── Redlock ──
+  function redlockSteps(){
+    return[
+      {t:'info',op:'Client1 向 5 个独立 Redis 实例请求加锁',impl:'SET lock_key uuid NX PX 30000',ft:'多数派 3/5'},
+      {t:'client',id:1,state:'active'},
+      {t:'redlock',results:[true,false,true,true,false]},
+      {t:'arrow',label:'3/5 成功，满足多数派 → 加锁成功 ✓'},
+      {t:'client',id:1,state:'holding'},
+      {t:'info',op:'Client2 尝试加锁，但多数实例已锁定',impl:'SET lock_key uuid2 NX PX 30000',ft:'-'},
+      {t:'client',id:2,state:'active'},
+      {t:'redlock',results:[false,false,true,false,false]},
+      {t:'arrow',label:'1/5 成功，未达多数派 → 加锁失败 ✗'},
+      {t:'client',id:2,state:'waiting'},
+      {t:'info',op:'Client1 释放所有实例上的锁',impl:'DEL lock_key (每个实例)',ft:'-'},
+      {t:'client',id:1,state:'active'},
+      {t:'redlock',results:[false,false,false,false,false]},
+      {t:'client',id:1,state:'free'},
+      {t:'done'}
+    ];
+  }
+
+  // ── ZooKeeper ──
+  function zkSteps(){
+    return[
+      {t:'info',op:'Client1 创建临时顺序节点 /lock/guid-0000000001',impl:'create -e -s /lock/guid-',ft:'Session 断开自动释放'},
+      {t:'client',id:1,state:'active'},
+      {t:'zk',nodes:['0000000001 (Client1)']},
+      {t:'arrow',label:'getChildren → min=0000000001 → 加锁 ✓'},
+      {t:'client',id:1,state:'holding'},
+      {t:'info',op:'Client2 创建 /lock/guid-0000000002，Watch 前一个节点',impl:'create -e -s /lock/guid- + exists watch',ft:'-'},
+      {t:'client',id:2,state:'active'},
+      {t:'zk',nodes:['0000000001 (Client1)','0000000002 (Client2)']},
+      {t:'arrow',label:'min=0000000001≠0000000002 → Watch(0000000001) 等待'},
+      {t:'client',id:2,state:'waiting'},
+      {t:'info',op:'Client1 释放锁 — 删除节点 /lock/guid-0000000001',impl:'delete /lock/guid-0000000001',ft:'-'},
+      {t:'client',id:1,state:'active'},
+      {t:'zk',nodes:['0000000002 (Client2)']},
+      {t:'client',id:1,state:'free'},
+      {t:'arrow',label:'Watch 触发 → Client2 收到通知'},
+      {t:'info',op:'Client2 检查最小节点是自己 → 获得锁',impl:'min=0000000002 → 加锁 ✓',ft:'-'},
+      {t:'client',id:2,state:'holding'},
+      {t:'done'}
+    ];
+  }
+
+  var algoFns={redis:redisSteps,redlock:redlockSteps,zk:zkSteps};
+  var algoInfo={
+    redis:{impl:'SET NX PX + Lua 释放',ft:'无容错，单点故障锁全部失效'},
+    redlock:{impl:'多实例多数派 (N/2+1)',ft:'容忍少数实例故障 (2/5)'},
+    zk:{impl:'临时顺序节点 + Watch',ft:'Session 断开自动释放，强一致'}
+  };
+
+  function renderStep(step){
+    if(!step)return;
+    rm('active');rm('flow');rm('holding');
+    if(step.t==='info'){
+      infoOp.textContent=step.op;
+      infoImpl.textContent=step.impl||infoImpl.textContent;
+      infoFT.textContent=step.ft||infoFT.textContent;
+    }else if(step.t==='client'){
+      var ce=document.getElementById('lc'+step.id);
+      if(ce){ce.classList.add(step.state==='active'?'active':(step.state==='holding'?'holding':''));}
+      if(step.state==='holding'){lockHolder.textContent='Client'+step.id;lockStatus.textContent='🔒 已锁定';}
+      else if(step.state==='free'){lockHolder.textContent='-';lockStatus.textContent='空闲';}
+      else if(step.state==='waiting'){lockHolder.textContent='Client'+step.id+' (等待)';lockStatus.textContent='⏳ 等待中';}
+    }else if(step.t==='arrow'){
+      var ae=document.getElementById('lockArrow');
+      if(ae){ae.textContent=step.label;ae.classList.add('flow');}
+    }else if(step.t==='server'){
+      var se=document.getElementById('srv0');
+      if(se){
+        if(step.state==='locked'){se.classList.add('locked');se.querySelector('.ls-val').textContent='持有: '+step.val;se.querySelector('.ls-ttl').textContent=step.ttl;}
+        else{se.classList.remove('locked');se.querySelector('.ls-val').textContent='空闲';se.querySelector('.ls-ttl').textContent='';}
+      }
+    }else if(step.t==='redlock'){
+      var srvEls=document.querySelectorAll('.server-pool .srv');
+      for(var i=0;i<srvEls.length&&i<step.results.length;i++){
+        srvEls[i].classList.remove('acquired','failed','locked');
+        if(step.results[i])srvEls[i].classList.add('acquired');
+        else srvEls[i].classList.add('failed');
+      }
+    }else if(step.t==='zk'){
+      var zkEl=document.getElementById('zkNodes');
+      if(zkEl)zkEl.innerHTML=step.nodes.map(function(n,i){return'<div class="zk-node'+(i===0?' min':'')+'">'+n+'</div>';}).join('');
+    }
+    stepIdx++;
+    stepCounter.textContent=stepIdx+' / '+(steps.length-1);
+  }
+
+  function buildScene(id){
+    var html='';
+    if(id==='redlock'){
+      html+='<div class="lock-row"><div class="lock-client" id="lc1"><div class="lc-name">Client 1</div><div class="lc-state">空闲</div></div>';
+      html+='<div class="lock-arrow" id="lockArrow">→</div>';
+      html+='<div class="lock-client" id="lc2"><div class="lc-name">Client 2</div><div class="lc-state">空闲</div></div></div>';
+      html+='<div class="server-pool">';
+      for(var i=0;i<5;i++)html+='<div class="srv"><div class="sn">Redis '+(i+1)+'</div><div class="ss">独立实例</div></div>';
+      html+='</div>';
+    }else if(id==='zk'){
+      html+='<div class="lock-row"><div class="lock-client" id="lc1"><div class="lc-name">Client 1</div><div class="lc-state">空闲</div></div>';
+      html+='<div class="lock-arrow" id="lockArrow">→</div>';
+      html+='<div class="lock-client" id="lc2"><div class="lc-name">Client 2</div><div class="lc-state">空闲</div></div></div>';
+      html+='<div style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px">';
+      html+='<div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">/lock (ZooKeeper 目录)</div>';
+      html+='<div id="zkNodes" style="display:flex;flex-direction:column;gap:4px;font-family:JetBrains Mono,monospace;font-size:11px">';
+      html+='<div style="color:var(--text-muted)">(空)</div></div></div>';
+    }else{
+      html+='<div class="lock-row"><div class="lock-client" id="lc1"><div class="lc-name">Client 1</div><div class="lc-state">空闲</div></div>';
+      html+='<div class="lock-arrow" id="lockArrow">→</div>';
+      html+='<div class="lock-server" id="srv0"><div class="ls-name">Redis</div><div class="ls-val">空闲</div><div class="ls-ttl"></div></div>';
+      html+='<div class="lock-arrow">←</div>';
+      html+='<div class="lock-client" id="lc2"><div class="lc-name">Client 2</div><div class="lc-state">空闲</div></div></div>';
+    }
+    scene.innerHTML=html;
+  }
+
+  function initProblem(id){
+    currentAlgo=id;steps=algoFns[id]();stepIdx=0;buildScene(id);
+    stepCounter.textContent='0 / '+(steps.length-1);lockHolder.textContent='-';lockStatus.textContent='空闲';
+    var inf=algoInfo[id];infoOp.textContent='-';infoImpl.textContent=inf.impl;infoFT.textContent=inf.ft;
+  }
+
+  function applyStep(step){if(!step)return;renderStep(step);}
+  function pause(){playing=false;if(timer){clearTimeout(timer);timer=null;}btnPlay.textContent='▶ 继续';}
+  function play(){if(playing)return;if(stepIdx>=steps.length)return;playing=true;btnPlay.textContent='▶ 运行中';scheduleNext();}
+  function scheduleNext(){
+    if(!playing||stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    applyStep(steps[stepIdx]);
+    if(stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    var v=parseInt(speedSlider.value);var delays=[500,250,120,40];
+    timer=setTimeout(scheduleNext,delays[v-1]);
+  }
+  function doStep(){if(playing){pause();return;}if(stepIdx<steps.length)applyStep(steps[stepIdx]);if(stepIdx>=steps.length)btnPlay.textContent='✓ 完成';}
+  function resetAll(){pause();btnPlay.textContent='▶ 开始';initProblem(currentAlgo);}
+
+  presetList.addEventListener('click',function(e){
+    var btn=e.target.closest('.pbtn');if(!btn)return;var id=btn.getAttribute('data-id');
+    if(id===currentAlgo)return;
+    presetList.querySelectorAll('.pbtn').forEach(function(b){b.classList.remove('active');});
+    btn.classList.add('active');pause();btnPlay.textContent='▶ 开始';initProblem(id);
+  });
+  btnPlay.addEventListener('click',function(){if(stepIdx>=steps.length)resetAll();play();});
+  btnPause.addEventListener('click',function(){pause();});
+  btnStep.addEventListener('click',function(){doStep();});
+  btnReset.addEventListener('click',function(){resetAll();});
+  speedSlider.addEventListener('input',function(){var labels=['慢速','中速','快速','极快'];speedVal.textContent=labels[parseInt(speedSlider.value)-1];});
+  speedVal.textContent='快速';initProblem('redis');
+})();
+</script>
+</body>
+</html>

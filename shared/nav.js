@@ -20,12 +20,16 @@
     { file: 'rabbitmq-ordering.html', title: 'RabbitMQ 消息顺序' },
     { file: 'threadpool.html', title: '线程池' },
     { file: 'juc-tools.html', title: 'JUC 并发工具' },
+    { file: 'jvm-gc.html', title: 'JVM 垃圾回收' },
     { file: 'classloader.html', title: '类加载机制' },
     { file: 'ha-architecture.html', title: '高可用架构' },
     { file: 'hystrix.html', title: 'Hystrix 熔断' },
     { file: 'rate-limiter.html', title: '限流算法' },
     { file: 'es-inverted-index.html', title: 'ES 倒排索引' },
     { file: 'distributed-tx.html', title: '分布式事务方案' },
+    { file: 'tls-handshake.html', title: 'TLS 握手过程' },
+    { file: 'raft.html', title: 'Raft 共识算法' },
+    { file: 'distributed-lock.html', title: '分布式锁' },
     { file: 'xss-csrf.html', title: 'XSS & CSRF' },
     { file: 'sorting.html', title: '排序算法' },
     { file: 'dp.html', title: '动态规划' },
@@ -35,7 +39,8 @@
   var SIDEBAR_PAGES = [
     'rag.html', 'redis-cluster.html', 'mysql-isolation.html',
     'xss-csrf.html', 'juc-tools.html', 'spring-boot-startup.html',
-    'classloader.html', 'threadpool.html', 'binary-tree.html'
+    'classloader.html', 'threadpool.html', 'binary-tree.html',
+    'tls-handshake.html', 'raft.html', 'distributed-lock.html', 'jvm-gc.html'
   ];
 
   var pathParts = location.pathname.replace(/\/+$/, '').split('/');

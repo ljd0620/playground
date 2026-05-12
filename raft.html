@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raft 共识算法可视化</title>
+  <meta name="description" content="交互式 Raft 共识算法可视化，演示领导者选举、日志复制和网络分区的完整过程">
+  <meta name="keywords" content="Raft,共识算法,分布式,领导者选举,日志复制,网络分区,分布式系统">
+  <meta property="og:title" content="Raft 共识算法可视化">
+  <meta property="og:description" content="交互式 Raft 共识算法可视化，演示领导者选举、日志复制和网络分区的完整过程">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg-primary:#080b12;--bg-card:#0f1319;--bg-elevated:#161c26;--bg-input:#0c1018;
+      --border:#1e2a3a;--border-hover:#2d4a6f;--text-primary:#e8edf5;--text-secondary:#7d8da0;
+      --text-muted:#4a5568;--accent-blue:#4da3ff;--accent-green:#36d986;--accent-purple:#b07aff;
+      --accent-orange:#ff9f43;--accent-red:#ff5c6c;--accent-cyan:#22d3ee;--accent-pink:#f472b6;
+      --glow-blue:rgba(77,163,255,0.15);--glow-green:rgba(54,217,134,0.12);--glow-purple:rgba(176,122,255,0.12);
+      --radius:14px;--radius-sm:8px;
+    }
+    body{
+      font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg-primary);
+      color:var(--text-primary);height:100vh;display:flex;flex-direction:column;overflow:hidden;
+      font-size:13px;position:relative
+    }
+    body::before{
+      content:'';position:fixed;inset:0;
+      background:radial-gradient(ellipse 80% 60% at 50% -10%,var(--glow-blue),transparent 70%);
+      pointer-events:none;z-index:0
+    }
+    header{
+      padding:12px 20px;background:var(--bg-card);border-bottom:1px solid var(--border);
+      display:flex;align-items:center;justify-content:center;gap:14px;flex-shrink:0;position:relative;z-index:1
+    }
+    header h1{
+      font-size:17px;font-weight:700;
+      background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
+    }
+    .tag{font-size:.68rem;background:var(--bg-elevated);color:var(--text-secondary);padding:3px 12px;border-radius:20px;border:1px solid var(--border);letter-spacing:.3px}
+    .main{display:flex;flex:1;overflow:hidden;position:relative;z-index:1}
+    .left{width:260px;min-width:260px;background:var(--bg-card);border-right:1px solid var(--border);overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+    .sec{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:10px;transition:border-color .2s}
+    .sec:hover{border-color:var(--border-hover)}
+    .sec-t{font-size:.65rem;text-transform:uppercase;letter-spacing:1.4px;color:var(--text-muted);margin-bottom:8px;font-weight:600;display:flex;align-items:center;gap:8px}
+    .sec-t::before{content:'';width:3px;height:12px;border-radius:2px;background:var(--accent-purple)}
+    .preset-list{display:flex;flex-direction:column;gap:4px}
+    .pbtn{background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;text-align:left;transition:all .15s;display:flex;gap:6px;align-items:center}
+    .pbtn:hover{border-color:var(--border-hover);background:var(--bg-elevated)}
+    .pbtn.active{border-color:var(--accent-purple);background:rgba(176,122,255,0.06);box-shadow:inset 3px 0 0 var(--accent-purple),0 0 12px var(--glow-purple)}
+    .pbtn .pn{font-weight:600;display:block;font-size:11px}
+    .pbtn .pd{color:var(--text-muted);font-size:9px;margin-top:2px}
+    .btns{display:flex;gap:5px;margin-top:4px}
+    .btn{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);padding:7px 0;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;transition:all .15s;flex:1;text-align:center}
+    .btn:hover{border-color:var(--border-hover);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.3)}
+    .btn.pri{background:linear-gradient(135deg,var(--accent-purple),#7c3aed);color:#fff;font-weight:600;border-color:var(--accent-purple);box-shadow:0 2px 10px var(--glow-purple)}
+    .btn.pri:hover{box-shadow:0 4px 16px var(--glow-purple)}
+    input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:var(--border);outline:none;margin:4px 0}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent-purple);cursor:pointer;border:2px solid var(--bg-card)}
+    .slider-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text-secondary)}
+    .right{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:14px;gap:10px}
+    .canvas-area{flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+    canvas{display:block}
+    .info-row{display:flex;gap:8px;flex-shrink:0}
+    .info-card{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;min-width:0}
+    .info-card .ic-t{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:3px}
+    .info-card .ic-v{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent-purple)}
+    .stat-cards{display:flex;gap:8px;flex-shrink:0}
+    .stc{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;text-align:center}
+    .stc .sv{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--accent-purple)}
+    .stc .sl{font-size:9px;color:var(--text-muted);margin-top:2px}
+    @media(max-width:900px){
+      .main{flex-direction:column}
+      .left{width:100%;min-width:0;flex-direction:row;flex-wrap:wrap;gap:6px;padding:8px;max-height:140px}
+      .left .sec{flex:1;min-width:120px;padding:8px}
+    }
+    ::-webkit-scrollbar{width:6px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.14)}
+  </style>
+</head>
+<body>
+<header><h1>Raft 共识算法可视化</h1><span class="tag">架构</span></header>
+<div class="main">
+  <div class="left">
+    <div class="sec">
+      <div class="sec-t">场景</div>
+      <div class="preset-list" id="presetList">
+        <button class="pbtn active" data-id="election"><span><span class="pn">领导者选举</span><span class="pd">超时 → 候选 → 投票 → 当选</span></span></button>
+        <button class="pbtn" data-id="replication"><span><span class="pn">日志复制</span><span class="pd">客户端写入 → AppendEntries → 提交</span></span></button>
+        <button class="pbtn" data-id="partition"><span><span class="pn">网络分区</span><span class="pd">分区 → 脑裂风险 → 愈合恢复</span></span></button>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-t">控制</div>
+      <div class="btns"><button class="btn pri" id="btnPlay">▶ 开始</button><button class="btn" id="btnPause">⏸ 暂停</button></div>
+      <div class="btns" style="margin-top:5px"><button class="btn" id="btnStep">⏮ 单步</button><button class="btn" id="btnReset">↺ 重置</button></div>
+      <div class="slider-label" style="margin-top:8px"><span>速度</span><span id="speedVal">快速</span></div>
+      <input type="range" id="speedSlider" min="1" max="4" value="3">
+    </div>
+  </div>
+  <div class="right">
+    <div class="canvas-area"><canvas id="cv"></canvas></div>
+    <div class="stat-cards">
+      <div class="stc"><div class="sv" id="stepCounter">0 / 0</div><div class="sl">步骤</div></div>
+      <div class="stc"><div class="sv" id="termText">0</div><div class="sl">当前 Term</div></div>
+      <div class="stc"><div class="sv" id="leaderText">-</div><div class="sl">Leader</div></div>
+    </div>
+    <div class="info-row">
+      <div class="info-card"><div class="ic-t">当前事件</div><div class="ic-v" id="infoEvent">-</div></div>
+      <div class="info-card"><div class="ic-t">提交索引</div><div class="ic-v" id="infoCommit">-</div></div>
+      <div class="info-card"><div class="ic-t">安全属性</div><div class="ic-v" id="infoSafety">-</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="shared/theme.js"></script>
+<script src="shared/nav.js"></script>
+<script src="shared/analytics.js"></script>
+<script>
+(function(){
+  var cv=document.getElementById('cv'),ctx=cv.getContext('2d'),W=760,H=480;
+  var presetList=document.getElementById('presetList'),btnPlay=document.getElementById('btnPlay');
+  var btnPause=document.getElementById('btnPause'),btnStep=document.getElementById('btnStep');
+  var btnReset=document.getElementById('btnReset'),speedSlider=document.getElementById('speedSlider');
+  var speedVal=document.getElementById('speedVal'),stepCounter=document.getElementById('stepCounter');
+  var termText=document.getElementById('termText'),leaderText=document.getElementById('leaderText');
+  var infoEvent=document.getElementById('infoEvent'),infoCommit=document.getElementById('infoCommit');
+  var infoSafety=document.getElementById('infoSafety');
+
+  var currentAlgo='election',steps=[],stepIdx=0,playing=false,timer=null;
+
+  function getC(){
+    var s=getComputedStyle(document.documentElement);
+    return{bg:s.getPropertyValue('--bg-primary').trim(),card:s.getPropertyValue('--bg-card').trim(),
+      elevated:s.getPropertyValue('--bg-elevated').trim(),border:s.getPropertyValue('--border').trim(),
+      text:s.getPropertyValue('--text-primary').trim(),text2:s.getPropertyValue('--text-secondary').trim(),
+      text3:s.getPropertyValue('--text-muted').trim(),blue:s.getPropertyValue('--accent-blue').trim(),
+      green:s.getPropertyValue('--accent-green').trim(),purple:s.getPropertyValue('--accent-purple').trim(),
+      orange:s.getPropertyValue('--accent-orange').trim(),red:s.getPropertyValue('--accent-red').trim()};
+  }
+  function hexA(hex,a){var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return'rgba('+r+','+g+','+b+','+a+')';}
+  var C=getC();
+
+  function rbox(x,y,w,h,fill,stroke,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();if(fill){ctx.fillStyle=fill;ctx.fill();}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1.5;ctx.stroke();}}
+
+  function arrow(x1,y1,x2,y2,color,dashed){
+    ctx.save();ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.lineCap='round';
+    if(dashed)ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+    ctx.setLineDash([]);var ang=Math.atan2(y2-y1,x2-x1),len=8;
+    ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-len*Math.cos(ang-Math.PI/6.5),y2-len*Math.sin(ang-Math.PI/6.5));
+    ctx.lineTo(x2-len*Math.cos(ang+Math.PI/6.5),y2-len*Math.sin(ang+Math.PI/6.5));ctx.closePath();ctx.fill();ctx.restore();
+  }
+
+  function txt(x,y,text,size,color,align,bl){ctx.save();ctx.font=(size||12)+'px Inter,system-ui,sans-serif';ctx.fillStyle=color||C.text;ctx.textAlign=align||'center';ctx.textBaseline=bl||'middle';ctx.fillText(text,x,y);ctx.restore();}
+  function txtM(x,y,text,size,color,align,bl){ctx.save();ctx.font=(size||10)+'px JetBrains Mono,monospace';ctx.fillStyle=color||C.text2;ctx.textAlign=align||'center';ctx.textBaseline=bl||'middle';ctx.fillText(text,x,y);ctx.restore();}
+
+  var state={nodes:[],messages:[],event:'',info:''};
+  var nodeX=[55,195,335,475,615],nodeW=110,nodeH=65,nodeY=45,logY=140,msgY=340;
+
+  function initState(){
+    state={nodes:[],messages:[],event:'',info:''};
+    for(var i=1;i<=5;i++)state.nodes.push({id:i,role:'follower',term:0,votedFor:null,log:[],commitIdx:0,alive:true});
+  }
+
+  function roleColor(r){if(r==='leader')return C.blue;if(r==='candidate')return C.orange;return C.text2;}
+  function roleLabel(r){if(r==='leader')return 'Leader';if(r==='candidate')return 'Candidate';return 'Follower';}
+  function roleBg(r){if(r==='leader')return hexA(C.blue,0.12);if(r==='candidate')return hexA(C.orange,0.12);return C.card;}
+
+  function draw(){
+    C=getC();cv.width=W;cv.height=H;ctx.clearRect(0,0,W,H);
+    txt(W/2,12,'Raft 集群 — 5 节点',13,C.text2);
+    // Partition line
+    if(state.partition){ctx.save();ctx.strokeStyle=C.red;ctx.lineWidth=2;ctx.setLineDash([8,6]);
+      ctx.beginPath();ctx.moveTo(nodeX[1]+nodeW/2,nodeY-10);ctx.lineTo(nodeX[1]+nodeW/2,H);ctx.stroke();ctx.setLineDash([]);
+      txt(nodeX[1]+nodeW/2,nodeY-18,'分区',10,C.red);ctx.restore();}
+    // Nodes
+    state.nodes.forEach(function(n,i){
+      var x=nodeX[i],y=nodeY,alive=n.alive;
+      var fill=alive?roleBg(n.role):C.card,stroke=alive?roleColor(n.role):C.border;
+      if(!alive)stroke=hexA(C.red,0.5);
+      rbox(x,y,nodeW,nodeH,fill,stroke,8);
+      txt(x+nodeW/2,y+16,'S'+n.id,13,alive?C.text:C.text3);
+      txt(x+nodeW/2,y+34,roleLabel(n.role),11,alive?roleColor(n.role):C.red);
+      txt(x+nodeW/2,y+50,'Term: '+n.term,10,alive?C.text3:C.red);
+      if(!alive){txt(x+nodeW/2,y+60,'DOWN',10,C.red);}
+      // Log entries
+      for(var j=0;j<Math.max(n.log.length,6);j++){
+        var lx=x+6,ly=logY+j*22;
+        if(j<n.log.length){
+          var e=n.log[j],committed=j<n.commitIdx;
+          var lfill=committed?hexA(C.green,0.25):(n.role==='leader'&&j===n.log.length-1&&alive?hexA(C.orange,0.2):C.card);
+          var lstroke=committed?hexA(C.green,0.6):(n.role==='leader'&&j===n.log.length-1&&alive?C.orange:C.border);
+          rbox(lx,ly,98,18,lfill,lstroke,4);
+          txtM(lx+49,ly+9,committed?'['+e+'] ✓':(e.cmd||e),committed?10:9,committed?C.green:C.text2);
+        }else{
+          rbox(lx,ly,98,18,null,C.border,4);
+        }
+      }
+    });
+    // Log area label
+    txt(30,logY-14,'日志:',10,C.text3,'left');
+    // Messages
+    state.messages.forEach(function(m,i){
+      var fromX=nodeX[m.from-1]+nodeW/2,toX=nodeX[m.to-1]+nodeW/2;
+      var y=msgY+i*28;
+      var col=m.type==='vote'?C.orange:(m.type==='append'?C.blue:C.green);
+      arrow(fromX,y,toX,y,col,m.type==='heartbeat');
+      var mx=(fromX+toX)/2;
+      txt(mx,y-10,m.label,10,col);
+      if(m.result)txt(mx,y+14,m.result,9,m.result.indexOf('✓')!==-1?C.green:C.red);
+    });
+    // Event description
+    if(state.event){txt(W/2,H-22,state.event,12,C.text);}
+    if(state.info){txt(W/2,H-40,state.info,10,C.text3);}
+  }
+
+  // ── Step generators ──
+  function electionSteps(){
+    var s=[];
+    s.push({t:'event',e:'5 个节点启动，均为 Follower，等待选举超时'});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'S3 的选举超时先到达，转变为 Candidate，Term=1'});
+    s.push({t:'role',n:3,role:'candidate',term:1});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'S3 投票给自己，向 S1、S2、S4、S5 发送 RequestVote'});
+    s.push({t:'msg',from:3,to:1,label:'RequestVote T=1',type:'vote'});
+    s.push({t:'msg',from:3,to:2,label:'RequestVote T=1',type:'vote'});
+    s.push({t:'msg',from:3,to:4,label:'RequestVote T=1',type:'vote'});
+    s.push({t:'msg',from:3,to:5,label:'RequestVote T=1',type:'vote'});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'S1、S2、S4 尚未投票，返回 VoteGranted。S5 延迟响应'});
+    s.push({t:'msg',from:1,to:3,label:'VoteGranted ✓',type:'vote',result:'✓'});
+    s.push({t:'msg',from:2,to:3,label:'VoteGranted ✓',type:'vote',result:'✓'});
+    s.push({t:'msg',from:4,to:3,label:'VoteGranted ✓',type:'vote',result:'✓'});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'S3 获得 3+1=4 票（多数派），当选为 Leader！'});
+    s.push({t:'role',n:3,role:'leader'});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'Leader S3 向所有节点发送心跳（AppendEntries），维持领导地位'});
+    s.push({t:'msg',from:3,to:1,label:'Heartbeat T=1',type:'heartbeat'});
+    s.push({t:'msg',from:3,to:2,label:'Heartbeat T=1',type:'heartbeat'});
+    s.push({t:'msg',from:3,to:4,label:'Heartbeat T=1',type:'heartbeat'});
+    s.push({t:'msg',from:3,to:5,label:'Heartbeat T=1',type:'heartbeat'});
+    s.push({t:'draw'});
+    s.push({t:'done',e:'选举完成，S3 是 Leader'});
+    return s;
+  }
+
+  function replicationSteps(){
+    var s=[];
+    s.push({t:'event',e:'集群正常运行：S3 是 Leader，所有节点日志一致 [1,2]'});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'客户端向 Leader S3 发送写请求：SET z=3'});
+    s.push({t:'info',i:'客户端 → S3: SET z=3'});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'Leader 将命令追加到本地日志 [entry 3]，并行发送 AppendEntries'});
+    s.push({t:'log', n:3, entry:'SET z=3'});
+    s.push({t:'msg',from:3,to:1,label:'AppendEntries [3]',type:'append'});
+    s.push({t:'msg',from:3,to:2,label:'AppendEntries [3]',type:'append'});
+    s.push({t:'msg',from:3,to:4,label:'AppendEntries [3]',type:'append'});
+    s.push({t:'msg',from:3,to:5,label:'AppendEntries [3]',type:'append'});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'S1、S2、S4 复制日志成功，返回 ACK。S5 响应延迟'});
+    s.push({t:'log', n:1, entry:'SET z=3'}); s.push({t:'log', n:2, entry:'SET z=3'}); s.push({t:'log', n:4, entry:'SET z=3'});
+    s.push({t:'msg',from:1,to:3,label:'ACK ✓',type:'append',result:'✓'});
+    s.push({t:'msg',from:2,to:3,label:'ACK ✓',type:'append',result:'✓'});
+    s.push({t:'msg',from:4,to:3,label:'ACK ✓',type:'append',result:'✓'});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'Leader 收到多数派 (3/5) 确认，提交 entry 3，通知所有节点'});
+    s.push({t:'commit', n:3});
+    s.push({t:'info',i:'commitIndex = 3 (多数派已复制)'});
+    s.push({t:'draw'});
+    s.push({t:'done',e:'日志复制完成，entry 3 已提交'});
+    return s;
+  }
+
+  function partitionSteps(){
+    var s=[];
+    s.push({t:'event',e:'初始状态：S3 是 Leader (Term=2)，集群正常'});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'网络分区发生！S1、S2 与 S3、S4、S5 断开'});
+    s.push({t:'partition', on:true});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'少数派 (S1、S2)：S1 选举超时，成为 Candidate，Term=3'});
+    s.push({t:'role',n:1,role:'candidate',term:3});
+    s.push({t:'msg',from:1,to:2,label:'RequestVote T=3',type:'vote'});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'S2 投票给 S1，但只有 2 票，不满足多数派 (需要 3)'});
+    s.push({t:'msg',from:2,to:1,label:'VoteGranted ✓',type:'vote',result:'✓'});
+    s.push({t:'info',i:'2/5 < 3 → 选举失败'});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'多数派 (S3、S4、S5)：Leader S3 继续正常提交新的日志 entry'});
+    s.push({t:'log', n:3, entry:'[3]'}); s.push({t:'log', n:4, entry:'[3]'}); s.push({t:'log', n:5, entry:'[3]'});
+    s.push({t:'commit', n:3});
+    s.push({t:'info',i:'多数派可继续提交，满足 Raft 安全性'});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'网络恢复！Leader S3 发送 AppendEntries (Term=2) 给 S1、S2'});
+    s.push({t:'partition', on:false});
+    s.push({t:'msg',from:3,to:1,label:'AppendEntries T=2',type:'append'});
+    s.push({t:'msg',from:3,to:2,label:'AppendEntries T=2',type:'append'});
+    s.push({t:'draw'});
+    s.push({t:'event',e:'S1、S2 发现 Leader 的 Term 更高，回退为 Follower，同步日志'});
+    s.push({t:'sync', n:1}); s.push({t:'sync', n:2});
+    s.push({t:'draw'});
+    s.push({t:'done',e:'集群恢复一致，所有节点日志统一'});
+    return s;
+  }
+
+  var algoFns={election:electionSteps,replication:replicationSteps,partition:partitionSteps};
+
+  function applyStep(step){
+    if(!step)return;
+    if(step.t==='event'){state.messages=[];state.event=step.e;state.info='';}
+    else if(step.t==='info')state.info=step.i;
+    else if(step.t==='role'){
+      var nd=state.nodes[step.n-1];nd.role=step.role;nd.term=step.term||nd.term;
+      if(step.role==='candidate')nd.votedFor=step.n;
+      var maxTerm=0;state.nodes.forEach(function(n){if(n.term>maxTerm)maxTerm=n.term;});
+      termText.textContent=maxTerm;
+      var ld=state.nodes.find(function(n){return n.role==='leader';});
+      leaderText.textContent=ld?'S'+ld.id:'-';
+    }
+    else if(step.t==='log'){state.nodes[step.n-1].log.push(step.entry);}
+    else if(step.t==='commit'){for(var i=0;i<5;i++)state.nodes[i].commitIdx=step.n;infoCommit.textContent=step.n;}
+    else if(step.t==='partition'){state.partition=step.on;}
+    else if(step.t==='sync'){
+      state.nodes[step.n-1].role='follower';state.nodes[step.n-1].term=2;
+      state.nodes[step.n-1].log=['[1]','[2]','[3]'];state.nodes[step.n-1].commitIdx=3;
+    }
+    else if(step.t==='msg'){state.messages.push(step);state.event=state.event||'';}
+    else if(step.t==='draw'){}
+    else if(step.t==='done'){state.event=step.e;state.info='';}
+    draw();
+    stepIdx++;
+    stepCounter.textContent=stepIdx+' / '+(steps.length-1);
+    if(step.t==='done'||step.t==='event'){
+      infoEvent.textContent=step.e||state.event;
+      if(step.t==='done'){infoSafety.textContent='Leader Completeness: 已提交的日志永不丢失';}
+    }
+  }
+
+  function initProblem(id){
+    currentAlgo=id;
+    initState();
+    stepIdx=0;
+    if(id==='replication'){
+      state.nodes[2].role='leader';state.nodes[2].term=1;
+      for(var i=0;i<5;i++){state.nodes[i].term=1;if(i!==2)state.nodes[i].votedFor=3;}
+      for(var i=0;i<5;i++){state.nodes[i].log=['SET x=1','SET y=2'];state.nodes[i].commitIdx=2;}
+    }
+    if(id==='partition'){
+      state.nodes[2].role='leader';state.nodes[2].term=2;
+      for(var i=0;i<5;i++){state.nodes[i].term=2;if(i!==2)state.nodes[i].votedFor=3;}
+      for(var i=0;i<5;i++){state.nodes[i].log=['[1]','[2]'];state.nodes[i].commitIdx=2;}
+    }
+    steps=algoFns[id]();
+    termText.textContent=state.nodes.reduce(function(m,n){return n.term>m?n.term:m;},0);
+    leaderText.textContent=(state.nodes.find(function(n){return n.role==='leader';})||{}).id?'S'+state.nodes.find(function(n){return n.role==='leader';}).id:'-';
+    infoEvent.textContent='-';infoCommit.textContent='-';infoSafety.textContent='-';
+    stepCounter.textContent='0 / '+(steps.length-1);
+    cv.width=W;cv.height=H;draw();
+  }
+
+  function pause(){playing=false;if(timer){clearTimeout(timer);timer=null;}btnPlay.textContent='▶ 继续';}
+  function play(){if(playing)return;if(stepIdx>=steps.length)return;playing=true;btnPlay.textContent='▶ 运行中';scheduleNext();}
+  function scheduleNext(){
+    if(!playing||stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    applyStep(steps[stepIdx]);
+    if(stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    var v=parseInt(speedSlider.value);var delays=[500,250,120,40];
+    timer=setTimeout(scheduleNext,delays[v-1]);
+  }
+  function doStep(){if(playing){pause();return;}if(stepIdx<steps.length)applyStep(steps[stepIdx]);if(stepIdx>=steps.length)btnPlay.textContent='✓ 完成';}
+  function resetAll(){pause();btnPlay.textContent='▶ 开始';initProblem(currentAlgo);}
+
+  presetList.addEventListener('click',function(e){
+    var btn=e.target.closest('.pbtn');if(!btn)return;var id=btn.getAttribute('data-id');
+    if(id===currentAlgo)return;
+    presetList.querySelectorAll('.pbtn').forEach(function(b){b.classList.remove('active');});
+    btn.classList.add('active');pause();btnPlay.textContent='▶ 开始';initProblem(id);
+  });
+  btnPlay.addEventListener('click',function(){if(stepIdx>=steps.length)resetAll();play();});
+  btnPause.addEventListener('click',function(){pause();});
+  btnStep.addEventListener('click',function(){doStep();});
+  btnReset.addEventListener('click',function(){resetAll();});
+  speedSlider.addEventListener('input',function(){var labels=['慢速','中速','快速','极快'];speedVal.textContent=labels[parseInt(speedSlider.value)-1];});
+  speedVal.textContent='快速';initProblem('election');
+
+  // Re-render on theme change
+  new MutationObserver(function () { draw(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+})();
+</script>
+</body>
+</html>

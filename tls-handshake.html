@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TLS 握手过程可视化</title>
+  <meta name="description" content="交互式 HTTPS/TLS 握手过程可视化，演示 TLS 1.2、TLS 1.3、mTLS 和证书链验证的完整流程">
+  <meta name="keywords" content="TLS, HTTPS, 握手, TLS 1.2, TLS 1.3, mTLS, 证书链, 加密, 密钥交换">
+  <meta property="og:title" content="TLS 握手过程可视化">
+  <meta property="og:description" content="交互式 HTTPS/TLS 握手过程可视化，演示 TLS 1.2、TLS 1.3、mTLS 和证书链验证的完整流程">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg-primary:#080b12;--bg-card:#0f1319;--bg-elevated:#161c26;--bg-input:#0c1018;
+      --border:#1e2a3a;--border-hover:#2d4a6f;--text-primary:#e8edf5;--text-secondary:#7d8da0;
+      --text-muted:#4a5568;--accent-blue:#4da3ff;--accent-green:#36d986;--accent-purple:#b07aff;
+      --accent-orange:#ff9f43;--accent-red:#ff5c6c;--accent-cyan:#22d3ee;--accent-pink:#f472b6;
+      --glow-blue:rgba(77,163,255,0.15);--glow-green:rgba(54,217,134,0.12);--glow-purple:rgba(176,122,255,0.12);
+      --radius:14px;--radius-sm:8px;
+    }
+    body{
+      font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg-primary);
+      color:var(--text-primary);height:100vh;display:flex;flex-direction:column;overflow:hidden;
+      font-size:13px;position:relative
+    }
+    body::before{
+      content:'';position:fixed;inset:0;
+      background:radial-gradient(ellipse 80% 60% at 50% -10%,var(--glow-green),transparent 70%);
+      pointer-events:none;z-index:0
+    }
+    header{
+      padding:12px 20px;background:var(--bg-card);border-bottom:1px solid var(--border);
+      display:flex;align-items:center;justify-content:center;gap:14px;flex-shrink:0;position:relative;z-index:1
+    }
+    header h1{
+      font-size:17px;font-weight:700;
+      background:linear-gradient(135deg,var(--accent-blue),var(--accent-cyan));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
+    }
+    .tag{font-size:.68rem;background:var(--bg-elevated);color:var(--text-secondary);padding:3px 12px;border-radius:20px;border:1px solid var(--border);letter-spacing:.3px}
+    .main{display:flex;flex:1;overflow:hidden;position:relative;z-index:1}
+    .left{width:260px;min-width:260px;background:var(--bg-card);border-right:1px solid var(--border);overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+    .sec{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:10px;transition:border-color .2s}
+    .sec:hover{border-color:var(--border-hover)}
+    .sec-t{font-size:.65rem;text-transform:uppercase;letter-spacing:1.4px;color:var(--text-muted);margin-bottom:8px;font-weight:600;display:flex;align-items:center;gap:8px}
+    .sec-t::before{content:'';width:3px;height:12px;border-radius:2px;background:var(--accent-blue)}
+    .preset-list{display:flex;flex-direction:column;gap:4px}
+    .pbtn{background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;text-align:left;transition:all .15s;display:flex;gap:8px;align-items:center}
+    .pbtn:hover{border-color:var(--border-hover);background:var(--bg-elevated)}
+    .pbtn.active{border-color:var(--accent-blue);background:rgba(77,163,255,0.06);box-shadow:inset 3px 0 0 var(--accent-blue),0 0 12px var(--glow-blue)}
+    .pbtn .pn{font-weight:600;display:block;font-size:11px}
+    .pbtn .pd{color:var(--text-muted);font-size:9px;margin-top:2px}
+    .btns{display:flex;gap:5px;margin-top:4px}
+    .btn{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);padding:7px 0;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;transition:all .15s;flex:1;text-align:center}
+    .btn:hover{border-color:var(--border-hover);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.3)}
+    .btn.pri{background:linear-gradient(135deg,var(--accent-blue),#2563eb);color:#fff;font-weight:600;border-color:var(--accent-blue);box-shadow:0 2px 10px var(--glow-blue)}
+    .btn.pri:hover{box-shadow:0 4px 16px var(--glow-blue)}
+    input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:var(--border);outline:none;margin:4px 0}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent-blue);cursor:pointer;border:2px solid var(--bg-card)}
+    .slider-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text-secondary)}
+    .right{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:14px;gap:10px}
+    .canvas-area{flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+    canvas{display:block}
+    .info-row{display:flex;gap:8px;flex-shrink:0}
+    .info-card{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;min-width:0}
+    .info-card .ic-t{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:3px}
+    .info-card .ic-v{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent-cyan)}
+    .stat-cards{display:flex;gap:8px;flex-shrink:0}
+    .stc{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;text-align:center}
+    .stc .sv{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--accent-blue)}
+    .stc .sl{font-size:9px;color:var(--text-muted);margin-top:2px}
+    @media(max-width:900px){
+      .main{flex-direction:column}
+      .left{width:100%;min-width:0;flex-direction:row;flex-wrap:wrap;gap:6px;padding:8px;max-height:140px}
+      .left .sec{flex:1;min-width:120px;padding:8px}
+    }
+    ::-webkit-scrollbar{width:6px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.14)}
+  </style>
+</head>
+<body>
+<header><h1>TLS 握手过程可视化</h1><span class="tag">架构</span></header>
+<div class="main">
+  <div class="left">
+    <div class="sec">
+      <div class="sec-t">握手协议</div>
+      <div class="preset-list" id="presetList">
+        <button class="pbtn active" data-id="tls12"><span><span class="pn">TLS 1.2 完整握手</span><span class="pd">4 个往返，RSA/ECDHE 密钥交换</span></span></button>
+        <button class="pbtn" data-id="tls13"><span><span class="pn">TLS 1.3 简化握手</span><span class="pd">1-RTT，前向安全默认</span></span></button>
+        <button class="pbtn" data-id="mtls"><span><span class="pn">双向认证 mTLS</span><span class="pd">客户端与服务端双向证书验证</span></span></button>
+        <button class="pbtn" data-id="certchain"><span><span class="pn">证书链验证</span><span class="pd">Root CA → 中间 CA → 服务器证书</span></span></button>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-t">控制</div>
+      <div class="btns"><button class="btn pri" id="btnPlay">▶ 开始</button><button class="btn" id="btnPause">⏸ 暂停</button></div>
+      <div class="btns" style="margin-top:5px"><button class="btn" id="btnStep">⏮ 单步</button><button class="btn" id="btnReset">↺ 重置</button></div>
+      <div class="slider-label" style="margin-top:8px"><span>速度</span><span id="speedVal">快速</span></div>
+      <input type="range" id="speedSlider" min="1" max="4" value="3">
+    </div>
+  </div>
+  <div class="right">
+    <div class="canvas-area"><canvas id="cv"></canvas></div>
+    <div class="stat-cards">
+      <div class="stc"><div class="sv" id="stepCounter">0 / 0</div><div class="sl">步骤</div></div>
+      <div class="stc"><div class="sv" id="phaseText">-</div><div class="sl">当前阶段</div></div>
+      <div class="stc"><div class="sv" id="stateText">明文</div><div class="sl">连接状态</div></div>
+    </div>
+    <div class="info-row">
+      <div class="info-card"><div class="ic-t">密钥交换</div><div class="ic-v" id="infoKE">-</div></div>
+      <div class="info-card"><div class="ic-t">加密套件</div><div class="ic-v" id="infoCS">-</div></div>
+      <div class="info-card"><div class="ic-t">认证方式</div><div class="ic-v" id="infoAuth">-</div></div>
+      <div class="info-card"><div class="ic-t">前向安全</div><div class="ic-v" id="infoFS">-</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="shared/theme.js"></script>
+<script src="shared/nav.js"></script>
+<script src="shared/analytics.js"></script>
+<script>
+(function(){
+  var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+  var presetList=document.getElementById('presetList'),btnPlay=document.getElementById('btnPlay');
+  var btnPause=document.getElementById('btnPause'),btnStep=document.getElementById('btnStep');
+  var btnReset=document.getElementById('btnReset'),speedSlider=document.getElementById('speedSlider');
+  var speedVal=document.getElementById('speedVal'),stepCounter=document.getElementById('stepCounter');
+  var phaseText=document.getElementById('phaseText'),stateText=document.getElementById('stateText');
+  var infoKE=document.getElementById('infoKE'),infoCS=document.getElementById('infoCS');
+  var infoAuth=document.getElementById('infoAuth'),infoFS=document.getElementById('infoFS');
+
+  var currentAlgo='tls12',steps=[],stepIdx=0,playing=false,timer=null;
+  var W=700,H=420;
+
+  function getC(){
+    var s=getComputedStyle(document.documentElement);
+    return{bg:s.getPropertyValue('--bg-primary').trim(),card:s.getPropertyValue('--bg-card').trim(),
+      elevated:s.getPropertyValue('--bg-elevated').trim(),border:s.getPropertyValue('--border').trim(),
+      text:s.getPropertyValue('--text-primary').trim(),text2:s.getPropertyValue('--text-secondary').trim(),
+      text3:s.getPropertyValue('--text-muted').trim(),blue:s.getPropertyValue('--accent-blue').trim(),
+      green:s.getPropertyValue('--accent-green').trim(),purple:s.getPropertyValue('--accent-purple').trim(),
+      orange:s.getPropertyValue('--accent-orange').trim(),red:s.getPropertyValue('--accent-red').trim(),
+      cyan:s.getPropertyValue('--accent-cyan').trim(),glowG:s.getPropertyValue('--glow-green').trim()};
+  }
+
+  function hexA(hex,alpha){var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return'rgba('+r+','+g+','+b+','+alpha+')';}
+
+  var C=getC();
+
+  function rbox(x,y,w,h,fill,stroke,r,c){c=c||ctx;c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h-r);c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);c.lineTo(x+r,y+h);c.quadraticCurveTo(x,y+h,x,y+h-r);c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();if(fill){c.fillStyle=fill;c.fill();}if(stroke){c.strokeStyle=stroke;c.lineWidth=1.5;c.stroke();}}
+
+  function arrow(x1,y1,x2,y2,color,dashed){
+    ctx.save();ctx.strokeStyle=color;ctx.lineWidth=2;ctx.lineCap='round';
+    if(dashed)ctx.setLineDash([6,4]);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+    ctx.setLineDash([]);var ang=Math.atan2(y2-y1,x2-x1),len=10;
+    ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-len*Math.cos(ang-Math.PI/6),y2-len*Math.sin(ang-Math.PI/6));
+    ctx.lineTo(x2-len*Math.cos(ang+Math.PI/6),y2-len*Math.sin(ang+Math.PI/6));ctx.closePath();ctx.fill();ctx.restore();
+  }
+
+  function txt(x,y,text,size,color,align,bl){ctx.save();ctx.font=(size||12)+'px Inter,system-ui,sans-serif';ctx.fillStyle=color||C.text;ctx.textAlign=align||'center';ctx.textBaseline=bl||'middle';ctx.fillText(text,x,y);ctx.restore();}
+  function txtM(x,y,text,size,color,align,bl){ctx.save();ctx.font=(size||11)+'px JetBrains Mono,monospace';ctx.fillStyle=color||C.text2;ctx.textAlign=align||'center';ctx.textBaseline=bl||'middle';ctx.fillText(text,x,y);ctx.restore();}
+
+  function drawNode(x,y,w,h,label,sub,accent,state){
+    var fill,stroke,bg;
+    if(state==='active'){fill=hexA(accent,0.15);stroke=accent;bg=accent;}
+    else if(state==='done'){fill=hexA(C.green,0.08);stroke=hexA(C.green,0.4);bg=C.green;}
+    else{fill=C.card;stroke=C.border;bg=C.text3;}
+    rbox(x,y,w,h,fill,stroke,8);
+    if(state==='active'){ctx.save();ctx.shadowColor=hexA(accent,0.3);ctx.shadowBlur=12;rbox(x,y,w,h,null,accent,8);ctx.restore();}
+    txt(x+w/2,y+20,label,13,state==='active'?accent:C.text);
+    if(sub)txt(x+w/2,y+42,sub,10,state==='done'?C.green:C.text3);
+    var bx=x+w/2-8;var by=y-5;ctx.fillStyle=bg;ctx.beginPath();ctx.arc(bx+8,by+5,6,0,Math.PI*2);ctx.fill();
+    if(state==='active'){ctx.strokeStyle=accent;ctx.lineWidth=1.5;ctx.stroke();}
+    txt(bx+8,by+5,state==='done'?'✓':state==='active'?'●':'○',10,state==='active'?accent:state==='done'?C.green:C.text3);
+  }
+
+  function drawMsg(x,y,text,data,color,enc){
+    var pad=enc?' 🔒':'';
+    ctx.save();ctx.font='bold 12px Inter,system-ui,sans-serif';ctx.fillStyle=color;
+    var w=ctx.measureText(text+pad).width+16;ctx.textAlign='left';ctx.fillText(text+pad,x,y);
+    if(data){ctx.font='10px JetBrains Mono,monospace';ctx.fillStyle=C.text3;ctx.fillText(data,x,y+16);}
+    ctx.restore();
+  }
+
+  // ── Preset definitions ──
+  function tls12Steps(){
+    return[
+      {t:'init'},
+      {t:'node',id:'client',s:'active'},
+      {t:'arrow',id:1,f:'client',to:'server',label:'ClientHello',color:'blue',data:'TLS 1.2, cipher suites, SNI, random'},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'server',s:'active'},
+      {t:'arrow',id:2,f:'server',to:'client',label:'ServerHello',color:'green',data:'TLS 1.2, TLS_ECDHE_RSA_AES128_GCM, random'},
+      {t:'arrow',id:3,f:'server',to:'client',label:'Certificate',color:'purple',data:'server.crt (RSA 2048, 由 CA 签名)'},
+      {t:'arrow',id:4,f:'server',to:'client',label:'ServerKeyExchange',color:'orange',data:'ECDHE 公钥参数 (signed)'},
+      {t:'arrow',id:5,f:'server',to:'client',label:'ServerHelloDone',color:'green'},
+      {t:'node',id:'server',s:'done'},{t:'node',id:'client',s:'active'},
+      {t:'arrow',id:6,f:'client',to:'server',label:'ClientKeyExchange',color:'orange',data:'ECDHE 公钥'},
+      {t:'arrow',id:7,f:'client',to:'server',label:'ChangeCipherSpec',color:'blue'},
+      {t:'arrow',id:8,f:'client',to:'server',label:'Finished',color:'green',data:'verify_data (encrypted)',enc:true},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'server',s:'active'},
+      {t:'arrow',id:9,f:'server',to:'client',label:'ChangeCipherSpec',color:'green'},
+      {t:'arrow',id:10,f:'server',to:'client',label:'Finished',color:'green',data:'verify_data (encrypted)',enc:true},
+      {t:'done'}
+    ];
+  }
+
+  function tls13Steps(){
+    return[
+      {t:'init'},
+      {t:'node',id:'client',s:'active'},
+      {t:'arrow',id:1,f:'client',to:'server',label:'ClientHello',color:'blue',data:'TLS 1.3, cipher suites, key_share (ECDHE), SNI'},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'server',s:'active'},
+      {t:'arrow',id:2,f:'server',to:'client',label:'ServerHello',color:'green',data:'TLS 1.3, TLS_AES_256_GCM_SHA384, key_share'},
+      {t:'arrow',id:3,f:'server',to:'client',label:'EncryptedExtensions',color:'purple'},
+      {t:'arrow',id:4,f:'server',to:'client',label:'Certificate',color:'purple',data:'server.crt (ECDSA P-256)'},
+      {t:'arrow',id:5,f:'server',to:'client',label:'CertificateVerify',color:'orange',data:'签名 handshake 上下文'},
+      {t:'arrow',id:6,f:'server',to:'client',label:'Finished',color:'green',data:'verify_data (encrypted)',enc:true},
+      {t:'node',id:'server',s:'done'},{t:'node',id:'client',s:'active'},
+      {t:'arrow',id:7,f:'client',to:'server',label:'Finished',color:'green',data:'verify_data (encrypted)',enc:true},
+      {t:'done'}
+    ];
+  }
+
+  function mtlsSteps(){
+    return[
+      {t:'init'},
+      {t:'node',id:'client',s:'active'},
+      {t:'arrow',id:1,f:'client',to:'server',label:'ClientHello',color:'blue',data:'TLS 1.2, cipher suites, SNI'},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'server',s:'active'},
+      {t:'arrow',id:2,f:'server',to:'client',label:'ServerHello',color:'green',data:'TLS 1.2, cipher suite selected'},
+      {t:'arrow',id:3,f:'server',to:'client',label:'Certificate',color:'purple',data:'server.crt'},
+      {t:'arrow',id:4,f:'server',to:'client',label:'CertificateRequest',color:'orange',data:'请求客户端证书'},
+      {t:'arrow',id:5,f:'server',to:'client',label:'ServerHelloDone',color:'green'},
+      {t:'node',id:'server',s:'done'},{t:'node',id:'client',s:'active'},
+      {t:'arrow',id:6,f:'client',to:'server',label:'Certificate',color:'purple',data:'client.crt'},
+      {t:'arrow',id:7,f:'client',to:'server',label:'ClientKeyExchange',color:'orange',data:'pre-master secret'},
+      {t:'arrow',id:8,f:'client',to:'server',label:'CertificateVerify',color:'orange',data:'客户端私钥签名'},
+      {t:'arrow',id:9,f:'client',to:'server',label:'ChangeCipherSpec',color:'blue'},
+      {t:'arrow',id:10,f:'client',to:'server',label:'Finished',color:'green',data:'encrypted',enc:true},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'server',s:'active'},
+      {t:'arrow',id:11,f:'server',to:'client',label:'ChangeCipherSpec',color:'green'},
+      {t:'arrow',id:12,f:'server',to:'client',label:'Finished',color:'green',data:'encrypted',enc:true},
+      {t:'done'}
+    ];
+  }
+
+  function certchainSteps(){
+    return[
+      {t:'init'},
+      {t:'node',id:'client',s:'active'},
+      {t:'arrow',id:1,f:'client',to:'server',label:'ClientHello',color:'blue'},
+      {t:'node',id:'client',s:'done'},{t:'node',id:'server',s:'active'},
+      {t:'arrow',id:2,f:'server',to:'client',label:'CertificateChain',color:'purple',data:'Root CA → Intermediate CA → server.crt'},
+      {t:'node',id:'server',s:'done'},{t:'node',id:'client',s:'active'},
+      {t:'arrow',id:3,f:'client',to:'ca',label:'验证签名',color:'orange',data:'用 Root CA 公钥验证中间 CA 证书'},
+      {t:'node',id:'ca',s:'active'},
+      {t:'arrow',id:4,f:'ca',to:'client',label:'✓ 中间 CA 可信',color:'green'},
+      {t:'node',id:'ca',s:'done'},{t:'node',id:'client',s:'active'},
+      {t:'arrow',id:5,f:'client',to:'ca',label:'验证签名',color:'orange',data:'用中间 CA 公钥验证 server.crt'},
+      {t:'arrow',id:6,f:'ca',to:'client',label:'✓ 服务器证书可信',color:'green'},
+      {t:'node',id:'ca',s:'done'},{t:'node',id:'client',s:'done'},
+      {t:'done'}
+    ];
+  }
+
+  var algoFns={tls12:tls12Steps,tls13:tls13Steps,mtls:mtlsSteps,certchain:certchainSteps};
+  var algoInfo={
+    tls12:{ke:'ECDHE-RSA',cs:'TLS_ECDHE_RSA_AES128_GCM_SHA256',auth:'服务端单向',fs:'✓ (ECDHE)'},
+    tls13:{ke:'ECDHE (P-256)',cs:'TLS_AES_256_GCM_SHA384',auth:'服务端单向',fs:'✓ (默认)'},
+    mtls:{ke:'RSA',cs:'TLS_RSA_AES128_GCM_SHA256',auth:'双向 mTLS',fs:'✗ (RSA 密钥交换)'},
+    certchain:{ke:'-',cs:'-',auth:'证书链 (3 级)',fs:'-'}
+  };
+
+  var drawnArrows=[],activeNode='',certState='';
+
+  function draw(){
+    C=getC();
+    cv.width=W;cv.height=H;
+    ctx.clearRect(0,0,W,H);
+
+    var cx=120,sx=500,caw=80,cah=50,cax=310,cay=30;
+    var nodeW=110,nodeH=60,clientY=150,serverY=150;
+
+    // Title
+    txt(W/2,8,algoInfo[currentAlgo].cs!=='-'?'TLS 握手流程':'证书链验证流程',13,C.text);
+
+    // CA node (only for certchain)
+    if(currentAlgo==='certchain'){
+      drawNode(cax,cay,caw,cah,'CA','根证书',C.purple,certState||'');
+    }
+
+    // Client & Server nodes
+    var clState='',svState='';
+    if(activeNode==='client')clState='active';
+    else if(activeNode==='server')svState='active';
+    drawnArrows.forEach(function(a){
+      if(a.f==='client')clState='done';
+      else if(a.f==='server')svState='done';
+    });
+
+    drawNode(cx,clientY,nodeW,nodeH,'Client','浏览器',C.blue,clState);
+    drawNode(sx,serverY,nodeW,nodeH,'Server','Nginx',C.green,svState);
+
+    // Divider line
+    ctx.save();ctx.strokeStyle=C.border;ctx.lineWidth=1;ctx.setLineDash([2,6]);
+    ctx.beginPath();ctx.moveTo(30,clientY+nodeH+12);ctx.lineTo(W-30,clientY+nodeH+12);ctx.stroke();
+    ctx.setLineDash([]);
+
+    var labelY=clientY+nodeH+30;
+
+    // Draw arrows
+    var arrowY=labelY+10;
+    var arrowsByRound=groupByRound();
+    var currentY=arrowY;
+
+    drawnArrows.forEach(function(a,i){
+      var isLast=i===drawnArrows.length-1;
+      var x1=a.f==='client'?cx+nodeW:cx;
+      var x2=a.to==='client'?cx:sx;
+      var y1=currentY,y2=currentY+18;
+      if(a.f==='server'){x1=sx;x2=cx;}
+      if(a.to==='ca'){x1=cx+nodeW;x2=cax+caw/2;y1=y2=currentY+9;}
+      else if(a.f==='ca'){x1=cax+caw/2;x2=cx;y1=y2=currentY+9;}
+
+      var col=getArrowColor(a.color);
+      arrow(x1,y1,x2,y2,col);
+      var mx=(x1+x2)/2;
+      drawMsg(mx,y2+4,a.label,a.data,col,a.enc);
+      if(a.enc){txt(mx-40,y2+4,'🔒',14,C.green,'right');}
+      currentY+=32;
+    });
+
+    stateText.textContent=drawnArrows.some(function(a){return a.enc;})?'🔒 已加密':'明文';
+  }
+
+  function getArrowColor(c){
+    switch(c){
+      case'blue':return C.blue;
+      case'green':return C.green;
+      case'purple':return C.purple;
+      case'orange':return C.orange;
+      default:return C.text2;
+    }
+  }
+
+  function groupByRound(){
+    return[]; // simplified
+  }
+
+  function initProblem(id){
+    currentAlgo=id;
+    steps=algoFns[id]();
+    stepIdx=0;
+    drawnArrows=[];
+    activeNode='';
+    certState='';
+    cv.width=W;cv.height=H;
+    draw();
+    stepCounter.textContent='0 / '+(steps.length-1);
+    phaseText.textContent='就绪';
+    stateText.textContent='明文';
+    var inf=algoInfo[id];
+    infoKE.textContent=inf.ke;infoCS.textContent=inf.cs;
+    infoAuth.textContent=inf.auth;infoFS.textContent=inf.fs;
+  }
+
+  function applyStep(step){
+    if(!step)return;
+    if(step.t==='init'){drawnArrows=[];activeNode='';certState='';draw();}
+    else if(step.t==='node'){
+      if(step.s==='active'){activeNode=step.id;}
+      else if(step.s==='done'){if(activeNode===step.id)activeNode='';}
+      if(step.id==='ca')certState=step.s;
+      draw();
+    }
+    else if(step.t==='arrow'){
+      drawnArrows.push(step);
+      draw();
+      phaseText.textContent=step.label;
+    }
+    else if(step.t==='done'){
+      phaseText.textContent='✓ 安全连接已建立';
+      stateText.textContent='🔒 已加密';
+    }
+    stepIdx++;
+    stepCounter.textContent=stepIdx+' / '+(steps.length-1);
+  }
+
+  function pause(){playing=false;if(timer){clearTimeout(timer);timer=null;}btnPlay.textContent='▶ 继续';}
+  function play(){if(playing)return;if(stepIdx>=steps.length)return;playing=true;btnPlay.textContent='▶ 运行中';scheduleNext();}
+
+  function scheduleNext(){
+    if(!playing||stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    applyStep(steps[stepIdx]);
+    if(stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    var v=parseInt(speedSlider.value);var delays=[500,250,120,40];
+    timer=setTimeout(scheduleNext,delays[v-1]);
+  }
+
+  function doStep(){if(playing){pause();return;}if(stepIdx<steps.length)applyStep(steps[stepIdx]);if(stepIdx>=steps.length)btnPlay.textContent='✓ 完成';}
+
+  function resetAll(){pause();btnPlay.textContent='▶ 开始';initProblem(currentAlgo);}
+
+  presetList.addEventListener('click',function(e){
+    var btn=e.target.closest('.pbtn');if(!btn)return;var id=btn.getAttribute('data-id');
+    if(id===currentAlgo)return;
+    presetList.querySelectorAll('.pbtn').forEach(function(b){b.classList.remove('active');});
+    btn.classList.add('active');pause();btnPlay.textContent='▶ 开始';initProblem(id);
+  });
+
+  btnPlay.addEventListener('click',function(){if(stepIdx>=steps.length)resetAll();play();});
+  btnPause.addEventListener('click',function(){pause();});
+  btnStep.addEventListener('click',function(){doStep();});
+  btnReset.addEventListener('click',function(){resetAll();});
+  speedSlider.addEventListener('input',function(){var labels=['慢速','中速','快速','极快'];speedVal.textContent=labels[parseInt(speedSlider.value)-1];});
+
+  speedVal.textContent='快速';
+  initProblem('tls12');
+
+  // Re-draw canvas on theme change
+  new MutationObserver(function () { draw(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JVM GC 算法对比</title>
+  <meta name="description" content="JVM 垃圾回收算法对比可视化，演示 Serial GC、Parallel GC、CMS、G1、ZGC 的线程模型与 STW 特征">
+  <meta name="keywords" content="JVM, GC, Serial GC, Parallel GC, CMS, G1, ZGC, STW, 垃圾回收算法, Java">
+  <meta property="og:title" content="JVM GC 算法对比可视化">
+  <meta property="og:description" content="JVM 垃圾回收算法对比可视化，演示 Serial、Parallel、CMS、G1、ZGC 的线程模型与 STW 特征">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="shared/nav.css">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg-primary:#080b12;--bg-card:#0f1319;--bg-elevated:#161c26;--bg-input:#0c1018;
+      --border:#1e2a3a;--border-hover:#2d4a6f;--text-primary:#e8edf5;--text-secondary:#7d8da0;
+      --text-muted:#4a5568;--accent-blue:#4da3ff;--accent-green:#36d986;--accent-purple:#b07aff;
+      --accent-orange:#ff9f43;--accent-red:#ff5c6c;--accent-cyan:#22d3ee;--accent-pink:#f472b6;
+      --glow-blue:rgba(77,163,255,0.15);--glow-green:rgba(54,217,134,0.12);--glow-purple:rgba(176,122,255,0.12);
+      --radius:14px;--radius-sm:8px;
+    }
+    body{
+      font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg-primary);
+      color:var(--text-primary);height:100vh;display:flex;flex-direction:column;overflow:hidden;
+      font-size:13px;position:relative
+    }
+    body::before{
+      content:'';position:fixed;inset:0;
+      background:radial-gradient(ellipse 80% 60% at 50% -10%,var(--glow-green),transparent 70%);
+      pointer-events:none;z-index:0
+    }
+    header{
+      padding:12px 20px;background:var(--bg-card);border-bottom:1px solid var(--border);
+      display:flex;align-items:center;justify-content:center;gap:14px;flex-shrink:0;position:relative;z-index:1
+    }
+    header h1{
+      font-size:17px;font-weight:700;
+      background:linear-gradient(135deg,var(--accent-green),var(--accent-cyan));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
+    }
+    .tag{font-size:.68rem;background:var(--bg-elevated);color:var(--text-secondary);padding:3px 12px;border-radius:20px;border:1px solid var(--border);letter-spacing:.3px}
+    .main{display:flex;flex:1;overflow:hidden;position:relative;z-index:1}
+    .left{width:260px;min-width:260px;background:var(--bg-card);border-right:1px solid var(--border);overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+    .sec{background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);padding:10px;transition:border-color .2s}
+    .sec:hover{border-color:var(--border-hover)}
+    .sec-t{font-size:.65rem;text-transform:uppercase;letter-spacing:1.4px;color:var(--text-muted);margin-bottom:8px;font-weight:600;display:flex;align-items:center;gap:8px}
+    .sec-t::before{content:'';width:3px;height:12px;border-radius:2px;background:var(--accent-green)}
+    .preset-list{display:flex;flex-direction:column;gap:4px}
+    .pbtn{background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:6px 10px;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;text-align:left;transition:all .15s;display:flex;gap:8px;align-items:center}
+    .pbtn:hover{border-color:var(--border-hover);background:var(--bg-elevated)}
+    .pbtn.active{border-color:var(--accent-green);background:rgba(54,217,134,0.06);box-shadow:inset 3px 0 0 var(--accent-green),0 0 12px var(--glow-green)}
+    .pbtn .pn{font-weight:600;display:block;font-size:11px}
+    .pbtn .pd{color:var(--text-muted);font-size:9px;margin-top:2px}
+    .btns{display:flex;gap:5px;margin-top:4px}
+    .btn{background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-primary);padding:7px 0;border-radius:var(--radius-sm);cursor:pointer;font-size:11px;transition:all .15s;flex:1;text-align:center}
+    .btn:hover{border-color:var(--border-hover);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.3)}
+    .btn.pri{background:linear-gradient(135deg,var(--accent-green),#059669);color:#fff;font-weight:600;border-color:var(--accent-green);box-shadow:0 2px 10px var(--glow-green)}
+    .btn.pri:hover{box-shadow:0 4px 16px var(--glow-green)}
+    input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:var(--border);outline:none;margin:4px 0}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent-green);cursor:pointer;border:2px solid var(--bg-card)}
+    .slider-label{display:flex;justify-content:space-between;font-size:10px;color:var(--text-secondary)}
+    .right{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:14px;gap:10px}
+    .canvas-area{flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+    canvas{display:block}
+    .info-row{display:flex;gap:8px;flex-shrink:0}
+    .info-card{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;min-width:0}
+    .info-card .ic-t{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:3px}
+    .info-card .ic-v{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent-green)}
+    .stat-cards{display:flex;gap:8px;flex-shrink:0}
+    .stc{flex:1;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;text-align:center}
+    .stc .sv{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--accent-green)}
+    .stc .sl{font-size:9px;color:var(--text-muted);margin-top:2px}
+    @media(max-width:900px){
+      .main{flex-direction:column}
+      .left{width:100%;min-width:0;flex-direction:row;flex-wrap:wrap;gap:6px;padding:8px;max-height:140px}
+      .left .sec{flex:1;min-width:120px;padding:8px}
+    }
+    ::-webkit-scrollbar{width:6px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.14)}
+  </style>
+</head>
+<body>
+<header><h1>JVM GC 算法对比</h1><span class="tag">Java</span></header>
+<div class="main">
+  <div class="left">
+    <div class="sec">
+      <div class="sec-t">GC 算法</div>
+      <div class="preset-list" id="presetList">
+        <button class="pbtn active" data-id="serial"><span><span class="pn">Serial GC</span><span class="pd">单线程、全部 STW、客户端默认</span></span></button>
+        <button class="pbtn" data-id="parallel"><span><span class="pn">Parallel GC</span><span class="pd">多线程并行、吞吐量优先、Java 8 默认</span></span></button>
+        <button class="pbtn" data-id="cms"><span><span class="pn">CMS</span><span class="pd">并发标记清除、低延迟、两次短暂 STW</span></span></button>
+        <button class="pbtn" data-id="g1"><span><span class="pn">G1 GC</span><span class="pd">区域化堆、增量回收、Java 9+ 默认</span></span></button>
+        <button class="pbtn" data-id="zgc"><span><span class="pn">ZGC</span><span class="pd">全并发、亚毫秒暂停、超大堆支持</span></span></button>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-t">控制</div>
+      <div class="btns"><button class="btn pri" id="btnPlay">▶ 开始</button><button class="btn" id="btnPause">⏸ 暂停</button></div>
+      <div class="btns" style="margin-top:5px"><button class="btn" id="btnStep">⏮ 单步</button><button class="btn" id="btnReset">↺ 重置</button></div>
+      <div class="slider-label" style="margin-top:8px"><span>速度</span><span id="speedVal">快速</span></div>
+      <input type="range" id="speedSlider" min="1" max="4" value="3">
+    </div>
+  </div>
+  <div class="right">
+    <div class="canvas-area"><canvas id="cv"></canvas></div>
+    <div class="stat-cards">
+      <div class="stc"><div class="sv" id="stepCounter">0 / 0</div><div class="sl">步骤</div></div>
+      <div class="stc"><div class="sv" id="pauseText">0 ms</div><div class="sl">STW 累计暂停</div></div>
+      <div class="stc"><div class="sv" id="throughputText">-</div><div class="sl">吞吐量估算</div></div>
+      <div class="stc"><div class="sv" id="algoName">Serial</div><div class="sl">当前算法</div></div>
+    </div>
+    <div class="info-row">
+      <div class="info-card"><div class="ic-t">当前阶段</div><div class="ic-v" id="infoPhase">Idle</div></div>
+      <div class="info-card"><div class="ic-t">STW 状态</div><div class="ic-v" id="infoStw">否</div></div>
+      <div class="info-card"><div class="ic-t">GC 线程数</div><div class="ic-v" id="infoThreads">-</div></div>
+      <div class="info-card"><div class="ic-t">算法特征</div><div class="ic-v" id="infoFeature">-</div></div>
+    </div>
+  </div>
+</div>
+
+<script src="shared/theme.js"></script>
+<script src="shared/nav.js"></script>
+<script src="shared/analytics.js"></script>
+<script>
+(function(){
+  var cv=document.getElementById('cv'),ctx=cv.getContext('2d'),W=760,H=480;
+  var presetList=document.getElementById('presetList'),btnPlay=document.getElementById('btnPlay');
+  var btnPause=document.getElementById('btnPause'),btnStep=document.getElementById('btnStep');
+  var btnReset=document.getElementById('btnReset'),speedSlider=document.getElementById('speedSlider');
+  var speedVal=document.getElementById('speedVal'),stepCounter=document.getElementById('stepCounter');
+  var pauseText=document.getElementById('pauseText'),throughputText=document.getElementById('throughputText');
+  var algoName=document.getElementById('algoName'),infoPhase=document.getElementById('infoPhase');
+  var infoStw=document.getElementById('infoStw'),infoThreads=document.getElementById('infoThreads');
+  var infoFeature=document.getElementById('infoFeature');
+
+  var currentPreset='serial',steps=[],stepIdx=0,playing=false,timer=null;
+
+  function getC(){
+    var s=getComputedStyle(document.documentElement);
+    return{bg:s.getPropertyValue('--bg-primary').trim(),card:s.getPropertyValue('--bg-card').trim(),
+      elevated:s.getPropertyValue('--bg-elevated').trim(),border:s.getPropertyValue('--border').trim(),
+      text:s.getPropertyValue('--text-primary').trim(),text2:s.getPropertyValue('--text-secondary').trim(),
+      text3:s.getPropertyValue('--text-muted').trim(),blue:s.getPropertyValue('--accent-blue').trim(),
+      green:s.getPropertyValue('--accent-green').trim(),purple:s.getPropertyValue('--accent-purple').trim(),
+      orange:s.getPropertyValue('--accent-orange').trim(),red:s.getPropertyValue('--accent-red').trim(),
+      cyan:s.getPropertyValue('--accent-cyan').trim()};
+  }
+  function hexA(hex,a){var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return'rgba('+r+','+g+','+b+','+a+')';}
+  var C=getC();
+
+  function rbox(x,y,w,h,fill,stroke,r,c){c=c||ctx;c.beginPath();c.moveTo(x+r,y);c.lineTo(x+w-r,y);c.quadraticCurveTo(x+w,y,x+w,y+r);c.lineTo(x+w,y+h-r);c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);c.lineTo(x+r,y+h);c.quadraticCurveTo(x,y+h,x,y+h-r);c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();if(fill){c.fillStyle=fill;c.fill();}if(stroke){c.strokeStyle=stroke;c.lineWidth=1.5;c.stroke();}}
+  function txt(x,y,text,size,color,align,bl){ctx.save();ctx.font=(size||12)+'px Inter,system-ui,sans-serif';ctx.fillStyle=color||C.text;ctx.textAlign=align||'center';ctx.textBaseline=bl||'middle';ctx.fillText(text,x,y);ctx.restore();}
+  function txtM(x,y,text,size,color,align,bl){ctx.save();ctx.font=(size||10)+'px JetBrains Mono,monospace';ctx.fillStyle=color||C.text2;ctx.textAlign=align||'center';ctx.textBaseline=bl||'middle';ctx.fillText(text,x,y);ctx.restore();}
+
+  // ── Algorithm metadata ──
+  var algos={
+    serial:{name:'Serial GC',nThreads:1,stw:'全部 Young + Old',throughput:'低 (单线程)',feature:'单线程串行回收',
+      desc:'-XX:+UseSerialGC',flag:'serial'},
+    parallel:{name:'Parallel GC',nThreads:4,stw:'全部 Young + Old（并行）',throughput:'高 (99%)',feature:'多线程并行回收',
+      desc:'-XX:+UseParallelGC (Java 8 默认)',flag:'parallel'},
+    cms:{name:'CMS',nThreads:3,stw:'仅 Initial Mark + Remark',throughput:'中高 (95%)',feature:'并发标记清除、低延迟',
+      desc:'-XX:+UseConcMarkSweepGC (Java 14 废弃)',flag:'cms'},
+    g1:{name:'G1 GC',nThreads:4,stw:'Young Evacuation + Remark',throughput:'中高 (97%)',feature:'区域化堆、增量回收',
+      desc:'-XX:+UseG1GC (Java 9+ 默认)',flag:'g1'},
+    zgc:{name:'ZGC',nThreads:4,stw:'<1ms (仅 Relocate Start)',throughput:'高 (98%)',feature:'全并发、亚毫秒暂停',
+      desc:'-XX:+UseZGC (Java 15+ 生产可用)',flag:'zgc'}
+  };
+
+  // ── Heap regions (traditional, for Serial/Parallel/CMS) ──
+  var tradRegions={
+    eden:{x:190,y:35,w:210,h:125,label:'Eden',sub:'Young',accent:'green',cap:60},
+    s0:  {x:410,y:35,w:80,h:125,label:'S0',sub:'Survivor',accent:'cyan',cap:16},
+    s1:  {x:500,y:35,w:80,h:125,label:'S1',sub:'Survivor',accent:'cyan',cap:16},
+    old: {x:190,y:175,w:390,h:115,label:'Old Gen',sub:'Tenured',accent:'blue',cap:80},
+    meta:{x:600,y:35,w:145,h:255,label:'Meta',sub:'Metaspace',accent:'purple',cap:30}
+  };
+
+  // ── State ──
+  var state;
+  function initState(){
+    state={
+      objects:[],timeline:[],totalPause:0,stwActive:false,
+      currentPhase:'',gcPhase:'idle',gcCount:0,
+      event:'',threadCount:1,useGrid:false,gridRegions:[]
+    };
+  }
+  initState();
+
+  // ── G1/ZGC region grid helpers ──
+  function initGrid(youngCount,oldCount,humongousCount){
+    var total=24,free=total-youngCount-oldCount-humongousCount;
+    var arr=[];
+    for(var i=0;i<youngCount;i++)arr.push({type:'young',color:'green'});
+    for(var i=0;i<oldCount;i++)arr.push({type:'old',color:'blue'});
+    for(var i=0;i<humongousCount;i++)arr.push({type:'humongous',color:'orange'});
+    for(var i=0;i<free;i++)arr.push({type:'free',color:'text3'});
+    state.gridRegions=arr;
+  }
+
+  function objCount(region){return state.objects.filter(function(o){return o.region===region;}).length;}
+
+  function allocObjects(n,region){
+    var r=tradRegions[region],existing=objCount(region);
+    for(var i=0;i<n&&existing+i<r.cap;i++){
+      state.objects.push({id:state.objects.length+1,region:region,age:0,marked:false,freed:false,x:0,y:0});
+    }
+    layoutObjects();
+  }
+
+  function layoutObjects(){
+    var pos={};
+    state.objects.forEach(function(o){
+      var r=tradRegions[o.region],idx=pos[o.region]||0;pos[o.region]=idx+1;
+      var cols=Math.max(1,Math.floor((r.w-12)/16)),row=Math.floor(idx/cols),col=idx%cols;
+      o.x=r.x+8+col*16;o.y=r.y+22+row*13;
+    });
+  }
+
+  // ── Drawing ──
+  function draw(){
+    C=getC();
+    cv.width=W;cv.height=H;
+    ctx.clearRect(0,0,W,H);
+
+    var alg=algos[currentPreset];
+    // Title
+    txt(W/2,10,'GC 算法对比: '+alg.desc,13,C.text2);
+    txt(W/2,24,alg.feature,10,C.text3);
+
+    // ── Heap area ──
+    if(currentPreset==='g1'||currentPreset==='zgc'){
+      drawGridHeap(C,alg);
+    } else {
+      drawTraditionalHeap(C,alg);
+    }
+
+    // Divider
+    ctx.save();ctx.strokeStyle=C.border;ctx.lineWidth=1;ctx.setLineDash([2,6]);
+    ctx.beginPath();ctx.moveTo(30,305);ctx.lineTo(W-30,305);ctx.stroke();ctx.setLineDash([]);
+
+    // ── Thread Timeline ──
+    drawTimeline(C,alg);
+
+    // ── Event text ──
+    if(state.event){
+      var isWarn=state.event.indexOf('⚠')!==-1;
+      txt(W/2,H-16,state.event,12,isWarn?C.orange:C.text);
+    }
+
+    // Update info DOM
+    infoPhase.textContent=state.currentPhase||'Idle';
+    infoStw.textContent=state.stwActive?'是 (STW)':'否 (并发)';
+    infoThreads.textContent=state.threadCount+'';
+
+    // Calculate throughput estimate
+    var totalSteps=steps.length||1;
+    var stwSteps=state.timeline.filter(function(s){return s.stw;}).length;
+    var tp=Math.round(100-stwSteps/totalSteps*100);
+    throughputText.textContent=tp+'%';
+  }
+
+  function drawTraditionalHeap(C,alg){
+    Object.keys(tradRegions).forEach(function(k){
+      var r=tradRegions[k];
+      var ac=r.accent==='green'?C.green:r.accent==='blue'?C.blue:r.accent==='purple'?C.purple:C.cyan;
+      var fill=hexA(ac,0.04),stroke=hexA(ac,0.35);
+      rbox(r.x,r.y,r.w,r.h,fill,stroke,8);
+      txt(r.x+r.w/2,r.y+10,r.label,11,C.text2);
+      txt(r.x+r.w/2,r.y-8,r.sub,9,C.text3);
+
+      // Usage bar
+      var cap=r.cap,used=objCount(k),pct=Math.round(used/cap*100);
+      var bw=r.w-16,bh=4,bx=r.x+8,by=r.y+r.h-12;
+      rbox(bx,by,bw,bh,null,hexA(C.border,0.6),2);
+      if(pct>0)rbox(bx,by,bw*pct/100,bh,hexA(ac,0.5),null,2);
+      txtM(r.x+r.w/2,by-6,pct+'%',9,pct>80?C.red:C.text3);
+    });
+
+    // Draw objects
+    state.objects.forEach(function(o){
+      var col;
+      if(o.freed){col=hexA(C.red,0.3);}
+      else if(o.region==='meta'){col=C.purple;}
+      else if(o.region==='old'){col=hexA(C.blue,0.7+o.age*0.01);}
+      else if(o.region==='s0'||o.region==='s1'){col=C.cyan;}
+      else{col=hexA(C.green,0.6+o.age*0.03);}
+      ctx.fillStyle=col;ctx.fillRect(o.x,o.y,14,8);
+      if(o.marked){ctx.strokeStyle=C.orange;ctx.lineWidth=1.2;ctx.strokeRect(o.x-1,o.y-1,16,10);}
+    });
+  }
+
+  function drawGridHeap(C,alg){
+    // 6 cols x 4 rows = 24 regions
+    var gx=230,gy=35,gw=60,gh=52,gap=6,cols=6;
+    state.gridRegions.forEach(function(r,i){
+      var col=i%cols,row=Math.floor(i/cols);
+      var x=gx+col*(gw+gap),y=gy+row*(gh+gap);
+      var ac=r.type==='young'?C.green:r.type==='old'?C.blue:r.type==='humongous'?C.orange:C.text3;
+      var fill=hexA(ac,0.06),stroke=hexA(ac,0.3);
+      if(r.type==='free'){fill=hexA(C.card,0.3);stroke=hexA(C.border,0.4);}
+      rbox(x,y,gw,gh,fill,stroke,5);
+      var label=r.type==='young'?'Y':r.type==='old'?'O':r.type==='humongous'?'H':'';
+      txt(x+gw/2,y+gh/2,label,11,ac);
+      // Region index
+      txt(x+gw-12,y+gh-10,i+'',8,C.text3,'right','bottom');
+    });
+    // Title
+    txt(W/2,310,'Region-Based Heap ('+alg.name+')',10,C.text2);
+  }
+
+  function drawTimeline(C,alg){
+    var tx=30,ty=320,tw=700,th=130;
+    // Background
+    rbox(tx,ty,tw,th,hexA(C.card,0.4),C.border,8);
+    txtM(tx+tw/2,ty-6,'线程时间线 (深色=STW 红色=STW 暂停  绿色=并发)',9,C.text3);
+
+    var rowH=20,rowGap=6;
+    var maxThreads=Math.max(4,alg.nThreads+1); // App thread + GC threads
+    var rowCount=1+Math.min(maxThreads,5); // App + up to 4 GC threads
+
+    // Phase labels across top
+    var tlStartX=tx+75;
+    var phaseY=ty+10;
+    state.timeline.forEach(function(seg,i){
+      var sx=tlStartX+seg.startX,sy=phaseY,sw=seg.width;
+      if(sw<1)sw=1;
+      rbox(sx,sy,sw,12,hexA(seg.color==='red'?C.red:C.orange,0.3),null,3);
+      if(sw>30)txt(sx+sw/2,sy+6,seg.phase,8,seg.color==='red'?C.red:C.orange);
+    });
+
+    // App thread row
+    var appY=ty+26;
+    txt(tx+60,appY+rowH/2,'App',9,C.text2,'right');
+    rbox(tlStartX,appY,tw-85,rowH,hexA(C.text3,0.15),hexA(C.border,0.4),4);
+    // STW blocks on app thread
+    state.timeline.forEach(function(seg){
+      if(seg.stw){
+        var sx=tlStartX+seg.startX,sw=Math.max(seg.width,2);
+        rbox(sx,appY,sw,rowH,hexA(C.red,0.45),null,4);
+      }
+    });
+    txt(tlStartX+4,appY+rowH/2,'应用线程',8,C.text3,'left');
+
+    // GC threads
+    for(var t=0;t<Math.min(alg.nThreads,4);t++){
+      var gy=appY+rowH+rowGap+t*(rowH+rowGap);
+      txt(tx+60,gy+rowH/2,'GC '+(t+1),9,C.text2,'right');
+      rbox(tlStartX,gy,tw-85,rowH,hexA(C.card,0.2),hexA(C.border,0.3),4);
+
+      state.timeline.forEach(function(seg){
+        var sx=tlStartX+seg.startX,sw=Math.max(seg.width,2);
+        var col=seg.stw?hexA(C.red,0.5):hexA(C.green,0.5);
+        rbox(sx,gy,sw,rowH,col,null,4);
+      });
+    }
+
+    // Legend at bottom right
+    var lx=tx+tw-130,ly=ty+th-28;
+    rbox(lx,ly,12,12,hexA(C.red,0.5),null,3);
+    txt(lx+22,ly+6,'STW 暂停',9,C.red,'left');
+    lx+=70;
+    rbox(lx,ly,12,12,hexA(C.green,0.5),null,3);
+    txt(lx+22,ly+6,'并发执行',9,C.green,'left');
+  }
+
+  // ── applyStep ──
+  function applyStep(step){
+    if(!step)return;
+    if(step.t==='event'){state.event=step.e;}
+    else if(step.t==='alloc'){allocObjects(step.n,step.region);}
+    else if(step.t==='phase'){
+      state.currentPhase=step.phase;
+      state.stwActive=!!step.stw;
+      state.threadCount=step.threads||1;
+      // Add segment to timeline
+      var seg={phase:step.phase,stw:!!step.stw,color:step.stw?'red':'green',
+        startX:step.startX||0,width:step.width||40};
+      state.timeline.push(seg);
+      if(step.stw){state.totalPause+=step.duration||0;}
+      pauseText.textContent=state.totalPause+' ms';
+    }
+    else if(step.t==='gc-start'){
+      state.gcPhase='active';state.gcCount++;state.timeline=[];
+      if(step.type==='minor'){state.currentPhase='Young GC Start';}
+      else if(step.type==='full'){state.currentPhase='Full GC Start';}
+      else{state.currentPhase='GC Start';}
+    }
+    else if(step.t==='gc-end'){
+      state.gcPhase='idle';state.stwActive=false;
+      state.currentPhase='GC Done';
+    }
+    else if(step.t==='mark'){
+      // Mark objects for traditional heap
+      var target=step.target;
+      state.objects.forEach(function(o){
+        if(target==='all'||o.region===target)o.marked=true;
+      });
+    }
+    else if(step.t==='sweep'){
+      var t2=step.target;
+      state.objects.forEach(function(o){
+        if((t2==='all'||o.region===t2)&&!o.marked)o.freed=true;
+      });
+    }
+    else if(step.t==='compact'){
+      state.objects=state.objects.filter(function(o){return!o.freed;});
+      var fromR=step.from,toR=step.to,nSurv=step.n||0;
+      var toMove=state.objects.filter(function(o){return o.region===fromR&&o.marked;});
+      if(nSurv>0&&toMove.length>nSurv)toMove=toMove.slice(0,nSurv);
+      toMove.forEach(function(o){o.region=toR;o.age=Math.min(o.age+1,15);o.marked=false;});
+      state.objects=state.objects.filter(function(o){return!(o.region===fromR&&o.marked);});
+      state.objects.forEach(function(o){o.marked=false;});
+      layoutObjects();
+    }
+    else if(step.t==='updateGrid'){
+      state.gridRegions.forEach(function(r,i){
+        if(step.changes&&step.changes[i]!==undefined)r.type=step.changes[i];
+      });
+    }
+    else if(step.t==='draw'){}
+    else if(step.t==='done'){state.event=step.e;state.gcPhase='idle';state.stwActive=false;}
+    state.event=state.event||step.e||'';
+    draw();
+    stepIdx++;
+    stepCounter.textContent=stepIdx+' / '+(steps.length-1);
+  }
+
+  // ── Step generators ──
+  var tw=560; // total timeline width
+
+  function serialSteps(){
+    var s=[];
+    s.push({t:'event',e:'Serial GC — 单线程收集器，所有 GC 阶段均导致 STW 暂停'});
+    s.push({t:'alloc',n:30,region:'eden'});
+    s.push({t:'alloc',n:10,region:'old'});
+    s.push({t:'event',e:'Eden 区接近满 → 触发 Minor GC'});
+    s.push({t:'gc-start',type:'minor'});
+    s.push({t:'phase',phase:'Mark (Eden)',stw:true,threads:1,startX:0,width:80,duration:15});
+    s.push({t:'mark',target:'eden'});
+    s.push({t:'phase',phase:'Sweep (Eden)',stw:true,threads:1,startX:80,width:70,duration:12});
+    s.push({t:'sweep',target:'eden'});
+    s.push({t:'phase',phase:'Copy to S1',stw:true,threads:1,startX:150,width:70,duration:10});
+    s.push({t:'compact',from:'eden',to:'s1',n:8});
+    s.push({t:'gc-end'});
+    s.push({t:'event',e:'Minor GC 完成：8 个存活对象复制到 S1，暂停 ~37ms'});
+    s.push({t:'event',e:'Old Gen 逐渐填满 → 触发 Full GC'});
+    s.push({t:'gc-start',type:'full'});
+    s.push({t:'phase',phase:'Mark (All)',stw:true,threads:1,startX:0,width:120,duration:35});
+    s.push({t:'mark',target:'all'});
+    s.push({t:'phase',phase:'Sweep (All)',stw:true,threads:1,startX:120,width:100,duration:28});
+    s.push({t:'sweep',target:'all'});
+    s.push({t:'phase',phase:'Compact',stw:true,threads:1,startX:220,width:100,duration:30});
+    s.push({t:'compact',from:'old',to:'old',n:6});
+    s.push({t:'gc-end'});
+    s.push({t:'event',e:'Full GC 完成：总暂停 ~130ms，单线程回收效率低'});
+    s.push({t:'done',e:'Serial GC: 全 STW，单线程，适合客户端小堆场景 (<100MB)'});
+    return s;
+  }
+
+  function parallelSteps(){
+    var s=[];
+    s.push({t:'event',e:'Parallel GC — 多线程并行收集器，STW 但回收速度更快'});
+    s.push({t:'alloc',n:30,region:'eden'});
+    s.push({t:'alloc',n:8,region:'old'});
+    s.push({t:'event',e:'Eden 区接近满 → 触发 Minor GC (并行)'});
+    s.push({t:'gc-start',type:'minor'});
+    s.push({t:'phase',phase:'Parallel Mark',stw:true,threads:4,startX:0,width:50,duration:6});
+    s.push({t:'mark',target:'eden'});
+    s.push({t:'phase',phase:'Parallel Sweep',stw:true,threads:4,startX:50,width:45,duration:5});
+    s.push({t:'sweep',target:'eden'});
+    s.push({t:'phase',phase:'Parallel Copy',stw:true,threads:4,startX:95,width:45,duration:5});
+    s.push({t:'compact',from:'eden',to:'s1',n:8});
+    s.push({t:'gc-end'});
+    s.push({t:'event',e:'Minor GC 完成：4 线程并行，暂停仅 ~16ms (比 Serial 快 2x+)'});
+    s.push({t:'event',e:'Old Gen 逐渐填满 → 触发 Full GC (并行)'});
+    s.push({t:'gc-start',type:'full'});
+    s.push({t:'phase',phase:'Parallel Mark All',stw:true,threads:4,startX:0,width:70,duration:18});
+    s.push({t:'mark',target:'all'});
+    s.push({t:'phase',phase:'Parallel Compact',stw:true,threads:4,startX:70,width:70,duration:22});
+    s.push({t:'compact',from:'old',to:'old',n:6});
+    s.push({t:'gc-end'});
+    s.push({t:'event',e:'Full GC 完成：4 线程并行回收，总暂停 ~56ms'});
+    s.push({t:'done',e:'Parallel GC: 多线程 STW，吞吐量高 (99%)，适合批处理和后台任务'});
+    return s;
+  }
+
+  function cmsSteps(){
+    var s=[];
+    s.push({t:'event',e:'CMS — 并发标记清除，追求低延迟，仅两次短暂 STW'});
+    s.push({t:'alloc',n:20,region:'eden'});
+    s.push({t:'alloc',n:25,region:'old'});
+    s.push({t:'event',e:'Old Gen 使用率达 CMSInitiatingOccupancyFraction 阈值'});
+    s.push({t:'gc-start',type:'full'});
+    // Initial Mark — STW, short
+    s.push({t:'phase',phase:'Initial Mark',stw:true,threads:1,startX:0,width:40,duration:6});
+    s.push({t:'mark',target:'old'});
+    s.push({t:'event',e:'Initial Mark: 标记 GC Roots 直接引用 (STW, ~6ms)'});
+    // Concurrent Mark — no STW
+    s.push({t:'phase',phase:'Concurrent Mark',stw:false,threads:3,startX:40,width:180,duration:0});
+    s.push({t:'event',e:'Concurrent Mark: 与应用线程并发遍历对象图 (无 STW)'});
+    // Remark — STW, short
+    s.push({t:'phase',phase:'Remark',stw:true,threads:3,startX:220,width:40,duration:8});
+    s.push({t:'event',e:'Remark: 修正并发标记期间的变更 (STW, ~8ms)'});
+    // Concurrent Sweep — no STW
+    s.push({t:'phase',phase:'Concurrent Sweep',stw:false,threads:2,startX:260,width:160,duration:0});
+    s.push({t:'sweep',target:'old'});
+    s.push({t:'event',e:'Concurrent Sweep: 与应用线程并发清除垃圾 (无 STW)'});
+    // Concurrent Reset
+    s.push({t:'phase',phase:'Reset',stw:false,threads:1,startX:420,width:60,duration:0});
+    s.push({t:'gc-end'});
+    s.push({t:'event',e:'CMS 周期完成：两次 STW 仅 ~14ms，其余与应用并发'});
+    s.push({t:'event',e:'⚠ CMS 缺点：碎片化、浮动垃圾、Java 14 已废弃'});
+    s.push({t:'done',e:'CMS: 低延迟，但碎片化严重 → 已被 G1 取代'});
+    return s;
+  }
+
+  function g1Steps(){
+    var s=[];
+    s.push({t:'event',e:'G1 GC — 区域化堆 (6×4=24 Regions)，增量回收 + 可预测暂停'});
+    s.push({t:'gc-start',type:'mixed'});
+    s.push({t:'event',e:'堆划分为 24 个等大 Region: 10 Young, 8 Old, 2 Humongous, 4 Free'});
+    // Young-only GC
+    s.push({t:'phase',phase:'Young Evacuation',stw:true,threads:4,startX:0,width:60,duration:8});
+    s.push({t:'event',e:'Young-only GC: 多线程撤离 Young Region (STW, ~8ms)'});
+    s.push({t:'updateGrid',changes:{0:'free',1:'free',2:'free',5:'old',6:'old',7:'free',10:'free',12:'free',13:'free',15:'free',18:'old'}});
+    // Concurrent marking
+    s.push({t:'phase',phase:'Concurrent Mark',stw:false,threads:4,startX:60,width:160,duration:0});
+    s.push({t:'event',e:'Concurrent Mark: 与应用并发标记所有 Region'});
+    // Remark
+    s.push({t:'phase',phase:'Remark',stw:true,threads:4,startX:220,width:35,duration:5});
+    s.push({t:'event',e:'Remark: STW 短暂停 (~5ms)，完成最终标记'});
+    // Mixed GC
+    s.push({t:'phase',phase:'Mixed GC (1)',stw:true,threads:4,startX:255,width:55,duration:7});
+    s.push({t:'event',e:'Mixed GC #1: 撤离 Young + 部分 Old Region'});
+    s.push({t:'phase',phase:'Mixed GC (2)',stw:true,threads:4,startX:310,width:55,duration:7});
+    s.push({t:'event',e:'Mixed GC #2: 继续撤离 Old Region'});
+    s.push({t:'updateGrid',changes:{3:'free',4:'free',5:'free',8:'free',18:'free',20:'free',22:'free'}});
+    s.push({t:'phase',phase:'Concurrent Cleanup',stw:false,threads:2,startX:365,width:80,duration:0});
+    s.push({t:'gc-end'});
+    s.push({t:'event',e:'G1 周期完成：增量回收，暂停可预测 (~27ms STW 总计)'});
+    s.push({t:'done',e:'G1: Java 9+ 默认，平衡延迟与吞吐量，支持超大堆'});
+    return s;
+  }
+
+  function zgcSteps(){
+    var s=[];
+    s.push({t:'event',e:'ZGC — 全并发回收器，染色指针 + 读屏障，亚毫秒级暂停'});
+    s.push({t:'gc-start',type:'full'});
+    s.push({t:'event',e:'大堆场景：18 个 Region 有数据，ZGC 启动并发标记'});
+    // Concurrent Mark
+    s.push({t:'phase',phase:'Mark Start',stw:true,threads:4,startX:0,width:20,duration:0.5});
+    s.push({t:'event',e:'Mark Start: 唯一 STW 点之一 (标记 GC Roots, <1ms)'});
+    s.push({t:'phase',phase:'Concurrent Mark',stw:false,threads:4,startX:20,width:200,duration:0});
+    s.push({t:'event',e:'Concurrent Mark: 染色指针遍历对象图 (无 STW)'});
+    // Concurrent Prepare
+    s.push({t:'phase',phase:'Prepare Relocate',stw:false,threads:4,startX:220,width:120,duration:0});
+    s.push({t:'event',e:'Concurrent Prepare: 选择待迁移 Region，构建转发表'});
+    // STW Relocate Start
+    s.push({t:'phase',phase:'Relocate Start',stw:true,threads:4,startX:340,width:15,duration:0.3});
+    s.push({t:'event',e:'Relocate Start: 唯一主要 STW (迁移 GC Roots, <0.5ms!)'});
+    // Concurrent Relocate
+    s.push({t:'phase',phase:'Concurrent Relocate',stw:false,threads:4,startX:355,width:180,duration:0});
+    s.push({t:'event',e:'Concurrent Relocate: 与应用并发迁移对象，读屏障保证一致性'});
+    s.push({t:'gc-end'});
+    s.push({t:'updateGrid',changes:{0:'free',1:'free',3:'free',5:'free',6:'free',7:'free',8:'old',12:'free',14:'free',16:'free',18:'free'}});
+    s.push({t:'event',e:'ZGC 周期完成：全并发！STW 总计 <1ms，暂停时间不随堆大小增长'});
+    s.push({t:'done',e:'ZGC: 亚毫秒暂停，超大堆 (16TB)，适合延迟敏感的大内存应用'});
+    return s;
+  }
+
+  var presetFns={serial:serialSteps,parallel:parallelSteps,cms:cmsSteps,g1:g1Steps,zgc:zgcSteps};
+  var algoPresets=['serial','parallel','cms','g1','zgc'];
+
+  // ── initProblem ──
+  function initProblem(id){
+    currentPreset=id;
+    initState();
+    stepIdx=0;
+    state.threadCount=algos[id].nThreads;
+    state.useGrid=(id==='g1'||id==='zgc');
+    if(id==='zgc')initGrid(8,10,0);
+    else if(id==='g1')initGrid(10,8,2);
+    steps=presetFns[id]();
+    var a=algos[id];
+    algoName.textContent=a.name;
+    pauseText.textContent='0 ms';
+    throughputText.textContent=a.throughput;
+    infoPhase.textContent='Idle';
+    infoStw.textContent='否';
+    infoThreads.textContent=a.nThreads+'';
+    infoFeature.textContent=a.feature;
+    stepCounter.textContent='0 / '+(steps.length-1);
+    cv.width=W;cv.height=H;draw();
+  }
+
+  // ── Control flow ──
+  function pause(){playing=false;if(timer){clearTimeout(timer);timer=null;}btnPlay.textContent='▶ 继续';}
+  function play(){if(playing)return;if(stepIdx>=steps.length)return;playing=true;btnPlay.textContent='▶ 运行中';scheduleNext();}
+  function scheduleNext(){
+    if(!playing||stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    applyStep(steps[stepIdx]);
+    if(stepIdx>=steps.length){playing=false;btnPlay.textContent='✓ 完成';return;}
+    var v=parseInt(speedSlider.value);var delays=[500,250,120,40];
+    timer=setTimeout(scheduleNext,delays[v-1]);
+  }
+  function doStep(){if(playing){pause();return;}if(stepIdx<steps.length)applyStep(steps[stepIdx]);if(stepIdx>=steps.length)btnPlay.textContent='✓ 完成';}
+  function resetAll(){pause();btnPlay.textContent='▶ 开始';initProblem(currentPreset);}
+
+  presetList.addEventListener('click',function(e){
+    var btn=e.target.closest('.pbtn');if(!btn)return;var id=btn.getAttribute('data-id');
+    if(id===currentPreset)return;
+    presetList.querySelectorAll('.pbtn').forEach(function(b){b.classList.remove('active');});
+    btn.classList.add('active');pause();btnPlay.textContent='▶ 开始';initProblem(id);
+  });
+  btnPlay.addEventListener('click',function(){if(stepIdx>=steps.length)resetAll();play();});
+  btnPause.addEventListener('click',function(){pause();});
+  btnStep.addEventListener('click',function(){doStep();});
+  btnReset.addEventListener('click',function(){resetAll();});
+  speedSlider.addEventListener('input',function(){var labels=['慢速','中速','快速','极快'];speedVal.textContent=labels[parseInt(speedSlider.value)-1];});
+  speedVal.textContent='快速';initProblem('serial');
+
+  // Re-render on theme change
+  new MutationObserver(function(){draw();}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','style']});
+})();
+</script>
+</body>
+</html>
